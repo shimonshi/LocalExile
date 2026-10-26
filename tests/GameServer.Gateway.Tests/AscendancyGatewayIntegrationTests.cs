@@ -1588,7 +1588,7 @@ public sealed partial class AscendancyGatewayIntegrationTests : IDisposable
             BinaryPrimitives.ReadUInt16BigEndian(packet[6..]), packet[8], packet[9], nodes);
     }
 
-    sealed class GatewayCharacter : IDisposable
+    sealed partial class GatewayCharacter : IDisposable
     {
         static readonly MethodInfo Load = GatewayMethod("LoadProgress");
         static readonly MethodInfo ChangeMethod = GatewayMethod("ChangePassives");

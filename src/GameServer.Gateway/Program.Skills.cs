@@ -150,16 +150,9 @@ partial class Program
         spell ? conn.Pools.SpellCriticalStrikeMultiplier
         : conn.Pools.CriticalStrikeMultiplier + (melee ? conn.Pools.UnarmedCriticalStrikeMultiplierBonus : 0);
 
-    // Conversion for one hit: the player's stats plus the skill's own stats (base/skill conversion). Player stats win on
-    // a key collision; the normal case is that the skill adds stats the player does not have.
-    internal static DamagePacket AttackHit(SkillCatalog.Unarmed weapon, IReadOnlyDictionary<uint, int> stats, bool melee)
-    {
-        int Get(string name) => Stats.Key(name) is uint key ? stats.GetValueOrDefault(key) : 0;
-        var derived = DerivedDamageIncreases.From(Get);
-        return DamageStats.Added(weapon.HitDamage(stats, melee, derived.AttackPercent), Get, spell: false, melee,
-                additionalIncreasedPct: derived.AttackPercent)
-            .Scale(Math.Max(0, 1 + Get("attack_damage_+%_final_from_rage") / 100.0));
-    }
+    // The raw weapon and added attack packet, before a gem's effectiveness/conversion and target-specific stages.
+    internal static DamagePacket AttackHit(SkillCatalog.Unarmed weapon, IReadOnlyDictionary<uint, int> stats, bool melee) =>
+        AttackSkillHit.BaseHit(weapon, stats, Stats, melee);
 
     static GamblerModifiers GamblerFor(IReadOnlyDictionary<uint, int> stats) =>
         GamblerModifiers.From(name => Stats.Key(name) is uint key ? stats.GetValueOrDefault(key) : 0);
@@ -313,6 +306,9 @@ partial class Program
     // no basic action uses (SkillCatalog.SkillIds).
     static IEnumerable<GrantedSkill> GemSkills(ClientState conn, IEnumerable<(uint, int)>? player = null)
     {
+        // Creation and refresh may inherit already-derived weapon display rows. Damage uses raw character inputs.
+        var characterInputs = CharacterPlayerStats(conn);
+        var mainHand = WeaponFor(conn);
         var playerStats = new Dictionary<uint, int>();
         foreach (var (key, value) in player ?? []) playerStats[key] = value;
         var gems = GemSkillEffects(conn).ToArray();
@@ -345,7 +341,7 @@ partial class Program
             foreach (var (key, worn) in skillCosmetics)
                 if (CharacterSaves.SkillCosmeticGem(key) == gem && Mtx.Find(worn.Record) is { } record && MtxEffects.Of(record.MtxTypeHash) is { } fx)
                     foreach (var (k, v) in fx.Stats) stats[k] = v;
-            // EffectStatsFor publishes the same quality-aware cast duration used by the server's release delay.
+            // EffectStatsFor publishes native base time and final speed/rate from the same quality-aware server timing.
             // A spell's tooltip DPS is its own hit (SpellDamage) × casts per second, not the default attack's values that
             // came with the player's stats.
             int Get(string name) => Stats.Key(name) is uint k ? stats.GetValueOrDefault(k) : 0;
@@ -371,6 +367,15 @@ partial class Program
                 var (perUse, perSecond) = SpellDamage.Display((hit.Min * damageFactor, hit.Max * damageFactor), cps / 100.0);
                 stats[StatKeys.DisplayHundredTimesDamagePerSkillUse] = perUse;
                 stats[StatKeys.HundredTimesDamagePerSecond] = perSecond;
+            }
+            var attackPlan = SkillHitPlan.ForSkill(Skills, effect, level, quality);
+            if (attackPlan.Kind == SkillHitKind.Attack)
+            {
+                var attackHit = AttackSkillHit.Resolve(mainHand, characterInputs, Skills.EffectStats(effect, level),
+                    Stats, Skills.DamageEffectiveness(effect, level), MeleeAttack(conn, effect), Skills.QualityStats(effect, quality))
+                    .Scale(GamblerFor(characterInputs).DamageFactor);
+                foreach (var (stat, value) in AttackPanelStats.Compute(attackPlan, attackHit, Get("hundred_times_attacks_per_second")))
+                    if (Stats.Key(stat) is uint key) stats[key] = value;
             }
             if (Skills.FindByRow(id, effect, level, [.. stats.Select(kv => (kv.Key, kv.Value))]) is { } skill)
             {
@@ -488,17 +493,21 @@ partial class Program
             return Stats.Key($"virtual_{attribute}_for_requirements") is uint key && conn.PlayerStats.TryGetValue(key, out int set) ? set : value;
     }
 
-    // Why a gem skill may not be used: a skill-type restriction, or the character's level/attributes below its requirements.
+    // Shared preflight for handlers and cooldown reservation: restrictions, requirements and impossible cast duration.
     // The client reds the gem but still sends the use, so this is the backstop for a client whose item is not inactive yet.
-    // Null when no gem granting the effect is below its requirement.
+    // A null reason permits the use; this path does not start an action or reserve a cooldown.
     static string? GemDisabled(ClientState conn, int effect, ushort skillId = 0)
     {
         if (SkillRestrictionReason(conn, effect) is { } restriction) return restriction;
-        // Passive-granted skills have their own level and no socketed gem's requirements.
-        if (skillId != 0 && GemSkillEffects(conn).Any(g => g.Id == skillId && g.Gem == 0)) return null;
-        foreach (var place in PlayerInventories.For(CharacterName(conn), Items).SocketedGemPlaces())
-            if (Items.GemEffects(place.Gem).Contains(effect) && GemRequirementsUnmet(conn, place.Gem) is { } missing)
-                return missing;
+        var grants = GemSkillEffects(conn).Where(g => g.Effect == effect && (skillId == 0 || g.Id == skillId)).ToArray();
+        // Passive-granted skills have their own level and no socketed gem's requirements, but still need valid timing.
+        if (skillId == 0 || !grants.Any(g => g.Gem == 0))
+            foreach (var place in PlayerInventories.For(CharacterName(conn), Items).SocketedGemPlaces())
+                if (Items.GemEffects(place.Gem).Contains(effect) && GemRequirementsUnmet(conn, place.Gem) is { } missing)
+                    return missing;
+        if (Skills.IsSpell(effect) && !Skills.IsAttack(effect) && !Skills.IsInstant(effect))
+            foreach (var grant in grants)
+                if (CastMs(conn, effect, grant.Level, grant.Quality) is null) return "Invalid cast duration";
         return null;
     }
 

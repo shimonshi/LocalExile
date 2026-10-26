@@ -36,6 +36,7 @@ validate town/combat/character-switch round trips in the real client (protocol/1
   official tick boundaries and the separate location-instant C→S 0x190 contribution.
   See [11](../docs/protocol/11-skills.md) §9.
   Action speed, active Tailwind effect and Toughened Skin's action/movement floors now have production consumers.
+  Impossible-cast eligibility now precedes handler side effects and composes with shared cooldown preflight.
   Verify their native timing and movement before moving them from partial status; cooldown recovery is separate.
 - **Done when:** life, mana, attributes, resistances and their derived values come from the server's own calculation
   (Characters.dat base values, level, items, passives) and are sent in the Stats component.
@@ -74,6 +75,8 @@ validate town/combat/character-switch round trips in the real client (protocol/1
   General/attack penetration and critical elemental ignore now execute with native damage and combined-effect checks.
   Spell-to-attack and minion-to-owner transfers plus final-defence attack scaling have production-path coverage.
   Validate their real-client allocation/refund and damage behavior before moving them out of partial status.
+  Selected attack-gem ranges and pre-crit averages now reuse PR #198's raw packet and the emitted attack rate.
+  Native panel verification and fuller skill-specific damage/critical/accuracy weighting remain separate work.
   Special ES mechanics, exposure, ailment application, conditional added-damage stats and support
   modifiers remain open.
 - **Start:** special ES mechanics, exposure and the remaining conditional critical strike stats

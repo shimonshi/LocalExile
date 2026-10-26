@@ -318,12 +318,6 @@ partial class Program
             await SendPlayerMana(remote, stream, ciphers, conn, $"0x01b1 player mana {conn.PlayerMana} (disabled skill, cost back)");
             return false;
         }
-        if (gem.Name is not null && Skills.IsSpell(gem.Effect) && !Skills.IsAttack(gem.Effect)
-            && CastMs(conn, gem.Effect, gem.Level, gem.Quality) is null)
-        {
-            await SendPlayerMana(remote, stream, ciphers, conn, "invalid cast duration, cost unchanged");
-            return false;
-        }
         // Vaal souls are not gathered yet (Roadmap "Gems later"), so a Vaal skill never has the souls it needs.
         if (gem.Name is not null && Skills.VaalSouls(gem.Effect, gem.Level) is int souls and > 0)
         {
@@ -582,6 +576,7 @@ partial class Program
             // no spell damage of its own: its hit is the weapon's, scaled by the skill's damage effectiveness, with the
             // attack's crit — the same split AreaSkillHit makes for the non-projectile gems.
             var player = FinalPlayerStats(conn).ToDictionary(kv => kv.Item1, kv => kv.Item2);
+            var characterInputs = CharacterPlayerStats(conn);
             var own = Skills.EffectStats(gem.Effect, gem.Level, gem.Quality).ToDictionary(kv => kv.Item1, kv => kv.Item2);
             int chance = projectileHitPlan.CriticalChance(conn.Pools.AttackCriticalStrikeChance,
                 () => SpellCriticalStrike.Chance(Skills.SpellCritChance(gem.Effect, gem.Level), Stats, player, own));
@@ -591,9 +586,8 @@ partial class Program
                 .DealsDamage(spell)) return (0, false);
             bool melee = MeleeAttack(conn, gem.Effect);
             var hit = projectileHitPlan.BuildHit(
-                () => SpellDamage.WithEffectiveness(AttackHit(WeaponFor(conn), stats, melee),
-                        Skills.DamageEffectiveness(gem.Effect, gem.Level))
-                    .Convert(ConversionFor(conn, gem.Effect, gem.Level, attack: true, quality: gem.Quality)),
+                () => AttackSkillHit.Resolve(WeaponFor(conn), characterInputs, Skills.EffectStats(gem.Effect, gem.Level),
+                    Stats, Skills.DamageEffectiveness(gem.Effect, gem.Level), melee, Skills.QualityStats(gem.Effect, gem.Quality)),
                 spellBase => SpellDamage.Packet(spellBase, name => Stats.Key(name) is uint k ? stats.GetValueOrDefault(k) : 0,
                         AddedEffectiveness(gem.Effect, gem.Level))
                     .Convert(ConversionFor(conn, gem.Effect, gem.Level, attack: false, quality: gem.Quality)));
@@ -676,6 +670,7 @@ partial class Program
             targets = [.. conn.Monsters.Where(e => !e.Value.Dead && e.Value.Life > 0 && Dist(e.Value.Walk.Position(now), centre) <= radius)
                 .Select(e => (e.Key, e.Value))];
         var player = FinalPlayerStats(conn).ToDictionary(kv => kv.Item1, kv => kv.Item2);
+        var characterInputs = CharacterPlayerStats(conn);
         int criticalChance = hitPlan.CriticalChance(conn.Pools.AttackCriticalStrikeChance,
             () => SpellCriticalStrike.Chance(Skills.SpellCritChance(gem.Effect, gem.Level), Stats, player, skillStats));
         var stats = Skills.EffectStatsFor(gem.Effect, gem.Level, gem.Quality, player);
@@ -684,8 +679,8 @@ partial class Program
         foreach (var (id, m) in targets)
         {
             DamagePacket hit = hitPlan.BuildHit(
-                () => SpellDamage.WithEffectiveness(AttackHit(weapon, stats, MeleeAttack(conn, gem.Effect)), effectiveness)
-                    .Convert(ConversionFor(conn, gem.Effect, gem.Level, attack: true, quality: gem.Quality)),
+                () => AttackSkillHit.Resolve(weapon, characterInputs, Skills.EffectStats(gem.Effect, gem.Level),
+                    Stats, effectiveness, MeleeAttack(conn, gem.Effect), Skills.QualityStats(gem.Effect, gem.Quality)),
                 spellBase => SpellDamage.Packet(spellBase, name => Stats.Key(name) is uint k ? stats.GetValueOrDefault(k) : 0,
                         AddedEffectiveness(gem.Effect, gem.Level))
                     .Convert(ConversionFor(conn, gem.Effect, gem.Level, attack: false, quality: gem.Quality)));

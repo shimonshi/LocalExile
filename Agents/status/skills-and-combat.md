@@ -171,6 +171,10 @@ Part of [Status](../Status.md); what to build next in this area is in
   Multiplicative action speed, Tailwind effect and Toughened Skin's independent floors execute in attack/cast/walk.
   Timing reuses PR #194's inherent attack bases and PR #195's native spell base plus final cast-speed contract.
   Actual connected allocation/refunds and cooldown independence have automated coverage; native validation is pending.
+  Shared eligibility refuses impossible casts before action replacement, movement, echo, costs or cooldown reservation.
+  Ground, monster, self and instant handler regressions cover actual level/quality and unchanged prior action state.
+  PR #198's shared raw attack packet now supplies selected attack-gem ranges and pre-crit DPS at the emitted APS.
+  Creation/refresh, quality conversion and active-hand controls pass; complete official DPS and native checks remain open.
   Most Phrecia signature mechanics remain absent; selecting a class does not implement its entire tree.
   Code: `PassiveGemModifiers.cs`, `SkillGemFamilies.cs`, `GamblerModifiers.cs`, `SkillRestrictions.cs`, Gateway skill/combat partials.
   Docs: [implemented effects by class](../docs/game/ascendancies.md#what-this-does-not-complete).

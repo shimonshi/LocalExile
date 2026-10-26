@@ -279,6 +279,24 @@ Exact native action-speed getter/floor locations and fractional Tailwind-effect 
 Automated tests cover real connected allocation/paid refunds, native stat records and server consumers.
 This continuation does not claim new native action-speed verification or change cooldown recovery.
 
+**Selected attack-gem damage rows.** The shared `AttackSkillHit` and `AttackPanelStats` reuse PR #198 head
+`228b5362d6555f2c07cf1ab0546d218edc6f8de2`.
+Creation and refresh rebuild the selected main-hand packet from raw character sources and the active main hand,
+never from inherited, already-derived weapon display rows.
+The same packet resolver serves attack-gem projectile and area hits before their existing roll/crit/mitigation stages.
+Typed derived increases scale base and added damage together; final Rage is applied once.
+An attack gem's own Melee classification scopes melee increases, independently of the active weapon's shape.
+Effectiveness and conversion follow the existing supported model.
+Player conversion keys win over level inputs, then actual gem-quality conversion/gain inputs add once,
+matching the current quality-aware `ConversionFor` overlay rather than PR #198's older level-only limitation.
+Skill-owned generic damage modifiers and flat damage do not become new panel-only effects.
+The panel writes all main-hand type/total bounds, including zero for absent types, using whole-number floors.
+Damage per Use retains the packet's unrounded pre-crit average; DPS uses that average and the emitted native APS.
+It does not rescale previously rounded DPS or change critical rows, off-hand rows, accuracy or target mitigation.
+These remain limited supported pre-crit averages, not a claim of official complete skill DPS.
+Automated checks cover real Burning Arrow creation/refresh, active-hand changes, fractional derived damage,
+Rage/mana lightning, stale inherited rows, quality conversion and matching APS/DPS; native validation is pending.
+
 **Critical strikes.** The server rolls a hit's critical chance after the damage roll: `base chance × (1 + increased
 critical strike chance / 100)`, capped at 100%, then multiplies the damage by the final multiplier (150% plus
 `base_critical_strike_multiplier_+`), as PoB's `CalcOffence` does. PoB's `unarmedWeaponData[class].CritChance = 0`
@@ -538,7 +556,10 @@ Live 2026-10-18 with the Witch's Fireball. Code: `SkillCatalog.EffectStats`, `Ge
   The server divides that base by cast speed and action speed, then rounds its integer-ms duration once.
   Quality adds to the final cast-speed stat once; it does not pre-divide the native virtual base.
   Instant spells retain zero delay and zero fabricated cast rate, even at nonpositive speed.
-  Impossible or unrepresentable noninstant casts have no duration/rate and are refused before costs or cooldown.
+  Impossible or unrepresentable noninstant casts have no duration/rate.
+  Shared `GemDisabled` eligibility checks the actual granted level/quality before action replacement, walk changes,
+  action echoes, costs or cooldown reservation; ground, monster, self and instant entry paths all use that reason.
+  Passive-granted spells still receive timing checks; true instant spells and attacks retain their own eligibility.
   Projectile release still uses the animation contact fraction; area spells and Portal use their existing waits.
 - **Instant skills.** The client knows an instant skill by its stat **`skill_is_instant`** (0x2064), not by the
   ActiveSkillType `Instant`; the server derives it from the type and sends it with `base_skill_is_instant`
