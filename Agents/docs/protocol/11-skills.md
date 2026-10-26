@@ -190,7 +190,7 @@ Ten native checks allocated connected ordinary paths and selected both effects t
 The unconditional native panel stayed at 711; logged rolls used 995 against Unique and 1066 against a close normal.
 A close Unique used 1493, while a Unique outside close range used 995.
 Moving a target back into range restored the close multiplier, relog preserved both choices, and refund restored 30.
-Other conditional stats (nearby ally, marked enemy, low life, frenzy charges) are not modelled, and the panel is not
+Other conditional stats (nearby ally, marked enemy, frenzy charges) are not modelled, and the panel is not
 told the conditions: it keeps the unconditional `accuracy_rating` and, for the Offence
 panel's Main Hand / Off Hand Accuracy rows, `main_hand_accuracy_rating` / `off_hand_accuracy_rating`. Its Chance to
 Hit rows are sent directly as `main_hand_chance_to_hit_%` / `off_hand_chance_to_hit_%` (and the evasive-monster
@@ -241,6 +241,10 @@ once. The Gateway now sends the 0x20 update instead (above), which also removes 
    `TargetAccuracy.AgainstTarget` at the target's own rarity and position at that moment (§4); the gateway logs the
    value whenever a condition changes it. A miss is logged and
    sends no life update; spells do not roll accuracy and always hit.
+   Exhibit 122 (graph id 36978, the Chieftain position) grants `global_always_hit` (Stats.dat row 686, client key
+   687 = 1): the attack cannot be evaded, so the default attack skips the accuracy roll entirely, the panel's
+   Chance to Hit reference rows read 100, and the pools' rating, the mastery's target multipliers and the critical
+   chance are untouched (attack gems keep their current no-roll behavior).
 4. Any later player action (0x25 move, another 0x24) cancels steps 2 and 3 (`ClientState.ActionCount`).
 5. Pacing: one swing per attack time. While the button is held the client sends one 0x24 per swing; a swing may
    arrive up to a quarter of an attack early (jitter) and the schedule stays on the client's cadence. When the server
@@ -267,6 +271,20 @@ context keeps the weapon override out, and `SpellCriticalStrike`'s spell route r
 The active weapon set determines the attack base and weapon-specific increases; an inactive weapon grants neither.
 `global_cannot_crit`, `virtual_global_cannot_crit` and `cannot_critical_strike_with_attacks` suppress attack crits.
 The pool builds the base once in `AttackBaseCriticalStrike`.
+Final Blow (graph id 10135) also grants `unarmed_melee_attack_critical_strike_multiplier_+` (Stats.dat row 21564,
+client key 21565, 50 = +50 percentage points): the pools store it as a separate
+`UnarmedCriticalStrikeMultiplierBonus`, and `CriticalMultiplierFor` adds it to a hit's multiplier only when the hit
+is an attack in a melee context (`MeleeAttack`), so the default unarmed attack and melee attack gems get +50 while
+unarmed non-melee attack gems (for example Explosive Concoction) and spells keep the plain multiplier.
+Final Blow also grants `extra_critical_rolls_while_on_low_life` (Stats.dat row 14289, client key 14290, 1): the crit
+roll gains one extra roll while the player's live current life is at or below the Low Life threshold of maximum life.
+The threshold is 50% inclusive by default (the Ultimatum manifesto's official "50% or below" definition,
+[pathofexile.com/forum/view-thread/3079632](https://www.pathofexile.com/forum/view-thread/3079632)), and the stats
+`low_life_threshold_%_override` (key 17896, winning when positive) and `low_life_threshold_%` (key 17901) can raise
+it; the comparison is `(current × 100 ≤ maximum × threshold)` and the condition does not touch the chance itself.
+The ordinary `extra_critical_rolls` (lucky and unlucky alike) keep their own behavior, and opposing luck still
+cancels in the count the roll receives.
+A conditional low-life source outside this slice (the "count as low life" flag, key 7751) is not consumed.
 `/set_stat` replaces its source value and rebuilds the pools for critical-chance inputs and prohibitions.
 The panel's final `main_hand_critical_strike_chance` and the rolls share that result.
 Twelve real-client checks used a fresh synthetic character and read the client's received stat values.

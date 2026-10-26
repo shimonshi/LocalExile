@@ -38,6 +38,11 @@ Part of [Status](../Status.md); what to build next in this area is in
   in the constant 20-unit close range (2 metres; 10 units per metre), multiplying when both hold and never folded into
   the panel's rating or `/accuracy`'s unconditional rating.
   Gems' attack hits do not roll accuracy yet, so the conditions apply where a roll exists (the default attack).
+  Exhibit 122 (graph id 36978, the Chieftain position) grants `global_always_hit` (Stats row 686, key 687 = 1):
+  the default attack cannot be evaded, so it skips the accuracy roll entirely and the panel's Chance to Hit
+  reference rows (normal and high-dexterity monster) read 100;
+  the rating itself, the mastery's target multipliers and the critical chance never change with the flag.
+  A dev `/set_stat` global always-hit reaches the same pools' flag and both allocation and dev removals drop it.
   Ten native checks used connected ordinary paths and actual mastery selection requests.
   The panel stayed at 711 while target rolls used 995 against Unique, 1066 in close range and 1493 when both held.
   A far Unique kept only 995; target movement, relog and refund restored the expected conditions and baseline.
@@ -260,7 +265,22 @@ Part of [Status](../Status.md); what to build next in this area is in
   Each is a base, not a fixed final chance: generic increased crit still applies on top;
   the weapon override stays out of unarmed and spell rolls, and the unarmed base stays out of a weapon hand.
   Only the active weapon set supplies the attack base and its weapon-specific increases.
-  `/set_stat` replaces the input and rebuilds the pools, so the panel and the rolls agree.
+Unarmed final multiplier passives: Final Blow (graph id 10135) also grants
+`unarmed_melee_attack_critical_strike_multiplier_+` (Stats row 21564, key 21565, 50 = +50 points);
+the pools store it separately and `CriticalMultiplierFor` applies it to the hit's multiplier only in the attack's
+own melee context, so unarmed non-melee attack gems and spells keep the plain multiplier.
+Conditional low-life crit rolls: Final Blow's `extra_critical_rolls_while_on_low_life` (Stats row 14289, key
+14290) gives the crit roll an extra roll while the live current life is at or below the Low Life threshold of
+maximum life (50% inclusive by default, the Ultimatum manifesto's "50% or below";
+`low_life_threshold_%_override` 17896 wins over `low_life_threshold_%` 17901 when it is positive).
+The ordinary `extra_critical_rolls` and their unlucky/negative form keep their own behavior and the sum clamps
+before the roll.
+Always-hit attacks: Exhibit 122 (graph id 36978, Chieftain) grants `global_always_hit` (Stats row 686, key 687):
+the default attack skips its accuracy roll and the panel's reference Chance to Hit rows read 100, leaving the
+rating, the mastery's target multipliers and the critical chance untouched.
+Automated Gateway integration checks cover the unarmed multiplier's armed/inactive/swap/refund isolation, the
+Explosive Concoction non-melee catalog classification, the Gambler's low-life extra roll with the 50/55/60
+boundaries and no-life/zero-maximum forms, and the always-hit panel rows, dev flag and refund.  `/set_stat` replaces the input and rebuilds the pools, so the panel and the rolls agree.
   Twelve native checks verified 830 → 800 → 900, increased chance → 1800, cannot-crit → zero,
   empty-set/unarmed behavior, weapon restoration and relog; spell chance stayed 500.
   Ascendancy allocation remains in the separate lifecycle change.
@@ -275,7 +295,8 @@ Part of [Status](../Status.md); what to build next in this area is in
   Combined generic/spell bonuses add once; the no-crit flag clears the native chance and hides its row.
   A hitless Scorching Ray cast dealt no weapon damage, while the same connection's Fireball dealt a critical hit.
   Catalog, chance, panel gates, aura sources and hit routing also have automated checks.
-  Timed, charge, enemy-state, lucky/more and added-base crit mechanics are not modelled.
+  Timed, charge, enemy-state and added-base crit mechanics are not modelled (low-life conditional crit rolls now
+  are, in this entry above).
   `/crit` shows the attack values and a pooled 5%-base spell reference ([11](../docs/protocol/11-skills.md) §5).
 - **Overcapped-resistance modifiers.** While the flag stat is set, the uncapped resistance above its maximum is a
   generic increased modifier, exactly PoB's `ResistOverCap` (the maximum capped at 90): +1% increased evasion per 1%
