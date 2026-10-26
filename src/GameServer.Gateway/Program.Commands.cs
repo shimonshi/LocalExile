@@ -40,9 +40,11 @@ partial class Program
             uint stat = Stats.Key(args[0]) ?? throw new ArgumentException($"unknown stat {args[0]}");
             int value = int.Parse(args[1]);
             lock (conn.Monsters) conn.PlayerStats[stat] = value;
-            // Raw critical and overcap inputs rebuild the same pools and respect explicit zero replacements.
+            bool rawAttribute = AttributeModifiers.IsInput(Stats.Name(stat));
+            // Raw attribute, critical and overcap inputs rebuild the same pools and respect explicit zero replacements.
             if (AttackBaseCriticalStrike.IsInput(Stats.Name(stat) ?? args[0])
-                || ResistanceOvercap.IsInput(Stats.Name(stat) ?? args[0]))
+                || ResistanceOvercap.IsInput(Stats.Name(stat) ?? args[0])
+                || rawAttribute)
             {
                 while (true)
                 {
@@ -54,6 +56,11 @@ partial class Program
                         // A concurrent level/aura rebuild wins; retry against its current inputs and level.
                         if (!ReferenceEquals(conn.Pools, before)) continue;
                         conn.Pools = pools;
+                        if (rawAttribute)
+                        {
+                            conn.PlayerLife = Math.Min(conn.PlayerLife, conn.PlayerMaxLife);
+                            conn.PlayerMana = Math.Min(conn.PlayerMana, (uint)UnreservedMana(conn));
+                        }
                         break;
                     }
                 }
@@ -67,6 +74,20 @@ partial class Program
                 $"0x01b3 stats: {Stats.Name(stat)} (key 0x{stat:x}) = {value}, and the attack's final stats");
             // Skills compute with their own stats (the attack and the character panel read those), so send them again.
             await SendSkills(remote, stream, ciphers, conn);
+            if (rawAttribute)
+            {
+                // Skill refresh can restore an aura or update its reservation; use those completed caps too.
+                lock (conn.Monsters)
+                {
+                    conn.PlayerLife = Math.Min(conn.PlayerLife, conn.PlayerMaxLife);
+                    conn.PlayerMana = Math.Min(conn.PlayerMana, (uint)UnreservedMana(conn));
+                }
+                // A raw pool change can alter reservation while current mana stays idle. Sample resources only after
+                // earlier queued sends, and never refill or resurrect a character when a maximum grows.
+                await SendPlayerStatSnapshot(remote, stream, ciphers, conn,
+                    () => InstanceProtocol.LifeUpdate(PlayerId, conn.PlayerLife), "raw attribute current life");
+                await SendPlayerMana(remote, stream, ciphers, conn, "raw attribute mana reservation");
+            }
         })
         .Add("spawn_mob", "/spawn_mob <MonsterVarieties row, Id or name>[@level] [friendly] [normal|magic|rare|unique] [name]", async args =>
         {
