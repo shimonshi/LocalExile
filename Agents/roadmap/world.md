@@ -68,7 +68,7 @@ Items keep the Roadmap's priority groups, and are in rough priority order within
 
 ## 4. Server design
 
-- **Incoming stream framing:** C→S `0x020a` and `0x0059` now have primary-writer-backed fixed lengths and split tests.
+- **Incoming stream framing:** C→S `0x020a`, `0x0059` and `0x0099` have primary-writer-backed lengths and split tests.
   Other unknown ids still stop framing the read; safely continuing requires their actual message layouts.
   The intermittent transfer wide-string failure needs a reproducing trace before assigning its cause
   ([02](../docs/protocol/02-instance-connection.md#fixed-incoming-messages-without-implemented-semantics), issue #247).

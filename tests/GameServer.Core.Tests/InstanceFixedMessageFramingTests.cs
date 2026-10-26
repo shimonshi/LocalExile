@@ -10,6 +10,7 @@ public class InstanceFixedMessageFramingTests
     {
         { "020A01", 0x020a, 3 },
         { "005900150001001B001500000001020A", 0x0059, 16 },
+        { "00990100", 0x0099, 4 },
     };
 
     [Theory]
@@ -64,6 +65,20 @@ public class InstanceFixedMessageFramingTests
             for (int i = 0; i < expected.Length; i++) Assert.Equal(expected[i], messages[i].Bytes);
             Assert.Equal(text, InstanceChat.ReadChat(messages[2].Bytes).Text);
         }
+    }
+
+    [Fact]
+    public void A_twenty_byte_capture_of_0099_two_ticks_and_01ef_contains_four_messages()
+    {
+        // Native transfer trace: the previous 20-byte length swallowed these following ticks and 0x01ef.
+        byte[] capture = Convert.FromHexString("00990100001B009586263F001B009262EA6C01EF");
+        Assert.Equal(20, capture.Length);
+        var messages = InstanceProtocol.SplitClientMessages(capture, out var partial, out var unknown);
+        Assert.Equal(new ushort[] { 0x0099, InstanceProtocol.TickId, InstanceProtocol.TickId, 0x01ef },
+            messages.Select(m => m.Id));
+        Assert.Equal(new[] { 4, 7, 7, 2 }, messages.Select(m => m.Bytes.Length));
+        Assert.Empty(partial);
+        Assert.Empty(unknown);
     }
 
     [Fact]

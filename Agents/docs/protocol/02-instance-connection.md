@@ -160,6 +160,7 @@ The pinned 3.29.3b client writers prove these additional fixed lengths, includin
 |---|---|---|
 | `0x020a` | 3 | `0x140e29080`: u16 opcode followed by one byte from message `+0x10` |
 | `0x0059` | 16 | `0x141f935a0`: u16 opcode followed by fields of 4, 2, 2, 4, 1 and 1 bytes |
+| `0x0099` | 4 | `0x141f95200`: u16 opcode followed by two bytes |
 
 The `0x020a` send site `0x140d3c409–0x140d3c43b` sets opcode `0x20a` at `+8`, byte 1 at `+0x10`,
 and vtable `0x14345ef10`, then uses the normal sender `0x14216e940`.
@@ -175,5 +176,21 @@ A five-byte `0x0059` prefix must wait for eleven more bytes; `020A01` is already
 Native transfer follow-up observed two `020A01` reads before an intermittent wide-string error.
 The original error's causal chain remains unproven; registering these lengths does not prove it fixed that error.
 Other unknown ids still stop framing the current read; this patch does not change that policy.
+
+The earlier 20-byte length assigned to `0x0099` came from a coalesced capture, not its writer.
+Sender `0x142163190` constructs opcode `0x99` with vtable `0x1435c0258`.
+Writer slot 1, `0x141f95200`, writes exactly 2, 1 and 1 bytes through `0x140dfb760`
+at `0x141f9522d`, `0x141f9525b` and `0x141f95276`, with no conditional payload branch.
+The first payload byte is `(message[0x10] & 0x7f) | (message[0x12] != 0 ? 0x80 : 0)`;
+the second is `message[0x11]`.
+The sender's preconditions decide whether to send the message, not its length.
+Field gameplay meanings remain unassigned.
+
+A native transfer trace observed `00990100`, two separate seven-byte ticks and `01EF` being carried into 20 bytes.
+The old framer consumed all four as one `0x0099`, swallowing valid subsequent messages.
+If a chat follows instead, the false length can cut into its wide-string payload and lose subsequent boundaries.
+The exact original wide-string exception still lacks its complete preceding byte trace;
+this fixes the independently observed `0x0099` boundary defect without assigning unproven original causality.
+Tests preserve the captured four-message sequence and cover every split/coalesced chat boundary for `0x0099` too.
 
 Env: `Game_GATEWAY_PORT` (6112), `Game_INSTANCE_SECRET` (data/instance-secret.bin), `Game_GATEWAY_ENTER`.

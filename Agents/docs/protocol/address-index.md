@@ -58,6 +58,9 @@ G = global / static data.
 | `0x14345ef10` / `0x140e29080` | Cls / Fn | C→S `0x020a` class / writer: u16 opcode + u8, 3 bytes |
 | `0x142160020` | Fn | constructs and sends C→S `0x0059` through the normal sender |
 | `0x1435bfe78` / `0x141f935a0` | Cls / Fn | C→S `0x0059` class / writer: u16 + 4/2/2/4/1/1 bytes, 16 total |
+| `0x142163190` / `0x1435c0258` | Fn / Cls | C→S `0x0099` sender / class |
+| `0x141f95200` | Fn | C→S `0x0099` writer: opcode and two bytes, 4 total |
+| `0x141f9522d`, `0x141f9525b`, `0x141f95276` | Site | `0x0099` stream writes: 2, 1, 1 bytes |
 | `0x141fe1570` | Fn | digest used by 0x0E |
 | `0x142fbfbf8` | G | 8-byte constant in the 0x0E digest |
 | `0x14214a190` | Fn | instance S→C dispatcher |
