@@ -55,4 +55,10 @@ static class AttackBaseCriticalStrike
 
     public static bool IsInput(string name) => name.Contains("critical_strike_chance", StringComparison.Ordinal)
         || name is "global_cannot_crit" or "virtual_global_cannot_crit" or "cannot_critical_strike_with_attacks";
+
+    /// <summary>The conditional pool inputs PoolsFor reads beyond the ordinary chance and override names: the unarmed
+    /// melee critical multiplier, the always-hit flag and its Low Life threshold (override or ordinary). A dev
+    /// /set_stat input for any of them rebuilds the pools, so the rolls and the panel see the change at once.</summary>
+    public static bool IsConditionalInput(string name) => name is UnarmedCriticalStrikeMultiplierStat
+        or "global_always_hit" or "low_life_threshold_%_override" or "low_life_threshold_%";
 }

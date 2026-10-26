@@ -54,7 +54,8 @@ partial class Program
             {
                 conn.PlayerStats[stat] = value;
                 string name = Stats.Name(stat) ?? args[0];
-                if (AttackBaseCriticalStrike.IsInput(name) || ResistanceOvercap.IsInput(name))
+                if (AttackBaseCriticalStrike.IsInput(name) || ResistanceOvercap.IsInput(name)
+                    || AttackBaseCriticalStrike.IsConditionalInput(name))
                     conn.Pools = PoolsFor(conn, conn.Pools.Level);
             }
             // The client's requirement checks (gear and gems) read virtual_strength/dexterity/intelligence_for_requirements,

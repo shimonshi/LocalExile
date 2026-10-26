@@ -310,10 +310,14 @@ partial class Program
         foreach (var (key, value) in player ?? []) playerStats[key] = value;
         var gems = GemSkillEffects(conn).ToArray();
         var singleSources = gems.GroupBy(g => g.Effect).Where(g => g.Count() == 1).Select(g => g.Key).ToHashSet();
+        // Serialize each skill's own critical multiplier: since Final Blow, the copied main-hand row carries the
+        // unarmed melee attack's +50, which a gem with its own context must not inherit wholesale.
+        var gemPlayerStats = new Dictionary<uint, int>(playerStats);
+        if (Stats.Key("main_hand_critical_strike_multiplier") is uint mainMultiplierKey) gemPlayerStats.Remove(mainMultiplierKey);
         var skillCosmetics = CharacterSaves.SkillCosmetics(CharacterName(conn));
         foreach (var (id, effect, name, level, quality, gem) in gems)
         {
-            var stats = Skills.EffectStatsFor(effect, level, quality, playerStats);
+            var stats = Skills.EffectStatsFor(effect, level, quality, gemPlayerStats);
             var cost = CostFor(conn, effect, level, quality);
             if (Stats.Key("mana_cost") is uint manaCost) stats[manaCost] = (int)cost.Mana;
             if (Stats.Key("life_cost") is uint lifeCost) stats[lifeCost] = (int)cost.Life;
@@ -323,6 +327,10 @@ partial class Program
             if (singleSources.Contains(effect) && SingleUseCooldown.ForSkill(Skills, Stats, effect, level, playerStats, own) is { } cooldown
                 && Stats.Key("virtual_cooldown_speed_+%") is uint recoveryKey)
                 stats[recoveryKey] = cooldown.RecoveryPercent;
+            // The gem's own record swings with its own context's attack multiplier (MeleeAttack classifies the gem
+            // itself; unarmed non-melee attack gems keep the plain attack value, armed and spell gems theirs).
+            if (Skills.IsAttack(effect) && Stats.Key("main_hand_critical_strike_multiplier") is uint multiplierKey)
+                stats[multiplierKey] = CriticalMultiplierFor(conn, spell: false, melee: MeleeAttack(conn, effect));
             if (Skills.IsSpell(effect) && !Skills.IsAttack(effect) && Stats.Key("spell_critical_strike_chance") is uint critKey)
                 stats[critKey] = SpellCriticalStrike.Chance(Skills.SpellCritChance(effect, level), Stats, playerStats, own);
             // The skill effects worn in the gem's Cosmetics tab slots: their stats (skill_art_variation …) on this skill only.

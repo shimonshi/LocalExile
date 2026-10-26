@@ -1,4 +1,8 @@
+using System.Net;
+using System.Net.Sockets;
 using System.Reflection;
+using GameServer.Core.Protocol.Instance;
+using GameServer.Core.Protocol.Login;
 using GameServer.Core.World;
 
 namespace GameServer.Gateway.Tests;
@@ -44,6 +48,52 @@ public sealed class FinalBlowAndAlwaysHitGatewayTests : IDisposable
         (Dictionary<uint, int>)Method("CharacterPlayerStats").Invoke(null, [conn])!;
     static GamblerModifiers Gambler(Dictionary<uint, int> panel) =>
         (GamblerModifiers)Method("GamblerFor").Invoke(null, [panel])!;
+
+    // The granted gem records through the real skill catalog: the default attack's stats and the copied player
+    // stats, exactly as SendPlayer's Skills list composes them.
+    static IReadOnlyList<(ushort Id, int Effect, string Name, int Level, int Quality, uint Gem)> GemPlacements(ClientState conn) =>
+        [.. (IEnumerable<(ushort Id, int Effect, string Name, int Level, int Quality, uint Gem)>)Method("GemSkillEffects").Invoke(null, [conn])!];
+    static IReadOnlyList<GrantedSkill> GrantedGems(ClientState conn)
+    {
+        var stats = Panel(conn);
+        var player = stats.Select(kv => (kv.Key, kv.Value)).ToList();
+        var weapon = (SkillCatalog.Unarmed)Method("WeaponFor").Invoke(null, [conn])!;
+        var weaponStats = (List<(uint, int)>)Method("WeaponStats").Invoke(null, [conn, weapon, stats])!;
+        return [.. (IEnumerable<GrantedSkill>)Method("GemSkills").Invoke(null, [conn, weaponStats.Concat(player)])!];
+    }
+
+    int RecordMultiplier(GrantedSkill record, string name) =>
+        record.Stats!.First(kv => kv.Key == (uint)Program.Stats.Key(name)!.Value).Value;
+
+    // Invoke the real /set_stat command handler (the actual ChatCommands registry), not a dev Set + PoolsFor.
+    static async Task RunCommand(ClientState conn, string line)
+    {
+        using var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        using var client = new TcpClient();
+        var accept = listener.AcceptTcpClientAsync();
+        await client.ConnectAsync((IPEndPoint)listener.LocalEndpoint);
+        using var server = await accept;
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        var capture = new MemoryStream();
+        var reading = client.GetStream().CopyToAsync(capture, timeout.Token);
+        byte[] key = [.. Enumerable.Range(0, 64).Select(i => (byte)i)];
+        var serverCipher = new ConnectionCiphers(key, isClient: false);
+        conn.Commands = (ChatCommands)typeof(Program)
+            .GetMethod("Commands", BindingFlags.Static | BindingFlags.NonPublic,
+                [typeof(string), typeof(NetworkStream), typeof(ConnectionCiphers), typeof(ClientState)])!
+            .Invoke(null, ["set-stat-integration", server.GetStream(), serverCipher, conn])!;
+        try
+        {
+            await conn.Commands.RunAsync(line).WaitAsync(timeout.Token);
+            conn.Closed = false;
+        }
+        finally
+        {
+            server.Client.Shutdown(SocketShutdown.Send);
+            await reading;
+        }
+    }
 
     int PanelValue(Dictionary<uint, int> panel, string name) => panel[Program.Stats.Key(name)!.Value];
 
@@ -164,9 +214,95 @@ public sealed class FinalBlowAndAlwaysHitGatewayTests : IDisposable
         Assert.InRange(PanelValue(Panel(withNode), "main_hand_chance_to_hit_evasive_monsters_%"), 5, 99);
     }
 
+    [Fact]
+    public void Granted_gem_records_carry_the_multiplier_their_own_context_swallows()
+    {
+        var conn = Character();
+        conn.Passives.Add(10135); // Final Blow: the unarmed melee attack's +50 and the copied panel row.
+        conn.Pools = Pools(conn);
+        PlayerInventories.For(_name + "gems", Program.Items);
+        // Real equipment with the two real gems: the Melee-classified gem and Explosive Concoction.
+        string[] gemNames = { "Cleave", "Explosive Concoction" };
+        PlayerInventories.For(conn.Character!, Program.Items).Add(PlayerInventories.Helmet, 0, 0,
+            ItemCatalog.Create(Program.Items.Find("Iron Hat")!) with
+            {
+                Sockets = gemNames.Select(n =>
+                {
+                    var gem = Program.Items.FindGem(n)!.Value;
+                    return new ItemSocket(SocketColour.Blue,
+                        ItemCatalog.Create(gem.Type) with { GemVariant = gem.Variant.Index });
+                }).ToArray(),
+                Links = new byte[] { 0, 1 },
+            });
+        var placements = GemPlacements(conn);
+        var records = GrantedGems(conn);
+        Assert.Equal(placements.Count, records.Count);
+        // The copied panel row itself is the unarmed melee attack's total (+50 with Final Blow).
+        Assert.Equal(200, PanelValue(Panel(conn), "main_hand_critical_strike_multiplier"));
+        var byEffect = placements.Zip(records, (p, r) => (p, r)).Where(x => Program.Skills.IsAttack(x.p.Effect)).ToList();
+        // The attack gems' records serialize their own contexts: the Melee-classified one the unarmed +50,
+        // the non-Melee classified one the plain value.
+        var melee = byEffect.Single(x => Program.Skills.IsMelee(x.p.Effect));
+        var nonMelee = byEffect.Single(x => !Program.Skills.IsMelee(x.p.Effect));
+        Assert.Equal(200, RecordMultiplier(melee.r, "main_hand_critical_strike_multiplier"));
+        // The unarmed non-melee attack gem keeps the plain attack multiplier; the leak does not reach its record.
+        int concoction = nonMelee.p.Effect;
+        Assert.True(Program.Skills.IsAttack(concoction));
+        Assert.False(Program.Skills.IsMelee(concoction));
+        Assert.Equal(150, RecordMultiplier(nonMelee.r, "main_hand_critical_strike_multiplier"));
+        // The default attack's own multiplier stays the panel's unarmed melee total (+50); it travels in the
+        // connection's stats, not the granted record (its Stats list carries damage, speed and reach rows only).
+        Assert.Equal(200, PanelValue(Panel(conn), "main_hand_critical_strike_multiplier"));
+        Assert.Equal(200, Program.CriticalMultiplierFor(conn, spell: false, melee: Program.MeleeAttack(conn)));
+    }
+
+    [Fact]
+    public async Task The_set_stat_command_rebuilds_the_conditional_pool_inputs()
+    {
+        var conn = Character();
+        conn.Pools = Pools(conn);
+        var baseline = conn.Pools;
+        Assert.False(baseline.AlwaysHit);
+        Assert.Equal(0, baseline.LowLifeThresholdOverride);
+        Assert.Equal(0, baseline.LowLifeThresholdPct);
+        // The flag: the handler rebuilds the pools, so the panel and the roll state change with the command alone.
+        await RunCommand(conn, "/set_stat global_always_hit 1");
+        Assert.True(conn.Pools.AlwaysHit);
+        Assert.Equal(100, PanelValue(Panel(conn), "main_hand_chance_to_hit_%"));
+        // The flag is not a rating or crit value: both stay at the baseline.
+        Assert.Equal(baseline.Accuracy, conn.Pools.Accuracy);
+        Assert.Equal(baseline.AttackCriticalStrikeChance, conn.Pools.AttackCriticalStrikeChance);
+        Assert.Equal(baseline.CriticalStrikeMultiplier, conn.Pools.CriticalStrikeMultiplier);
+        await RunCommand(conn, "/set_stat global_always_hit 0");
+        Assert.False(conn.Pools.AlwaysHit);
+        // The Life Mastery-style threshold: the boundary moves with the command and stays inclusive there.
+        conn.Pools = Pools(conn);
+        await RunCommand(conn, "/set_stat low_life_threshold_%_override 55");
+        Assert.Equal(55, conn.Pools.LowLifeThresholdOverride);
+        conn.PlayerLife = (uint)Math.Floor(conn.PlayerMaxLife * 0.55);
+        Assert.True(Program.OnLowLife(conn));
+        conn.PlayerLife = (uint)Math.Floor(conn.PlayerMaxLife * 0.55) + 1;
+        Assert.False(Program.OnLowLife(conn));
+        // The override wins over the ordinary threshold stat.
+        await RunCommand(conn, "/set_stat low_life_threshold_% 60");
+        Assert.Equal(60, conn.Pools.LowLifeThresholdPct);
+        conn.PlayerLife = (uint)Math.Floor(conn.PlayerMaxLife * 0.55);
+        Assert.True(Program.OnLowLife(conn));
+        conn.PlayerLife = (uint)Math.Floor(conn.PlayerMaxLife * 0.60) + 1;
+        Assert.False(Program.OnLowLife(conn));
+        // The dev replace: an explicit 0 override clears itself, and the ordinary threshold takes over.
+        await RunCommand(conn, "/set_stat low_life_threshold_%_override 0");
+        Assert.Equal(0, conn.Pools.LowLifeThresholdOverride);
+        conn.PlayerLife = (uint)Math.Floor(conn.PlayerMaxLife * 0.60);
+        Assert.True(Program.OnLowLife(conn));
+        conn.PlayerLife = (uint)Math.Floor(conn.PlayerMaxLife * 0.60) + 1;
+        Assert.False(Program.OnLowLife(conn));
+    }
+
     public void Dispose()
     {
         PlayerInventories.Forget(_name);
+        PlayerInventories.Forget(_name + "gems");
         PlayerInventories.Forget(_name + "base");
         PlayerInventories.Forget(_name + "node");
         PlayerInventories.Forget(_name + "dev");
