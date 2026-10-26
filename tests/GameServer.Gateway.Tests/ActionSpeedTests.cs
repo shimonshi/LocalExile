@@ -83,7 +83,7 @@ public class ActionSpeedTests
         Assert.Equal((ushort)1094, tailwind.Definition);
         Assert.Contains((348u, -8), tailwind.Stats);
         // The integration owner supplies this flag in the active owner-buff path; never infer it from effect alone.
-        using var definitions = JsonDocument.Parse(File.ReadAllBytes(Path.Combine(GameDataFiles.ResolveFolder(), "tables", "BuffDefinitions.json")));
+        using var definitions = JsonDocument.Parse(File.ReadAllBytes(Path.Combine("data", "tables", "BuffDefinitions.json")));
         Assert.Contains(7785, definitions.RootElement[1094].GetProperty("GrantedFlags").EnumerateArray().Select(x => x.GetInt32()));
         Assert.Equal(347, definitions.RootElement[922].GetProperty("StatsKeys")[0].GetInt32());
     }

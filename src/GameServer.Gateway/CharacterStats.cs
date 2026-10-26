@@ -223,7 +223,7 @@ static class CharacterStats
             LowLifeThresholdOverride: b.LowLifeThresholdOverride, LowLifeThresholdPct: b.LowLifeThresholdPct);
     }
 
-    private static readonly Lazy<uint[]> Experience = new(() => LoadExperience(GameDataFiles.ResolveFolder()));
+    private static readonly Lazy<uint[]> Experience = new(() => LoadExperience("data"));
 
     /// <summary>Every level's starting experience (index = level − 1), ExperienceLevels.dat.</summary>
     public static IReadOnlyList<uint> LevelStarts => Experience.Value;

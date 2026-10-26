@@ -16,18 +16,11 @@ public sealed class FinalBlowAndAlwaysHitGatewayCollection;
 [Collection("Final Blow and always hit Gateway")]
 public sealed class FinalBlowAndAlwaysHitGatewayTests : IDisposable
 {
-    readonly string _cwd = Directory.GetCurrentDirectory();
     readonly string _name = "FinalBlow" + Guid.NewGuid().ToString("N");
     static MethodInfo Method(string name) => typeof(Program).GetMethod(name, BindingFlags.Static | BindingFlags.NonPublic)!;
 
     public FinalBlowAndAlwaysHitGatewayTests()
     {
-        for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
-            if (Directory.Exists(Path.Combine(dir.FullName, "data", "tables")))
-            {
-                Directory.SetCurrentDirectory(dir.FullName);
-                break;
-            }
         TestSaves.Ensure();
     }
 
@@ -342,6 +335,5 @@ public sealed class FinalBlowAndAlwaysHitGatewayTests : IDisposable
         PlayerInventories.Forget(_name + "dev");
         PlayerInventories.Forget(_name + "armed");
         PlayerInventories.Forget(_name + "swapped");
-        Directory.SetCurrentDirectory(_cwd);
     }
 }
