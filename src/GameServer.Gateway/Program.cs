@@ -108,8 +108,6 @@ static async Task SaveUnsavedProgress(CancellationToken stop)
 
 sealed partial class Program
 {
-    // Catalogs retain an absolute source directory: a lazy table must not depend on the working directory when it is
-    // first read. Resolve on construction instead of sharing a field whose initializer order spans partial files.
 
     internal const uint PlayerId = 0x1000;
     // The server's tick: 30 per second. Nothing the server times (an attack) is shorter than one tick.
