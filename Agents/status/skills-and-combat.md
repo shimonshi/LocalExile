@@ -112,8 +112,8 @@ Part of [Status](../Status.md); what to build next in this area is in
 - Movement speed: the passive `base_movement_velocity_+%` is summed into `Pools`, sent as the client's
   `movement_velocity_+%` and used by the server's walk copy (37 × (1 + pct / 100) cells/s);
   applied on login, level, passive and area changes; `/set_speed` adds its percentage on top;
-  only unconditional passive increases are modelled (no action speed, more multipliers, gear/buff movement or the 128
-  cap yet).
+  unconditional passive increases have native coverage.
+  Action speed and floors have separate automated coverage below; other more multipliers and the 128 cap remain open.
   Code: `CharacterStats.cs`, Gateway (`ApplyMovementSpeed`).
   Docs: [07](../docs/protocol/07-latency-visibility-movement.md) §3.
 - Block / Spell Block: passives' `additional_block_%` and `base_spell_block_%` are summed and capped at 75% / 90% (PoB
@@ -168,6 +168,9 @@ Part of [Status](../Status.md); what to build next in this area is in
   Steel Willed and Forest Tracking scale attack increases from complete groups of 450 final armour/evasion.
   Fractional transfers join base and added damage before conversion and Rage.
   Sixteen native checks cover real-node allocation, fixed hits reaching enemy Life and paid refunds for four sources.
+  Multiplicative action speed, Tailwind effect and Toughened Skin's independent floors execute in attack/cast/walk.
+  Timing reuses PR #194's inherent attack bases and PR #195's native spell base plus final cast-speed contract.
+  Actual connected allocation/refunds and cooldown independence have automated coverage; native validation is pending.
   Most Phrecia signature mechanics remain absent; selecting a class does not implement its entire tree.
   Code: `PassiveGemModifiers.cs`, `SkillGemFamilies.cs`, `GamblerModifiers.cs`, `SkillRestrictions.cs`, Gateway skill/combat partials.
   Docs: [implemented effects by class](../docs/game/ascendancies.md#what-this-does-not-complete).

@@ -41,9 +41,9 @@ partial class Program
             int percent = int.Parse(args[0]);
             if (percent is < 10 or > 1000) throw new ArgumentException("10 to 1000");
             int totalPct = conn.Pools.MovementVelocityPct + percent - 100;
-            conn.Walk.SetSpeed(WalkSpeed * (100 + totalPct) / 100, conn.Clock.Elapsed.TotalSeconds);
             lock (conn.Monsters) conn.PlayerStats[StatKeys.MovementVelocityPct] = totalPct;
-            await Send(remote, stream, ciphers, InstanceEntities.StatsUpdate(PlayerId, [(StatKeys.MovementVelocityPct, totalPct)]),
+            conn.ApplyMovementSpeed();
+            await Send(remote, stream, ciphers, InstanceEntities.StatsUpdate(PlayerId, PlayerStatsWithCleared(conn)),
                 $"0x01b3 stats: movement_velocity_+% (key {StatKeys.MovementVelocityPct}) = {totalPct} ({conn.Pools.MovementVelocityPct} passive + {percent - 100} dev)");
         })
         .Add("set_stat", "/set_stat <stat name or client key> <value> (e.g. attack_speed_+% 100)", async args =>
@@ -57,6 +57,7 @@ partial class Program
                 if (AttackBaseCriticalStrike.IsInput(name) || ResistanceOvercap.IsInput(name)
                     || AttackBaseCriticalStrike.IsConditionalInput(name))
                     conn.Pools = PoolsFor(conn, conn.Pools.Level);
+                if (ActionSpeed.IsInput(name) || name == "movement_velocity_+%") conn.ApplyMovementSpeed();
             }
             // The client's requirement checks (gear and gems) read virtual_strength/dexterity/intelligence_for_requirements,
             // not the attributes themselves (13-items.md §2d), so an attribute set here sets its requirement value too.

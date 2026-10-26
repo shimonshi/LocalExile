@@ -171,7 +171,9 @@ sealed class SkillCatalog(string folder = "data")
             result[areaKey] = area + Quality("base_skill_area_of_effect_+%") + Quality("skill_area_of_effect_+%");
         if (!SkillRestrictions.From(Get).DealsDamage(IsSpell(effectRow)) && _stats.Key("base_deal_no_damage") is uint noDamage)
             result[noDamage] = 1;
-        if (CastMs(effectRow) is int baseMs and > 0)
+        if (SpellCastTiming.ForSkill(this, effectRow, Get("cast_speed_+%"), ActionSpeed.Multiplier(result, _stats.Key)) is { } timing)
+            timing.ApplyTo(result, _stats);
+        else if (CastMs(effectRow) is int baseMs and > 0)
         {
             int ms = IsInstant(effectRow) ? 0 : Math.Max(1, (int)Math.Round(baseMs / (1 + Math.Max(-99, Get("cast_speed_+%")) / 100.0)));
             if (_stats.Key("virtual_base_spell_cast_time_ms") is uint time) result[time] = ms;
@@ -181,10 +183,13 @@ sealed class SkillCatalog(string folder = "data")
     }
 
     /// <summary>The actual cast delay, from exactly the skill stats published to the client.</summary>
-    public int CastTimeMs(int effectRow, int level, int quality, IReadOnlyDictionary<uint, int> character)
+    public int? CastTimeMs(int effectRow, int level, int quality, IReadOnlyDictionary<uint, int> character)
     {
         if (IsInstant(effectRow)) return 0;
         var stats = EffectStatsFor(effectRow, level, quality, character);
+        int Get(string name) => _stats.Key(name) is uint key ? stats.GetValueOrDefault(key) : 0;
+        if (IsSpell(effectRow) && !IsAttack(effectRow))
+            return SpellCastTiming.ForSkill(this, effectRow, Get("cast_speed_+%"), ActionSpeed.Multiplier(stats, _stats.Key))?.DurationMilliseconds;
         return _stats.Key("virtual_base_spell_cast_time_ms") is uint key && stats.TryGetValue(key, out int value)
             ? value : CastMs(effectRow);
     }
@@ -261,6 +266,11 @@ sealed class SkillCatalog(string folder = "data")
         int row = PickLevel(t.StatSetsPerLevel, t.StatSets[effectRow], level);
         return row >= 0 && row < t.Effectiveness.Count ? Math.Max(0, t.Effectiveness[row]) : 0;
     }
+
+    /// <summary>The selected GEPL level's inherent weapon attack-rate multiplier, separate from player/action speed.</summary>
+    public int AttackSpeedMultiplier(int effectRow, int level) =>
+        effectRow >= 0 && level > 0 && _tables.Value is { } t
+            && PickLevel(t.PerLevel, effectRow, level) is int row and >= 0 ? t.AttackSpeedMultipliers[row] : 0;
 
     /// <summary>The effect's primary stat set's base spell critical chance at this gem level, in permyriad.
     /// Null means missing/invalid data, distinct from a known zero (a spell with no inherent critical chance).</summary>
@@ -605,7 +615,7 @@ sealed class SkillCatalog(string folder = "data")
         /// main_hand_attack_speed_+% (the final value already includes more multipliers), at least one server tick
         /// (<see cref="Program.TickSeconds"/>: at most 30 attacks per second).</summary>
         public double AttackSeconds(IReadOnlyDictionary<uint, int>? player) =>
-            Math.Max(Program.TickSeconds, AttackMs / 1000.0 / Math.Max(0.01, 1 + IncreasedAttackSpeed(player) / 100.0));
+            SkillAttackTiming.Seconds(AttackMs, IncreasedAttackSpeed(player), 0, ActionSpeed.Multiplier(player, Program.Stats.Key));
 
         /// <summary>
         /// The skill's final main-hand stats (client keys = Stats.dat row + 1). The server computes them, as the real one
@@ -709,7 +719,8 @@ sealed class SkillCatalog(string folder = "data")
         List<(int StatSet, int CastTime, bool CooldownPauses)> Effects, List<(int[] Implicit, (int, int)[] Constant)> StatSetBase,
         List<(int, int)[]> StatSetLevelStats, List<(int StatSet, int GemLevel, int PlayerLevelReq)> GemLevelReqs, List<int> ManaCost, List<int> LifeCost,
         List<(int ManaFlat, int ManaPercent, int LifeFlat, int LifePercent)> Reservations, List<(int Ms, int Uses)> Cooldowns,
-        List<int> VaalSouls, Dictionary<int, (int, int)[]> Quality, List<int> Effectiveness, List<int?> SpellCritChances)
+        List<int> VaalSouls, Dictionary<int, (int, int)[]> Quality, List<int> Effectiveness, List<int?> SpellCritChances,
+        List<int> AttackSpeedMultipliers)
     {
         public static Tables? Load(string folder)
         {
@@ -751,6 +762,7 @@ sealed class SkillCatalog(string folder = "data")
             var reservations = new List<(int ManaFlat, int ManaPercent, int LifeFlat, int LifePercent)>();
             var cooldowns = new List<(int, int)>();
             var vaalSouls = new List<int>();
+            var attackSpeedMultipliers = new List<int>();
             foreach (var r in p.RootElement.EnumerateArray())
             {
                 perLevel.Add((Int(r, "GrantedEffect"), Int(r, "Level")));
@@ -763,6 +775,8 @@ sealed class SkillCatalog(string folder = "data")
                     Math.Max(0, Int(r, "LifeReservationFlat")), Math.Max(0, Int(r, "LifeReservationPercent"))));
                 cooldowns.Add((Math.Max(0, Int(r, "Cooldown")), Math.Max(0, Int(r, "StoredUses"))));
                 vaalSouls.Add(Math.Max(0, Int(r, "VaalSouls")));
+                attackSpeedMultipliers.Add(r.TryGetProperty("AttackSpeedMultiplier", out var speed)
+                    && speed.ValueKind == JsonValueKind.Number && speed.TryGetInt32(out int multiplier) ? multiplier : 0);
             }
             var quality = new Dictionary<int, (int, int)[]>();
             if (File.Exists(Table("GrantedEffectQualityStats")))
@@ -787,7 +801,7 @@ sealed class SkillCatalog(string folder = "data")
                 if (Int(r, "PlayerLevelReq") is >= 0 and var req) levelReqs.Add((Int(r, "StatSet"), Int(r, "GemLevel"), req));
             }
             return new Tables(effects, statSets, perLevel, setLevels, effectInfo, baseStats, levelStats, levelReqs, mana, life, reservations, cooldowns,
-                vaalSouls, quality, effectiveness, spellCritChances);
+                vaalSouls, quality, effectiveness, spellCritChances, attackSpeedMultipliers);
         }
     }
 }

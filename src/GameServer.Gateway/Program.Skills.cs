@@ -116,6 +116,13 @@ partial class Program
                 ("energy_shield_recharge_active", 0) })
             .Concat(ChargePanelStats.Compute(Get)))
             if (Stats.Key(stat) is uint key && !devSet.Contains(key)) stats[key] = value;
+        // Publish the action multiplier independently of attack/cast/movement increases. Tailwind's raw base is
+        // already in the source reduction; only its own effect bonus is added, and each floor has its own scope.
+        var actionSpeed = ActionSpeed.From(Get);
+        foreach (var (name, value) in new[] { (ActionSpeed.Virtual, actionSpeed.Percent),
+            ("intermediary_combined_action_speed_+%", actionSpeed.Percent),
+            ("movement_velocity_+%", actionSpeed.MovementPercent(Get("movement_velocity_+%"))) })
+            if (Stats.Key(name) is uint key) stats[key] = value;
         // The Offence tab's per-hand damage rows (issue #75): the hit the default attack actually swings with, so the panel
         // agrees with the damage the server applies. Only the main hand: the server attacks with it. Those rows are gated by
         // skill_uses_main_hand, which nothing sent before, so the numbers alone would leave them blank.
@@ -318,6 +325,7 @@ partial class Program
         foreach (var (id, effect, name, level, quality, gem) in gems)
         {
             var stats = Skills.EffectStatsFor(effect, level, quality, gemPlayerStats);
+            SkillAttackTiming.Apply(Skills, effect, level, stats);
             var cost = CostFor(conn, effect, level, quality);
             if (Stats.Key("mana_cost") is uint manaCost) stats[manaCost] = (int)cost.Mana;
             if (Stats.Key("life_cost") is uint lifeCost) stats[lifeCost] = (int)cost.Life;

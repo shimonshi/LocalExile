@@ -35,6 +35,8 @@ validate town/combat/character-switch round trips in the real client (protocol/1
   Remaining cooldown work includes multi-use recharge, shared groups, bypass, typed/conditional/more recovery,
   official tick boundaries and the separate location-instant C→S 0x190 contribution.
   See [11](../docs/protocol/11-skills.md) §9.
+  Action speed, active Tailwind effect and Toughened Skin's action/movement floors now have production consumers.
+  Verify their native timing and movement before moving them from partial status; cooldown recovery is separate.
 - **Done when:** life, mana, attributes, resistances and their derived values come from the server's own calculation
   (Characters.dat base values, level, items, passives) and are sent in the Stats component.
   The overcapped resistances' derived evasion and critical increases now follow that rule and are native-verified.

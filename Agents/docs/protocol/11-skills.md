@@ -253,6 +253,32 @@ once. The Gateway now sends the 0x20 update instead (above), which also removes 
    thought the swing took 833 ms instead of 757 ms it fell behind and dropped every third or fourth swing, which then
    animated without damage.
 
+**Action speed and inherent timing.** `SkillAttackTiming` adapts PR #194's implementation at
+`4de759ed65966dd099d57c0b827de7a3987aa43e`.
+The GEPL `AttackSpeedMultiplier` changes the integer total base attack duration before player attack speed.
+Burning Arrow's -30% rate changes a 714 ms weapon base into a 1020 ms total base; Flicker Strike's +20% is separate.
+The weapon's ordinary base and per-hand increased-speed stats retain their native meanings.
+Default attacks, attack gems, approach readiness, projectile/area contact waits and existing channel ticks use
+the same duration, with the server tick cap applied after all multipliers.
+
+`ActionSpeed` reads signed `action_speed_-%` (key 348): -10 gives a 1.10 action multiplier.
+It publishes the final `virtual_action_speed_+%` (key 3302) and the combined action-speed panel row.
+Attack and spell timing consume that final multiplier once, independently of their own increased speed.
+Ancestral Commander's Toughened Skin (node 37852) supplies action floor 3444 and movement floor 3445.
+The action floor clamps only action speed; it does not cancel reduced attack/cast speed or reduced movement speed.
+Movement applies its own floor before multiplying by action speed (see [07](07-latency-visibility-movement.md)).
+
+Tailwind template 44 (`DeadeyeTailwind`, BuffDefinition 1094) already contributes raw reduction -8.
+Only while `has_tailwind` (key 7786) is active does `tailwind_effect_on_self_+%` (key 7766) add its extra effect.
+The integer Tailwind contribution is floored after effect scaling, then its existing eight is subtracted.
+Greatwolf's Call (node 14442) gives 50% effect, so its action bonus becomes 12%, not 20%.
+With a separate Harbinger raw -10, raw -18 plus that effect becomes 22%; Harbinger's contribution is not scaled.
+The integration owner supplies the active owner-buff marker; no trigger or charge engine is inferred from the flag.
+The stat keys and signs follow the pinned Stats/Buff tables, including Harbinger BuffDefinition 922.
+Exact native action-speed getter/floor locations and fractional Tailwind-effect rounding await native verification.
+Automated tests cover real connected allocation/paid refunds, native stat records and server consumers.
+This continuation does not claim new native action-speed verification or change cooldown recovery.
+
 **Critical strikes.** The server rolls a hit's critical chance after the damage roll: `base chance × (1 + increased
 critical strike chance / 100)`, capped at 100%, then multiplies the damage by the final multiplier (150% plus
 `base_critical_strike_multiplier_+`), as PoB's `CalcOffence` does. PoB's `unarmedWeaponData[class].CritChance = 0`
@@ -426,7 +452,7 @@ dead was ignored), then 0x1b7 next to the area's waypoint if the character has a
 
 **Client stat key = Stats.dat row + 1** with the vendored schema: every key read during an attack matches
 (0xf5 → row 244 `movement_velocity_+%`, 0x7d → 124 `base_maximum_life`, 0x144 → 323
-`main_hand_minimum_attack_distance`, 0x35a → 857 `is_totem`, 0xce6 → 3301 `virtual_action_speed_+%`, …).
+`main_hand_minimum_attack_distance`, 0x35a → 857 `is_totem`, 0xce6 → 3302 `virtual_action_speed_+%`, …).
 `scripts/re/frida/trace-skill-stats.js` logs the keys, values and callers of the stat getter `0x1424cfa40` while an
 action is created (`0x141941c90`) or started (`0x141e8cf10`); `dump-stats-object.js` dumps the stored (key, value)
 vector (stats +0xf0) of whichever stats object answers a key; `scripts/re/statkeys.py <key>…` lists the client code
@@ -448,7 +474,8 @@ Live 2026-10-18 with the Witch's Fireball. Code: `SkillCatalog.EffectStats`, `Ge
   skill's list also carries the player's stats.
 - **Cast time.** The client reads **`virtual_base_spell_cast_time_ms`** (0x24b9) when it starts the cast; without it
   the cast was instant (`trace-skill-stats.js`). The Gateway sends GrantedEffects `CastTime` (750 ms) there and in
-  `base_spell_cast_time_ms`, and `hundred_times_casts_per_second`. `mana_cost` (0x2e72) is what the client spends.
+  `base_spell_cast_time_ms`; only `hundred_times_casts_per_second` uses the final adjusted duration.
+  `mana_cost` (0x2e72) is what the client spends.
 - **Casting.** At the ground: C→S 0x25 with the gem skill's id. A **spell** stops where it stands and the server echoes
   0x1ab from there (no walk). An **attack** (ActiveSkillType Attack: Holy Strike, Ground Slam …) follows bit 0 of the
   message's flags, the client's **"Always Attack Without Moving"** setting (live 2026-10-25: 0x400 with it off, 0x401
@@ -506,8 +533,13 @@ Live 2026-10-18 with the Witch's Fireball. Code: `SkillCatalog.EffectStats`, `Ge
   time: the Witch's `spell_projectile_wand` in `Art/Models/CHARACTERS/Witch/rig.amd` is 1066 ms long with `contact` at
   599 ms, so Fireball leaves after 56% of the cast. `python -I scripts/re/anim_contacts.py` writes every class's
   contacts to data/animation-contacts.json (`AnimationContacts`); the Gateway waits cast time × that fraction.
-- **Cast speed.** `base_cast_speed_+%` and `cast_speed_+%` shorten `virtual_base_spell_cast_time_ms` and
-  `hundred_times_casts_per_second` in the skill's stats and the server's release time.
+- **Cast speed.** `SpellCastTiming` adapts PR #195 head `af10f7b7e35cfc68cc3822b72dc9a01de7c0c916`.
+  The native spell action receives unadjusted base milliseconds and final `cast_speed_+%` separately.
+  The server divides that base by cast speed and action speed, then rounds its integer-ms duration once.
+  Quality adds to the final cast-speed stat once; it does not pre-divide the native virtual base.
+  Instant spells retain zero delay and zero fabricated cast rate, even at nonpositive speed.
+  Impossible or unrepresentable noninstant casts have no duration/rate and are refused before costs or cooldown.
+  Projectile release still uses the animation contact fraction; area spells and Portal use their existing waits.
 - **Instant skills.** The client knows an instant skill by its stat **`skill_is_instant`** (0x2064), not by the
   ActiveSkillType `Instant`; the server derives it from the type and sends it with `base_skill_is_instant`
   (`SkillCatalog.EffectStats`). Without it Haste's and Righteous Fire's actions used the spell action class (vtable
@@ -1155,7 +1187,7 @@ it:
 | `minimum/maximum_*_damage_to_return_to_melee_attacker` | `*_damage_to_return_to_melee_attacker` (both ends) |
 | `extra_damage_taken_from_crit_+%` | − `base_self_critical_strike_multiplier_-%` |
 | `impale_on_hit_%_chance` | `attacks_impale_on_hit_%_chance` (the attack reads this row's name) |
-| `intermediary_combined_action_speed_+%` | − `action_speed_-%` |
+| `intermediary_combined_action_speed_+%` | Signed action source plus active Tailwind effect, with the action floor |
 
 **Main hand / off hand rows** (`main_hand_…` / `off_hand_…`, `virtual_total_main_hand_…`) add the global stats and that
 hand's item's own local stats (`HandLocalStats`: the active item in the first weapon set, else the second):

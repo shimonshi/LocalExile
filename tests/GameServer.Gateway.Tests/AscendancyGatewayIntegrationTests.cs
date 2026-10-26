@@ -18,7 +18,7 @@ namespace GameServer.Gateway.Tests;
 public sealed class AscendancyGatewayIntegrationCollection;
 
 [Collection("Ascendancy Gateway integration")]
-public sealed class AscendancyGatewayIntegrationTests : IDisposable
+public sealed partial class AscendancyGatewayIntegrationTests : IDisposable
 {
     readonly string _previousDirectory = Directory.GetCurrentDirectory();
 
