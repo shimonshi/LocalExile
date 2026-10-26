@@ -545,8 +545,10 @@ partial class Program
             }
             int evasion = Monsters.BaseEvasion(level) ?? 0;
             int evasiveEvasion = Monsters.BaseEvasiveEvasion(level) ?? 0;
-            int chance = DamageModel.AccuracyHitChance(evasion, conn.Pools.Accuracy);
-            int evasiveChance = DamageModel.AccuracyHitChance(evasiveEvasion, conn.Pools.Accuracy);
+            // Exhibit 122's can't-be-evaded flag: the reference chances cannot be below 100, and the diagnostic
+            // agrees with the panel and the roll (the rating and the mastery's own fields stay unconditional).
+            int chance = conn.Pools.AlwaysHit ? 100 : DamageModel.AccuracyHitChance(evasion, conn.Pools.Accuracy);
+            int evasiveChance = conn.Pools.AlwaysHit ? 100 : DamageModel.AccuracyHitChance(evasiveEvasion, conn.Pools.Accuracy);
             var withMastery = conn.Pools.AccuracyMoreVsUniquePct != 0 || conn.Pools.AccuracyMoreInCloseRangePct != 0
                 ? $" Targets gain {conn.Pools.AccuracyMoreVsUniquePct:0.#}% more accuracy against unique enemies and " +
                   $"{conn.Pools.AccuracyMoreInCloseRangePct:0.#}% more within the 20-unit close range, applied per attack roll."

@@ -245,6 +245,8 @@ once. The Gateway now sends the 0x20 update instead (above), which also removes 
    687 = 1): the attack cannot be evaded, so the default attack skips the accuracy roll entirely, the panel's
    Chance to Hit reference rows read 100, and the pools' rating, the mastery's target multipliers and the critical
    chance are untouched (attack gems keep their current no-roll behavior).
+   `/accuracy` states the can't-be-evaded reference chances the same way: both of its Chance to Hit values read
+   100 with the flag, keeping the diagnostic and the panel agreed.
 4. Any later player action (0x25 move, another 0x24) cancels steps 2 and 3 (`ClientState.ActionCount`).
 5. Pacing: one swing per attack time. While the button is held the client sends one 0x24 per swing; a swing may
    arrive up to a quarter of an attack early (jitter) and the schedule stays on the client's cadence. When the server

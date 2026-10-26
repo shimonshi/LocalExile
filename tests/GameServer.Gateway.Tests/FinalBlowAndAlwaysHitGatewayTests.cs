@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Sockets;
 using System.Reflection;
+using System.Text;
 using GameServer.Core.Protocol.Instance;
 using GameServer.Core.Protocol.Login;
 using GameServer.Core.World;
@@ -65,8 +66,9 @@ public sealed class FinalBlowAndAlwaysHitGatewayTests : IDisposable
     int RecordMultiplier(GrantedSkill record, string name) =>
         record.Stats!.First(kv => kv.Key == (uint)Program.Stats.Key(name)!.Value).Value;
 
-    // Invoke the real /set_stat command handler (the actual ChatCommands registry), not a dev Set + PoolsFor.
-    static async Task RunCommand(ClientState conn, string line)
+    // Invoke the real command handler (the actual ChatCommands registry), not a dev Set + PoolsFor, and return the
+    // decrypted capture of what the handler sent (the chat replies are plain Wireshark-ascii inside 0x17 lines).
+    static async Task<byte[]> RunCommand(ClientState conn, string line)
     {
         using var listener = new TcpListener(IPAddress.Loopback, 0);
         listener.Start();
@@ -79,6 +81,7 @@ public sealed class FinalBlowAndAlwaysHitGatewayTests : IDisposable
         var reading = client.GetStream().CopyToAsync(capture, timeout.Token);
         byte[] key = [.. Enumerable.Range(0, 64).Select(i => (byte)i)];
         var serverCipher = new ConnectionCiphers(key, isClient: false);
+        var clientCipher = new ConnectionCiphers(key, isClient: true);
         conn.Commands = (ChatCommands)typeof(Program)
             .GetMethod("Commands", BindingFlags.Static | BindingFlags.NonPublic,
                 [typeof(string), typeof(NetworkStream), typeof(ConnectionCiphers), typeof(ClientState)])!
@@ -86,13 +89,15 @@ public sealed class FinalBlowAndAlwaysHitGatewayTests : IDisposable
         try
         {
             await conn.Commands.RunAsync(line).WaitAsync(timeout.Token);
-            conn.Closed = false;
         }
         finally
         {
             server.Client.Shutdown(SocketShutdown.Send);
             await reading;
         }
+        byte[] sent = capture.ToArray();
+        clientCipher.Receive.Process(sent);
+        return sent;
     }
 
     int PanelValue(Dictionary<uint, int> panel, string name) => panel[Program.Stats.Key(name)!.Value];
@@ -297,6 +302,35 @@ public sealed class FinalBlowAndAlwaysHitGatewayTests : IDisposable
         Assert.True(Program.OnLowLife(conn));
         conn.PlayerLife = (uint)Math.Floor(conn.PlayerMaxLife * 0.60) + 1;
         Assert.False(Program.OnLowLife(conn));
+    }
+
+    [Fact]
+    public async Task The_accuracy_diagnostic_reports_cannot_be_evaded_reference_chances()
+    {
+        var conn = Character();
+        conn.Pools = Pools(conn);
+        // The real handler's own reply: the rating and its increased form stay unconditional (no flag, no mastery).
+        string before = Encoding.ASCII.GetString(await RunCommand(conn, "/accuracy 88"));
+        int rating = conn.Pools.Accuracy;
+        Assert.Contains($"Accuracy {rating} (", before);
+        Assert.Contains("% chance to hit a level 88 monster", before);
+        Assert.DoesNotContain("100% chance to hit", before);
+        Assert.DoesNotContain("100% against evasive monsters", before);
+        Assert.DoesNotContain("Targets gain", before);
+        // The can't-be-evaded flag: both reference chances read 100, whatever the monster level's evasion.
+        await RunCommand(conn, "/set_stat global_always_hit 1");
+        Assert.True(conn.Pools.AlwaysHit);
+        string flagged = Encoding.ASCII.GetString(await RunCommand(conn, "/accuracy 88"));
+        Assert.Contains("100% chance to hit a level 88 monster", flagged);
+        Assert.Contains("100% against evasive monsters", flagged);
+        // The same exact rating form stays (the flag is not an accuracy value).
+        Assert.Contains($"Accuracy {rating} (", flagged);
+        // The removal restores the ordinary values again.
+        await RunCommand(conn, "/set_stat global_always_hit 0");
+        string after = Encoding.ASCII.GetString(await RunCommand(conn, "/accuracy 88"));
+        Assert.Contains($"Accuracy {rating} (", after);
+        Assert.DoesNotContain("100% chance to hit", after);
+        Assert.DoesNotContain("100% against evasive monsters", after);
     }
 
     public void Dispose()
