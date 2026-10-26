@@ -40,7 +40,8 @@ partial class Program
             uint stat = Stats.Key(args[0]) ?? throw new ArgumentException($"unknown stat {args[0]}");
             bool off = args[1].Equals("off", StringComparison.OrdinalIgnoreCase);
             int value = off ? 0 : int.Parse(args[1]);
-            bool rebuildMana = stat == Stats.Key(StrengthMana.PerFourStrength);
+            bool rebuildMana = stat == Stats.Key(StrengthMana.PerFourStrength)
+                || stat == Stats.Key(PowerOfPurpose.RawFlag);
             lock (conn.Monsters)
             {
                 if (off) conn.PlayerStats.Remove(stat);

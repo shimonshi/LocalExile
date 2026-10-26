@@ -37,7 +37,8 @@ Part of [Status](../Status.md); what to build next in this area is in
   A fresh Witch's 56 mana becomes 80 at 14/15 Strength, 88 at 16 Strength and 110 with 25% increased mana.
   Maximum-mana attack lightning follows the final pool; display-only Strength overrides cannot feed it back.
   Idle aura reservation and current-mana clamps have decrypted command-wire coverage, including the send gate.
-  Native controls use raw inputs and synthetic gear; the other Mental Conditioning flags and class remain separate.
+  Historical native controls use raw inputs and synthetic gear; Phrecia selection remains gated.
+  The full Mental Conditioning node now composes with Power of Purpose in automated tests; native reruns remain pending.
   See [11](../docs/protocol/11-skills.md) section 4.
 
 - Player Actor scale (#299): passive, active item, aura, flask and cosmetic size inputs share final1973.
@@ -59,6 +60,16 @@ Part of [Status](../Status.md); what to build next in this area is in
   Native controls use a raw source on an unascended Marauder; Incorruptible selection, recent-hit doubling
   and partial armour percentages remain separate.
   See [20](../docs/protocol/20-damage.md) section 2e.
+
+- Power of Purpose (#291): raw `keystone_mental_conditioning` converts 80% of flat mana to twice as much armour.
+  Mana and armour increases add for the converted contribution, under the documented PoB calculation model.
+  Thirteen historical native controls at original head `7678d60` covered toggles, increases, rounding and relog.
+  Those controls exercised actual Steel Willed attack damage and remaining-mana lightning on an unascended Witch.
+  Current-main tests compose mana per final Strength, active equipment, increases, chaos-armour/CI and Mageblood.
+  Reservation, clamps, zero/off/removal, Iron Reflexes, MORE and own-aura send-gate freshness have automated coverage.
+  The rebased candidate and exact #290 → #294 → #296 → #300 composition still need fresh native checks.
+  Phrecia selection remains gated.
+  See [the model and scope](../docs/game/power-of-purpose.md).
 
 - Skills and combat: the player has the default attack (PlayerMelee, Characters.dat StartingMeleeSkill) in the Actor
   skill list; it goes on the skill bar, walks into range, swings at the unarmed speed (757 ms with dual wielding's
