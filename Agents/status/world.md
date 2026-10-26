@@ -71,6 +71,7 @@ Part of [Status](../Status.md); what to build next in this area is in
 - Incoming fixed-message framing recognizes C→S `0x020a` (3 bytes), `0x0059` (16) and `0x0099` (4).
   Primary client writers establish these lengths; all TCP splits and coalesced tick/chat regression tests cover them.
   The old `0x0099` length of 20 swallowed following tick/chat bytes; a native transfer trace exposed that defect.
+  Ten native Daughter of Oshabi transfers between The Coast and The Twilight Strand pass after the length correction.
   Their gameplay semantics and the causal chain of a prior intermittent transfer wide-string error remain unproven.
   Other unknown message ids still stop framing the current read.
   Code: `InstanceProtocol.cs`, `InstanceFixedMessageFramingTests.cs`.

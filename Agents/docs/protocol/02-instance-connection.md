@@ -192,5 +192,7 @@ If a chat follows instead, the false length can cut into its wide-string payload
 The exact original wide-string exception still lacks its complete preceding byte trace;
 this fixes the independently observed `0x0099` boundary defect without assigning unproven original causality.
 Tests preserve the captured four-message sequence and cover every split/coalesced chat boundary for `0x0099` too.
+After the correction, ten actual Daughter of Oshabi transfers between The Coast and The Twilight Strand completed
+with subsequent commands intact and no wide-string protocol error.
 
 Env: `Game_GATEWAY_PORT` (6112), `Game_INSTANCE_SECRET` (data/instance-secret.bin), `Game_GATEWAY_ENTER`.
