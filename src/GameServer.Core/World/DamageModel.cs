@@ -159,6 +159,26 @@ public static class DamageModel
     /// <summary>Whether an attack hits; <paramref name="roll"/> is 0..99, and the chance is at least 5%.</summary>
     public static bool Hits(int chance, int roll) => roll < Math.Clamp(chance, 5, 100);
 
+    /// <summary>The game's default Low Life threshold: at or below 50% of maximum life (50%, inclusive), per the
+    /// Ultimatum manifesto's "low or no resources count as 50% or below"
+    /// (<see href="https://www.pathofexile.com/forum/view-thread/3079632">official forum</see>).</summary>
+    public const int DefaultLowLifeThreshold = 50;
+
+    /// <summary>
+    /// Whether the player is on Low Life: current life at or below the threshold percentage (inclusive) of maximum
+    /// life, as a whole and integer-safe comparison ((current × 100 ≤ maximum × threshold)). The predicate takes the
+    /// pool's actual <c>low_life_threshold_%_override</c> (Stats key 17896) when it is positive, else the ordinary
+    /// <c>low_life_threshold_%</c> (key 17901) summed value, else the 50% default; a negative input keeps the default.
+    /// A zero maximum (no pool) cannot be on low life, so it returns false; a zero current life is on the boundary and
+    /// counts (a dead player never rolls a hit).
+    /// </summary>
+    public static bool LowLife(uint currentLife, uint maximumLife, int thresholdOverride = 0, int thresholdPct = 0)
+    {
+        int raw = thresholdOverride > 0 ? thresholdOverride : thresholdPct;
+        int threshold = Math.Clamp(raw > 0 ? raw : DefaultLowLifeThreshold, 0, 100);
+        return maximumLife > 0 && (long)currentLife * 100 <= (long)maximumLife * threshold;
+    }
+
     /// <summary>Path of Building's <c>data.misc.DamageReductionCap</c>: physical damage reduction from armour is
     /// capped at 90%.</summary>
     public const int DamageReductionCap = 90;

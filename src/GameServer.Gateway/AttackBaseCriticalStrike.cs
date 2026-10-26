@@ -22,6 +22,11 @@ static class AttackBaseCriticalStrike
     /// <summary>Stats.dat row 3906: the unarmed melee attack's base critical strike chance, permyriad (1000 = 10.00%).</summary>
     public const string UnarmedBaseStat = "base_melee_critical_strike_chance_while_unarmed_%";
 
+    /// <summary>Stats.dat row 21564: the unarmed melee attack's critical strike multiplier, percentage points on top of
+    /// the base multiplier (the final multiplier is 150 + this sum; Final Blow grants 50 = +50%). Only an empty active
+    /// main hand in a melee context grants it; it is not a spell or weapon value.</summary>
+    public const string UnarmedCriticalStrikeMultiplierStat = "unarmed_melee_attack_critical_strike_multiplier_+";
+
     /// <summary>
     /// The main hand's attack base critical strike chance (permyriad) before the global increased chance.
     /// <paramref name="weaponBase"/> is the armed weapon's base with its own local mods (WeaponProfileFor.Critical);

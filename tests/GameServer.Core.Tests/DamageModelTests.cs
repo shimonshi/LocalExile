@@ -227,4 +227,37 @@ public class DamageModelTests
         Assert.Equal(95, DamageModel.EvadeChance(1_000_000, 30));
         Assert.Equal(95, DamageModel.EvadeChance(67, 0));
     }
+
+    [Fact]
+    public void Low_life_is_the_threshold_percentage_of_maximum_life_inclusive_with_the_default_50()
+    {
+        // The boundary itself is included: exactly half of the maximum is on Low Life, one more is not.
+        Assert.True(DamageModel.LowLife(5000, 10_000));
+        Assert.False(DamageModel.LowLife(5001, 10_000));
+        // Well above and a tiny pool.
+        Assert.False(DamageModel.LowLife(10_000, 10_000));
+        Assert.True(DamageModel.LowLife(1, 3)); // 33% of the maximum is inside the half.
+        // The override percentage drives the boundary when it is positive: 55 inclusive at 55% (the Life Mastery's
+        // raised threshold), still out at 56%.
+        Assert.True(DamageModel.LowLife(5500, 10_000, thresholdOverride: 55));
+        Assert.False(DamageModel.LowLife(5501, 10_000, thresholdOverride: 55));
+        // The ordinary conditional threshold applies when no override is set; the override wins when both are set.
+        Assert.True(DamageModel.LowLife(5900, 10_000, thresholdPct: 60));
+        Assert.True(DamageModel.LowLife(6000, 10_000, thresholdPct: 60)); // inclusive at the threshold itself
+        Assert.False(DamageModel.LowLife(6001, 10_000, thresholdPct: 60));
+        Assert.True(DamageModel.LowLife(5400, 10_000, thresholdOverride: 60, thresholdPct: 40));
+        // A negative (or absent) threshold keeps the default; the percentage clamps to 0..100.
+        Assert.True(DamageModel.LowLife(5000, 10_000, thresholdOverride: -5));
+        Assert.False(DamageModel.LowLife(5001, 10_000, thresholdOverride: -5));
+        Assert.True(DamageModel.LowLife(10_000, 10_000, thresholdOverride: 150)); // clamped to 100
+        // A threshold of 1 keeps 1% or less inside it.
+        Assert.True(DamageModel.LowLife(0, 10_000, thresholdPct: 1));
+        Assert.True(DamageModel.LowLife(100, 10_000, thresholdPct: 1));
+        Assert.False(DamageModel.LowLife(101, 10_000, thresholdPct: 1));
+        // Zero current life is the boundary itself (a dead player never rolls, but the answer keeps its meaning).
+        Assert.True(DamageModel.LowLife(0, 10_000));
+        // A zero maximum cannot be reduced: not low life, whatever the current value is.
+        Assert.False(DamageModel.LowLife(0, 0));
+        Assert.False(DamageModel.LowLife(10_000, 0));
+    }
 }

@@ -165,12 +165,25 @@ partial class Program
             SpellBlockLucky = pools.SpellBlockLucky || conn.ForceSpellBlockLucky,
             SpellSuppressionLucky = pools.SpellSuppressionLucky || conn.ForceSpellSuppressionLucky,
             SpellSuppressionUnlucky = pools.SpellSuppressionUnlucky || conn.ForceSpellSuppressionUnlucky,
+            // Exhibit 122's can't-be-evaded flag also honours a dev /set_stat input, like the overcap flags do; a dev
+            // value replaces its own input (the present override or ordinary threshold), and thresholds' static
+            // sources otherwise keep the passives' values.
+            AlwaysHit = bonus.AlwaysHit || (Stats.Key("global_always_hit") is uint alwaysKey && devStats.TryGetValue(alwaysKey, out var alwaysDev) && alwaysDev != 0),
+            LowLifeThresholdOverride = Stats.Key("low_life_threshold_%_override") is uint ovKey && devStats.TryGetValue(ovKey, out var ovDev)
+                ? ovDev : bonus.LowLifeThresholdOverride,
+            LowLifeThresholdPct = Stats.Key("low_life_threshold_%") is uint thKey && devStats.TryGetValue(thKey, out var thDev)
+                ? thDev : bonus.LowLifeThresholdPct,
             // WeaponTypes.dat gives the main hand's base critical chance (permyriad, e.g. 830 = 8.30%); unarmed is 0.
             // A pure base stat takes its place before the global increases: the weapon override (Slayer Overwhelm,
             // Blind Prophet's Sightless) replaces the armed weapon's base, already with its local mods, and unarmed
             // melee uses its own Behemoth base. Neither base is a spell value; the spell route stays on SpellCriticalStrike.
             AttackCriticalStrikeChance = AttackBaseCriticalStrike.Chance(!activeWeapon.Unarmed,
                 activeWeapon.Critical, criticalIncrease, RawCritical),
+            // Final Blow's unarmed_melee_attack_critical_strike_multiplier_+ (Stats key 21565, +50): only the empty
+            // active main hand (unarmed) grants it, stored separately so the consumers apply it only in a melee
+            // context (CriticalMultiplierFor); spells and non-melee attack gems keep the plain attack multiplier.
+            UnarmedCriticalStrikeMultiplierBonus = activeWeapon.Unarmed && activeWeapon.Melee
+                ? RawCritical(AttackBaseCriticalStrike.UnarmedCriticalStrikeMultiplierStat) : 0,
             SpellCriticalStrikeChance = (int)Math.Round(
                 DamageModel.CriticalStrikeChance(DamageModel.BaseSpellCriticalStrikeChancePerMyriad,
                     pools.SpellCriticalStrikeChancePct) * 100)
@@ -333,6 +346,13 @@ partial class Program
         int auraEffect = Get("non_curse_aura_effect_+%") + Get("aura_effect_+%")
             + Get("aura_effect_on_self_from_your_skills_+%");
         int auraArea = Get("base_aura_area_of_effect_+%");
+        // Exhibit 122 (graph id 36978): global_always_hit (Stats key 687) — attacks cannot be evaded. It is a flag,
+        // not an accuracy value: the rating, the rolls' target-conditional multipliers and the crit stay as they are.
+        bool alwaysHit = Get("global_always_hit") != 0;
+        // The rolls' Low Life threshold: the override percentage (when positive) or the ordinary conditional
+        // percentage (when positive), else the default 50 (DamageModel.LowLife clamps and decides).
+        int lowLifeThresholdOverride = Get("low_life_threshold_%_override");
+        int lowLifeThresholdPct = Get("low_life_threshold_%");
         // Defences: the tree's flat armour/evasion and their increased modifiers. "Defences" and the combined armour and
         // evasion increase apply to both ratings, as in PoB's calcLib.mod.
         int defencesPct = Get("global_defences_+%") + Get("combined_global_defences_+%")
@@ -399,7 +419,9 @@ partial class Program
             LifeAsEnergyShieldPct: Get("maximum_life_%_to_add_as_maximum_energy_shield"),
             ManaAsEnergyShieldPct: Get("mana_%_to_add_as_energy_shield"),
             NoEnergyShield: Get("no_energy_shield") != 0,
-            Ward: Get("base_ward"), WardPct: Get("ward_+%") + Get("global_defences_+%") + Get("combined_global_defences_+%"));
+            Ward: Get("base_ward"), WardPct: Get("ward_+%") + Get("global_defences_+%") + Get("combined_global_defences_+%"),
+            AlwaysHit: alwaysHit,
+            LowLifeThresholdOverride: lowLifeThresholdOverride, LowLifeThresholdPct: lowLifeThresholdPct);
     }
 
     // The character's passive skill points (one per level after the first, plus the extra points from

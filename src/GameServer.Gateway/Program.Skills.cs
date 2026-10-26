@@ -136,6 +136,13 @@ partial class Program
         gemEffect >= 0 && Skills.IsAttack(gemEffect) ? Skills.IsMelee(gemEffect)
             : WeaponProfileFor(conn, activeSet: true).Melee;
 
+    // A hit's critical strike multiplier: spells use the spell multiplier; attacks the attack multiplier plus Final
+    // Blow's unarmed extra (+50, UnarmedCriticalStrikeMultiplierBonus) only in the attack's own melee context
+    // (MeleeAttack), so an unarmed non-melee attack gem keeps the plain 150%-based multiplier.
+    internal static int CriticalMultiplierFor(ClientState conn, bool spell, bool melee) =>
+        spell ? conn.Pools.SpellCriticalStrikeMultiplier
+        : conn.Pools.CriticalStrikeMultiplier + (melee ? conn.Pools.UnarmedCriticalStrikeMultiplierBonus : 0);
+
     // Conversion for one hit: the player's stats plus the skill's own stats (base/skill conversion). Player stats win on
     // a key collision; the normal case is that the skill adds stats the player does not have.
     internal static DamagePacket AttackHit(SkillCatalog.Unarmed weapon, IReadOnlyDictionary<uint, int> stats, bool melee)
@@ -230,8 +237,10 @@ partial class Program
     {
         int referenceEvasion = Monsters.BaseEvasion(pools.Level) ?? 0;
         int referenceEvasiveEvasion = Monsters.BaseEvasiveEvasion(pools.Level) ?? 0;
-        int chanceToHit = DamageModel.AccuracyHitChance(referenceEvasion, pools.Accuracy);
-        int evasiveChanceToHit = DamageModel.AccuracyHitChance(referenceEvasiveEvasion, pools.Accuracy);
+        // Exhibit 122's global_always_hit: the reference monster's evasion cannot matter, so both Chance to Hit rows
+        // read 100 without the accuracy rating or its crit touching the pools.
+        int chanceToHit = pools.AlwaysHit ? 100 : DamageModel.AccuracyHitChance(referenceEvasion, pools.Accuracy);
+        int evasiveChanceToHit = pools.AlwaysHit ? 100 : DamageModel.AccuracyHitChance(referenceEvasiveEvasion, pools.Accuracy);
         foreach (var (stat, value) in new[] { ("level", pools.Level), ("base_maximum_life", (int)pools.Life), ("maximum_life", (int)pools.Life),
             ("base_maximum_mana", (int)pools.Mana), ("maximum_mana", (int)pools.Mana), ("accuracy_rating", pools.Accuracy),
             ("main_hand_accuracy_rating", pools.Accuracy), ("off_hand_accuracy_rating", pools.Accuracy),
@@ -277,7 +286,7 @@ partial class Program
             ("base_spell_damage_%_suppressed", pools.SpellSuppressionEffect),
             // The Offence panel's crit rows read these final values (permyriad for chance, percent for multiplier).
             ("main_hand_critical_strike_chance", pools.AttackCriticalStrikeChance),
-            ("main_hand_critical_strike_multiplier", pools.CriticalStrikeMultiplier),
+            ("main_hand_critical_strike_multiplier", pools.CriticalStrikeMultiplier + pools.UnarmedCriticalStrikeMultiplierBonus),
             ("spell_critical_strike_chance", pools.SpellCriticalStrikeChance),
             ("spell_critical_strike_multiplier", pools.SpellCriticalStrikeMultiplier) })
             if (Stats.Key(stat) is uint key) yield return (key, value);

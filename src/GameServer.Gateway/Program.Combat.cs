@@ -28,6 +28,12 @@ partial class Program
             conn.Pools.AccuracyMoreInCloseRangePct, unique, close), unique, close);
     }
 
+    // Low Life checks the live pools' current life against their own maximum with the pools' threshold (the override
+    // percentage when set, else the ordinary percentage, else the default 50, inclusive; DamageModel.LowLife). Dead
+    // (current 0 is the boundary, but dead players do not roll) and a zero maximum (no pool) are not low life.
+    internal static bool OnLowLife(ClientState conn) => DamageModel.LowLife(conn.PlayerLife, conn.PlayerMaxLife,
+        conn.Pools.LowLifeThresholdOverride, conn.Pools.LowLifeThresholdPct);
+
     // Whether an attack may start now: the shared attack timer (the default attack and the attack gem skills) is over, or
     // the use is no more than a quarter of an attack early (the client's jitter). Does not reserve the timer: an attack used
     // on a monster waits for the walk into reach, and CastGemSkill reserves it when the swing starts.
@@ -140,8 +146,10 @@ partial class Program
                     $"for the target ({(unique ? "unique target, " : "")}{(closeRange ? "in close range (20 units) " : "")}accuracy mastery more)");
             evasion = Monsters.BaseEvasion(m.Level) ?? 0;
         }
-        int hitChance = DamageModel.AccuracyHitChance(evasion, accuracy);
-        if (!DamageModel.Hits(hitChance, Random.Shared.Next(100)))
+        // Exhibit 122's global_always_hit (Stats key 687): the attack cannot be evaded, so there is no accuracy roll
+        // at all. The accuracy rating itself, the panel's rating rows and the critical chance stay untouched.
+        int hitChance = conn.Pools.AlwaysHit ? 100 : DamageModel.AccuracyHitChance(evasion, accuracy);
+        if (!conn.Pools.AlwaysHit && !DamageModel.Hits(hitChance, Random.Shared.Next(100)))
         {
             Console.WriteLine($"[gateway] {remote} attack on 0x{use.TargetId:x} missed: accuracy {accuracy} vs evasion {evasion}, " +
                 $"{hitChance}% chance");
@@ -154,8 +162,8 @@ partial class Program
             .Convert(ConversionFor(conn, attackEffect, 1, attack: true));
         var rolls = GamblerFor(player);
         hit = rolls.RollOutgoingHit(hit, Random.Shared);
-        bool critical = rolls.IsCritical(conn.Pools.AttackCriticalStrikeChance, Random.Shared);
-        if (critical) hit = hit.Critical(conn.Pools.CriticalStrikeMultiplier);
+        bool critical = rolls.IsCritical(conn.Pools.AttackCriticalStrikeChance, Random.Shared, OnLowLife(conn));
+        if (critical) hit = hit.Critical(CriticalMultiplierFor(conn, spell: false, melee: MeleeAttack(conn)));
         // Impale: the stacks already on the target add their stored damage to this hit, this hit uses one of their five
         // hits, and the hit's own physical damage may store a new stack for the hits after it.
         double physical = hit[DamageType.Physical].Max;
@@ -579,8 +587,8 @@ partial class Program
                     .Convert(ConversionFor(conn, gem.Effect, gem.Level, attack: false, quality: gem.Quality)));
             var rolls = GamblerFor(stats);
             hit = rolls.RollOutgoingHit(hit, Random.Shared);
-            bool critical = rolls.IsCritical(chance, Random.Shared);
-            if (critical) hit = hit.Critical(spell ? conn.Pools.SpellCriticalStrikeMultiplier : conn.Pools.CriticalStrikeMultiplier);
+            bool critical = rolls.IsCritical(chance, Random.Shared, OnLowLife(conn));
+            if (critical) hit = hit.Critical(CriticalMultiplierFor(conn, spell, melee));
             hit = ApplyPassiveDamageTaken(conn, m, rolls.MitigateOutgoingHit(hit,
                 HitResistancesFor(conn, m, player, own, critical, attack: !spell), Random.Shared));
             int damage = (int)Math.Round(hit.MinTotal);
@@ -668,8 +676,8 @@ partial class Program
                     .Convert(ConversionFor(conn, gem.Effect, gem.Level, attack: false, quality: gem.Quality)));
             var rolls = GamblerFor(stats);
             hit = rolls.RollOutgoingHit(hit, Random.Shared);
-            bool critical = rolls.IsCritical(criticalChance, Random.Shared);
-            if (critical) hit = hit.Critical(spell ? conn.Pools.SpellCriticalStrikeMultiplier : conn.Pools.CriticalStrikeMultiplier);
+            bool critical = rolls.IsCritical(criticalChance, Random.Shared, OnLowLife(conn));
+            if (critical) hit = hit.Critical(CriticalMultiplierFor(conn, spell, MeleeAttack(conn, gem.Effect)));
             hit = ApplyPassiveDamageTaken(conn, m, rolls.MitigateOutgoingHit(hit,
                 HitResistancesFor(conn, m, player, skillStats, critical, attack: !spell), Random.Shared));
             int damage = (int)Math.Round(hit.MinTotal);
