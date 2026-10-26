@@ -25,8 +25,9 @@ public sealed partial class AscendancyGatewayIntegrationTests
         Assert.False(Program.Skills.IsInstant(gem.Effect));
         Assert.True(Program.Skills.CooldownMs(gem.Effect, gem.Level) > 0);
         game.State.PlayerStats[Program.Stats.Key(input)!.Value] = value;
-        // Prime the pool reply cache; the regression below exercises the actual entry handlers, not Cast alone.
         Assert.False((await game.Cast(gem.Name)).Accepted);
+        // The cooldown preflight rejects before CastGemSkill, so explicitly prime the existing ES reply cache.
+        await game.PrimeTimingPools();
         game.State.ActionCount = 17;
         game.State.ChannelSkill = 0x222;
         game.State.ChannelSkillSequence = 0x1234;
@@ -62,8 +63,9 @@ public sealed partial class AscendancyGatewayIntegrationTests
         Assert.Equal(life, game.State.PlayerLife);
         Assert.Equal(saved, game.SavedJson);
         Assert.Empty(game.State.Auras);
-        // A pool resync is allowed on ground/instant rejection. No ActionStarted/InstantAction echo is emitted.
-        byte[] expected = route is "ground" or "instant"
+        // Ground rejection resyncs the predicted mana cost. The single-use cooldown
+        // preflight refuses an impossible instant-route request before CastGemSkill, without a resync or action echo.
+        byte[] expected = route == "ground"
             ? InstanceProtocol.LifeUpdate(Program.PlayerId, mana, 0, pool: 1) : [];
         Assert.Equal(expected, result.Bytes);
     }
@@ -95,6 +97,12 @@ public sealed partial class AscendancyGatewayIntegrationTests
 
     sealed partial class GatewayCharacter
     {
+        public Task<(string? Error, byte[] Bytes)> PrimeTimingPools() => Exchange(async (stream, cipher) =>
+        {
+            await ProgramValue<Task>("SendPlayerMana", "timing-preflight-prime", stream, cipher, State, null!);
+            return null;
+        });
+
         public Task<(string? Error, byte[] Bytes)> TimingInput(string route, ushort skill, uint monster) => Exchange(async (stream, cipher) =>
         {
             if (route == "ground")
