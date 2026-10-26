@@ -37,7 +37,8 @@ validate town/combat/character-switch round trips in the real client (protocol/1
   See [11](../docs/protocol/11-skills.md) §9.
   Action speed, active Tailwind effect and Toughened Skin's action/movement floors now have production consumers.
   Impossible-cast eligibility now precedes handler side effects and composes with shared cooldown preflight.
-  Verify their native timing and movement before moving them from partial status; cooldown recovery is separate.
+  Native Q timing inputs, separate floors, Tailwind rounding and selected attack APS/DPS now pass bounded checks.
+  Full class acceptance and unsupported conditional timing sources remain separate; cooldown recovery is independent.
 - **Done when:** life, mana, attributes, resistances and their derived values come from the server's own calculation
   (Characters.dat base values, level, items, passives) and are sent in the Stats component.
   The overcapped resistances' derived evasion and critical increases now follow that rule and are native-verified.

@@ -275,9 +275,17 @@ Greatwolf's Call (node 14442) gives 50% effect, so its action bonus becomes 12%,
 With a separate Harbinger raw -10, raw -18 plus that effect becomes 22%; Harbinger's contribution is not scaled.
 The integration owner supplies the active owner-buff marker; no trigger or charge engine is inferred from the flag.
 The stat keys and signs follow the pinned Stats/Buff tables, including Harbinger BuffDefinition 922.
-Exact native action-speed getter/floor locations and fractional Tailwind-effect rounding await native verification.
 Automated tests cover real connected allocation/paid refunds, native stat records and server consumers.
-This continuation does not claim new native action-speed verification or change cooldown recovery.
+Native Q casts observe the client's stat getter `0x1424cfa40` during action creation/start
+(`0x141941c90` / `0x141e8cf10`).
+Fireball retains base 750 ms: action -20% gives 107 casts per hundred seconds; Toughened Skin restores 133.
+Its separate native action/movement floors clear both negative factors and paid refunds restore them.
+Greatwolf's actual connected allocation gives raw -8, marker 1, effect 50 and final action 12.
+Adding a separate raw -10 gives 22, and effect 56 still floors that Tailwind contribution to the same 22.
+Refund removes the marker and its extra contribution.
+These checks validate received timing inputs and actual native actions.
+They do not measure animation length with a stopwatch.
+Cooldown recovery remains a separate multiplier.
 
 **Selected attack-gem damage rows.** The shared `AttackSkillHit` and `AttackPanelStats` reuse PR #198 head
 `228b5362d6555f2c07cf1ab0546d218edc6f8de2`.
@@ -295,7 +303,13 @@ Damage per Use retains the packet's unrounded pre-crit average; DPS uses that av
 It does not rescale previously rounded DPS or change critical rows, off-hand rows, accuracy or target mitigation.
 These remain limited supported pre-crit averages, not a claim of official complete skill DPS.
 Automated checks cover real Burning Arrow creation/refresh, active-hand changes, fractional derived damage,
-Rage/mana lightning, stale inherited rows, quality conversion and matching APS/DPS; native validation is pending.
+Rage/mana lightning, stale inherited rows, quality conversion and matching APS/DPS.
+Actual native Q Burning Arrow retains weapon base 714 ms and inherent total base 1020 ms.
+In the controlled +1000% attack-speed fixture, the selected skill reads APS 10.78 and pre-crit DPS 174.64.
+Adding 100 attack-speed percentage points and final action 22% changes those to 14.35 and 232.47;
+unrounded damage per use stays 16.20, so both DPS values match their own emitted APS.
+The absent physical type is explicitly zero after conversion.
+Ignored evidence: `logs/three-pr/native-phrecia-followups/{affloors,afpanel,aftailwind}-results.json`.
 
 **Critical strikes.** The server rolls a hit's critical chance after the damage roll: `base chance × (1 + increased
 critical strike chance / 100)`, capped at 100%, then multiplies the damage by the final multiplier (150% plus
@@ -331,6 +345,13 @@ it; the comparison is `(current × 100 ≤ maximum × threshold)` and the condit
 The ordinary `extra_critical_rolls` (lucky and unlucky alike) keep their own behavior, and opposing luck still
 cancels in the count the roll receives.
 A conditional low-life source outside this slice (the "count as low life" flag, key 7751) is not consumed.
+Actual Final Blow allocation publishes multiplier 200 and the low-life extra-roll flag.
+Controlled critical hits remove 200 native enemy Life unarmed and 150 with a weapon; an empty hand restores 200.
+Paid refund removes the extra multiplier and flag.
+Exhibit 122 allocation publishes 100% hit chance while retaining its Dexterity drawback (14 to 7);
+its accuracy diagnostic reports 100%, and paid refund clears the flag and restores Dexterity.
+Native checks do not estimate the low-life critical probability.
+Deterministic roll/threshold tests cover that consumer.
 `/set_stat` replaces its source value and rebuilds the pools for critical-chance inputs and prohibitions.
 The panel's final `main_hand_critical_strike_chance` and the rolls share that result.
 Twelve real-client checks used a fresh synthetic character and read the client's received stat values.

@@ -110,10 +110,10 @@ charges, and a skill's table entry does not grant or execute that skill.
 
 | Phrecia class | Executed effect examples | Important missing mechanics |
 |---|---|---|
-| Ancestral Commander | Life/armour; Born under Fire; action/movement floors (native pending) | Ancestors, totems, echoes and warcries |
+| Ancestral Commander | Life/armour; Born under Fire; action/movement floors | Ancestors, totems, echoes and warcries |
 | Behemoth | Mana; unarmed crit; Rage; chaos armour; armour-scaled attacks | Fortification, Rampage, Vaal costs |
 | Antiquarian | Ward/Adrenaline; Strength duration | Far Shot, stun and ranged/shield rules |
-| Wildspeaker | Suppression; Dexterity; minion damage transfer; Tailwind effect (native pending) | Wolves, Aspects and sharing |
+| Wildspeaker | Suppression; Dexterity; minion damage transfer; Tailwind effect | Wolves, Aspects and sharing |
 | Whisperer | Mana, lightning, free costs, Rage; spell-to-attack | Recoup, absorption, blind, forks |
 | Daughter of Oshabi | Oath; evasion-scaled attacks | Tracking, Wisps, Shrines, Vines, Spellslinger |
 | Harbinger | Extra ES from life/mana and non-chaos ES bypass | Granted Harbingers, ally AI and time effects |

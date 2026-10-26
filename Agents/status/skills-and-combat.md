@@ -170,7 +170,10 @@ Part of [Status](../Status.md); what to build next in this area is in
   Sixteen native checks cover real-node allocation, fixed hits reaching enemy Life and paid refunds for four sources.
   Multiplicative action speed, Tailwind effect and Toughened Skin's independent floors execute in attack/cast/walk.
   Timing reuses PR #194's inherent attack bases and PR #195's native spell base plus final cast-speed contract.
-  Actual connected allocation/refunds and cooldown independence have automated coverage; native validation is pending.
+  Actual connected allocation/refunds and cooldown independence have automated coverage.
+  Native Q Fireball checks retain base 750 ms and change cast rate 1.07 to 1.33 when the action floor applies.
+  Native Burning Arrow retains 714/1020 ms bases and scales selected APS/DPS together at final action 22%.
+  Greatwolf's Tailwind 12%, separate-source 22%, fractional rounding and paid refunds pass native stat checks.
   Shared eligibility refuses impossible casts before action replacement, movement, echo, costs or cooldown reservation.
   Ground, monster, self and instant handler regressions cover actual level/quality and unchanged prior action state.
   PR #198's shared raw attack packet now supplies selected attack-gem ranges and pre-crit DPS at the emitted APS.
@@ -288,6 +291,10 @@ rating, the mastery's target multipliers and the critical chance untouched.
 Automated Gateway integration checks cover the unarmed multiplier's armed/inactive/swap/refund isolation, the
 Explosive Concoction non-melee catalog classification, the Gambler's low-life extra roll with the 50/55/60
 boundaries and no-life/zero-maximum forms, and the always-hit panel rows, dev flag and refund.  `/set_stat` replaces the input and rebuilds the pools, so the panel and the rolls agree.
+  Native connected Final Blow allocation gives multiplier 200.
+  Controlled hits remove 200 enemy Life unarmed or 150 armed.
+  Exhibit 122 gives native 100% hit chance and retains Dexterity 14 to 7; paid refunds remove both grants.
+  Native critical probability sampling is not claimed; deterministic low-life roll tests cover the conditional branch.
   Twelve native checks verified 830 → 800 → 900, increased chance → 1800, cannot-crit → zero,
   empty-set/unarmed behavior, weapon restoration and relog; spell chance stayed 500.
   Ascendancy allocation remains in the separate lifecycle change.
