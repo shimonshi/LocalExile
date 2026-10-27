@@ -304,6 +304,30 @@ public class SpellNoDamageTests
     }
 
     [Fact]
+    public async Task Joint_attributes_and_converted_mana_survive_parsed_spell_restriction_toggles()
+    {
+        using var f = new Fixture("Fireball");
+        f.Set("strength_+%", 25);
+        f.Set(StrengthMana.PerFourStrength, 8);
+        f.Set(PowerOfPurpose.RawFlag, 1);
+        f.Set(Flag, 1);
+        f.Set(DamageStats.MaxManaAddedLightning, 5);
+        f.Conn.Pools = Program.PoolsFor(f.Conn, 100);
+        Assert.Equal((1268, 1032, 737u, 5917),
+            (f.Conn.Pools.Strength, f.Conn.Pools.Intelligence, f.Conn.Pools.Mana, f.Conn.Pools.Armour));
+        Assert.Same(DamagePacket.Empty, f.Hit());
+        Assert.Equal(0, Value(f.Panel(), "spell_maximum_total_damage"));
+        Assert.Equal(36.85, Program.AttackHit(new(1000, 0, 0, 8),
+            Program.CharacterPlayerStats(f.Conn), melee: false)[DamageType.Lightning].Min, 10);
+        await f.Command($"/set_stat {Flag} 0");
+        Assert.True(f.Hit().MaxTotal > 0);
+        Assert.Equal((737u, 5917), (f.Conn.Pools.Mana, f.Conn.Pools.Armour));
+        await f.Command($"/set_stat {Flag} 1");
+        Assert.Same(DamagePacket.Empty, f.Hit());
+        Assert.Equal((737u, 5917), (f.Conn.Pools.Mana, f.Conn.Pools.Armour));
+    }
+
+    [Fact]
     public async Task Parsed_source_overrides_preserve_Strength_mana_chaos_armour_and_Mageblood_deduplication()
     {
         using var f = new Fixture("Fireball");
