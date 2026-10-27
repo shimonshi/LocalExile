@@ -41,15 +41,15 @@ partial class Program
             bool off = args[1].Equals("off", StringComparison.OrdinalIgnoreCase);
             int value = off ? 0 : int.Parse(args[1]);
             bool rebuildMana = stat == Stats.Key(StrengthMana.PerFourStrength);
+            bool rawAttribute = AttributeModifiers.IsInput(Stats.Name(stat));
             lock (conn.Monsters)
             {
                 if (off) conn.PlayerStats.Remove(stat);
                 else conn.PlayerStats[stat] = value;
             }
-            // Keep each supported raw consumer and source restoration when another mechanic changes this gate.
             if (AttackBaseCriticalStrike.IsInput(Stats.Name(stat) ?? args[0])
                 || ResistanceOvercap.IsInput(Stats.Name(stat) ?? args[0])
-                || rebuildMana
+                || rawAttribute || rebuildMana
                 || Stats.Name(stat) == PlayerHitMitigation.ArmourAppliesToChaos)
             {
                 while (true)
@@ -62,7 +62,9 @@ partial class Program
                         // A concurrent level/aura rebuild wins; retry against its current inputs and level.
                         if (!ReferenceEquals(conn.Pools, before)) continue;
                         conn.Pools = pools;
-                        if (rebuildMana) conn.PlayerMana = Math.Min(conn.PlayerMana, (uint)UnreservedMana(conn));
+                        if (rawAttribute) conn.PlayerLife = Math.Min(conn.PlayerLife, conn.PlayerMaxLife);
+                        if (rawAttribute || rebuildMana)
+                            conn.PlayerMana = Math.Min(conn.PlayerMana, (uint)UnreservedMana(conn));
                         break;
                     }
                 }
@@ -80,8 +82,18 @@ partial class Program
                 $"0x01b3 stats: {Stats.Name(stat)} (key 0x{stat:x}) = {(off ? "the character's own" : value)}, and the attack's final stats");
             // Skills compute with their own stats (the attack and the character panel read those), so send them again.
             await SendSkills(remote, stream, ciphers, conn);
-            // Reservation can change with maximum mana even when recovery leaves current mana unchanged.
-            if (rebuildMana) await SendPlayerMana(remote, stream, ciphers, conn, "0x01b1 mana after raw source rebuild");
+            if (rawAttribute)
+            {
+                lock (conn.Monsters)
+                {
+                    conn.PlayerLife = Math.Min(conn.PlayerLife, conn.PlayerMaxLife);
+                    conn.PlayerMana = Math.Min(conn.PlayerMana, (uint)UnreservedMana(conn));
+                }
+                await SendPlayerStatSnapshot(remote, stream, ciphers, conn,
+                    () => InstanceProtocol.LifeUpdate(PlayerId, conn.PlayerLife), "raw attribute current life");
+            }
+            if (rawAttribute || rebuildMana)
+                await SendPlayerMana(remote, stream, ciphers, conn, "raw source mana reservation");
         })
         .Add("spawn_mob", "/spawn_mob <MonsterVarieties row, Id or name>[@level] [friendly] [normal|magic|rare|unique] [name]", async args =>
         {

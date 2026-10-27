@@ -64,6 +64,11 @@ validate town/combat/character-switch round trips in the real client (protocol/1
 - **Done when:** life, mana, attributes, resistances and their derived values come from the server's own calculation
   (Characters.dat base values, level, items, passives) and are sent in the Stats component.
   The overcapped resistances' derived evasion and critical increases now follow that rule and are native-verified.
+  Generic increased attributes have automated coverage and native raw-source, derived-pool and requirement controls.
+  Remaining native composition includes own-item percentage retention, cascading equipment, passive refunds and swaps.
+  The fractional algorithm remains a documented PoB server model; official-server parity is not established.
+  See [Status](../status/skills-and-combat.md) and [the calculation model](../docs/protocol/11-skills.md) section 4.
+  Mana per Strength, mana-to-armour conversion and Phrecia play compatibility remain separate prerequisites.
 
 ### Auras: reservation and effects
 
