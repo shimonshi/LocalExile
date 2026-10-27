@@ -70,6 +70,7 @@ The suspend/restore lifecycle is explicit LocalExile policy; see protocol/11-ski
   Generic increased attributes have historical native raw-source, derived-pool and requirement controls at `60044ad`.
   Current-main mana-per-Strength, requirement and inactive-weapon composition has automated coverage.
   Eleven rebased native controls verify final Strength mana groups, increased mana once and ordinary gear requirements.
+  Ordered joint native controls at `c9cd1864` verify conversion after final Strength and odd Intelligence.
   Remaining native composition includes own-item percentage retention, cascading equipment, passive refunds and swaps.
   The fractional algorithm remains a documented PoB server model; official-server parity is not established.
   See [Status](../status/skills-and-combat.md) and [the calculation model](../docs/protocol/11-skills.md) section 4.

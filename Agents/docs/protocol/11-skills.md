@@ -226,6 +226,9 @@ Reduced attributes disable the ordinary vest at Strength 8 with 58 mana and rest
 Clearing the inputs restores Strength 32, mana 47 and Armour 19.
 Every control reads the actual native final and requirement stats; Gateway/Core/Storage/Host revisions were pinned.
 The check uses raw development inputs and ordinary equipment, without enabling a Phrecia class.
+The ordered #290 / #294 / #296 / #300 integration at `c9cd1864` passes 28 fresh native controls.
+Eight conversion controls preserve final Strength groups and the half mana from odd final Intelligence.
+At final Strength 16 and Intelligence 7, conversion uses B=75.5 and publishes 15 mana and 140 Armour with the vest.
 Combined regressions cross the rounded four-Strength boundary, then verify mana increases and truncation once.
 Equipment, inactive/current weapon snapshots, zero/off raw replacements and idle aura reservation share that result.
 Inactive-weapon, cascading-equipment, passive-refund and active-aura composition still need native coverage.
