@@ -130,7 +130,7 @@ The suspend/restore lifecycle is explicit LocalExile policy; see protocol/11-ski
   See Status and protocol/20-damage.md section 2e.
   Rampager's raw spell restriction has hit/panel and RF regressions; eleven native controls are historical (#293).
   See [status](../status/skills-and-combat.md) for the verified consumer scope.
-  Recheck the rebased spell restriction and exact proposed PR composition natively.
+  Fresh ordered joint hit controls pass at `c9cd1864`; original RF, Ice Nova and relog checks remain historical.
   Rampager's other mechanics and class admission remain separate work.
   Recent-hit armour defence now composes with physical/chaos mitigation in actual and queued contact regressions.
   Full stat writers, including Rage, own auras and Mageblood, have expiry and encoded-pair acknowledgment regressions.
