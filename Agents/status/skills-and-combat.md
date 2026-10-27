@@ -85,7 +85,9 @@ Part of [Status](../Status.md); what to build next in this area is in
   Those controls exercised actual Steel Willed attack damage and remaining-mana lightning on an unascended Witch.
   Current-main tests compose mana per final Strength, active equipment, increases, chaos-armour/CI and Mageblood.
   Reservation, clamps, zero/off/removal, Iron Reflexes, MORE and own-aura send-gate freshness have automated coverage.
-  The rebased candidate and exact #290 → #294 → #296 → #300 composition still need fresh native checks.
+  Ordered joint validation at `c9cd1864` passes 28 native controls, including eight final-attribute conversion cases.
+  B=127 gives 25 mana / 222 Armour; 100% mana gives 51 / 425; odd final Intelligence retains its half mana.
+  Remaining native cases include reservation, Iron Reflexes, MORE and the full node's independent consumers.
   Phrecia selection remains gated.
   See [the model and scope](../docs/game/power-of-purpose.md).
 
