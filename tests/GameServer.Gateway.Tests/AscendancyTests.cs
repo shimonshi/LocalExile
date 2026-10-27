@@ -174,15 +174,7 @@ public sealed class AscendancyTests : IDisposable
         Assert.False(catalog.Find(4, AscendancyFamily.Normal, "Slayer")!.Nodes.ContainsKey(30851));
     }
 
-    static string? FindData()
-    {
-        for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
-        {
-            string folder = Path.Combine(dir.FullName, "data");
-            if (File.Exists(Path.Combine(folder, AscendancyCatalog.GraphFile))) return folder;
-        }
-        return null;
-    }
+    static string? FindData() => File.Exists(Path.Combine("data", AscendancyCatalog.GraphFile)) ? "data" : null;
 }
 
 [Collection(TestSaves.FailWriteCollection)]
@@ -418,5 +410,12 @@ sealed class AscendancyFixture : IDisposable
     }
 
     void Write(string file, object value) => File.WriteAllText(Path.Combine(Folder, file), JsonSerializer.Serialize(value));
-    public void Dispose() => Directory.Delete(Folder, recursive: true);
+    public void Dispose()
+    {
+        string tables = Path.Combine(Folder, "tables");
+        foreach (string file in Directory.EnumerateFiles(tables)) File.Delete(file);
+        Directory.Delete(tables);
+        foreach (string file in Directory.EnumerateFiles(Folder)) File.Delete(file);
+        Directory.Delete(Folder);
+    }
 }

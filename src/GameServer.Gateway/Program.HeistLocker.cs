@@ -20,16 +20,16 @@ partial class Program
         await Send(remote, stream, ciphers, InstanceProtocol.EnterWakeZone(id), null);
         conn.HeistLockerObject = id;
         conn.HeistLockerAt = (locker.X, locker.Y);
-        conn.SetBlocker(id, locker.X, locker.Y, 4);
-        conn.HideoutEditor.Register(id, "heist-locker", locker.X, locker.Y, locker.Rotation, 4);
+        await RegisterStationaryCollision(remote, stream, ciphers, conn, id, HideoutCatalog.HeistLockerType,
+            locker.X, locker.Y, locker.Rotation, "heist-locker", locker.Model);
     }
 
     static async Task OpenHeistLocker(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn, double requestedAt)
     {
-        if (!TryBeginObjectWalk(conn, requestedAt, conn.HeistLockerAt.X, conn.HeistLockerAt.Y, 4, out var walk)) return;
+        if (!TryBeginObjectWalk(conn, requestedAt, conn.HeistLockerAt.X, conn.HeistLockerAt.Y, conn.StationaryInteractionSize(conn.HeistLockerObject), out var walk)) return;
         var (action, now, _, stop, arrive) = walk;
         if (arrive > now) await Task.Delay(TimeSpan.FromSeconds(arrive - now));
-        if (!PlayerActionCurrent(conn, action) || !PlayerWalk.InWalkUpRange(stop, conn.HeistLockerAt, 4)) return;
+        if (!PlayerActionCurrent(conn, action) || !PlayerWalk.InWalkUpRange(stop, conn.HeistLockerAt, conn.StationaryInteractionSize(conn.HeistLockerObject))) return;
         conn.BenchOpen = false;
         await RefreshBenchBalance(remote, stream, ciphers, conn, clear: true);
         await Send(remote, stream, ciphers, InstanceWaypoints.OpenUi(InstanceWaypoints.HeistLockerUi),

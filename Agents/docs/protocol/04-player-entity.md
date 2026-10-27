@@ -185,7 +185,8 @@ The early refusal precedes the fallback; a null skill context does not apply the
 Otherwise target `is_usable_as_corpse_when_alive` (9525) provides a separate fallback, including on dead targets.
 A staged boss at life 1 therefore fails the ordinary path; a living object carrying wire bit0 is not yet a corpse.
 
-`ot_components.py` resolves inherited Life booleans and the component-derived veto in `object-types` manifest v3.
+`ot_components.py` resolves inherited Life booleans and the component-derived veto in `object-types` manifest v4.
+The combined format also retains inherited Positioned footprints and Animated collision models.
 Missing inheritance keeps unresolved fields null; explicit later overrides, including false, remain authoritative.
 `MonsterCatalog.Variety.LifeData` binds this record through `BaseMonsterTypeIndex`.
 `MonsterObject` writes the resolved bits; owned summons and companions force corpse usability false at creation.

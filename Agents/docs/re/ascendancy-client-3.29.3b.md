@@ -229,3 +229,23 @@ After choosing Aristocrat and re-entering with the corrected first-list encoding
 ClassNo 1), secondary byte 0. The Gateway retained the character's ordinary `Standard` league. This verifies the
 native per-connection family selector without a game-data or executable patch; it does not by itself verify all
 ascendancy mechanics or an expanded native chooser. The trace is in ignored `logs/ascendancies-native.jsonl`.
+
+## Current compatibility boundary
+
+## Client compatibility remains separate
+
+The shipped alternate PSG has older ordinary/Bloodline topology: it omits 29 current non-main-ascendancy nodes.
+Switching to that graph changes the ordinary tree too.
+Earlier PR206 experiments installed a combined graph and observed ordinary Slayer and Phrecia Aristocrat in one
+Standard account; those observations establish the protocol, not permission to replace the installed archive.
+This extracted selection slice performs no archive apply, recovery or automatic installation.
+Its production command/connection preflight rejects Phrecia until a separate client-compatible graph
+solution is agreed.
+The preflight runs only for a requested/saved Phrecia identity.
+Ordinary/unascended characters require no alternate graph.
+No executable patch or memory-writing graph selector is introduced.
+The native selector remains world stat 21146, with an area reload required when the family changes.
+
+The parent must repeat ordinary command selection, allocation, paid refund, relog and restart with the real client.
+A Phrecia native smoke test is blocked by this explicit compatibility prerequisite.
+The native Labyrinth/Altar selection flow remains #151, outside command-based selection.

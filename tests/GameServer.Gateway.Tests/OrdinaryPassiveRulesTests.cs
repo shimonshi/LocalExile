@@ -53,7 +53,14 @@ public sealed class OrdinaryPassiveRulesTests : IDisposable
         Write(AscendancyCatalog.GraphFile, new { revision = AscendancyCatalog.Revision, normal = Graph(false), phrecia = Graph(true) });
     }
 
-    public void Dispose() => Directory.Delete(_folder, recursive: true);
+    public void Dispose()
+    {
+        string tables = Path.Combine(_folder, "tables");
+        foreach (string file in Directory.EnumerateFiles(tables)) File.Delete(file);
+        Directory.Delete(tables);
+        foreach (string file in Directory.EnumerateFiles(_folder)) File.Delete(file);
+        Directory.Delete(_folder);
+    }
     OrdinaryPassiveRules Rules => new(_folder);
     void Write(string relativePath, object value) => File.WriteAllText(Path.Combine(_folder, relativePath), JsonSerializer.Serialize(value));
 
@@ -220,14 +227,6 @@ public sealed class OrdinaryPassiveRulesTests : IDisposable
         }
     }
 
-    static string? RealDataFolder()
-    {
-        for (var directory = new DirectoryInfo(AppContext.BaseDirectory); directory is not null; directory = directory.Parent)
-        {
-            string folder = Path.Combine(directory.FullName, "data");
-            if (File.Exists(Path.Combine(folder, AscendancyCatalog.GraphFile)) &&
-                File.Exists(Path.Combine(folder, "tables", "PassiveSkills.json"))) return folder;
-        }
-        return null;
-    }
+    static string? RealDataFolder() => File.Exists(Path.Combine("data", AscendancyCatalog.GraphFile)) &&
+        File.Exists("data/tables/PassiveSkills.json") ? "data" : null;
 }

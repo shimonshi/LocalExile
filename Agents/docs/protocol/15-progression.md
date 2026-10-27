@@ -23,6 +23,13 @@ yet confirmed on screen).
   character list and the next tickets carry it). Experience stops at the start of level 100.
 - **Saved** in the character's save (`data/saves.db`, `Experience`): added to the character's total in memory and saved within 5 s, at once at a level-up ([saves](../saves.md)); the saved
   experience decides the level, and a stale account level is corrected at login ([saves](../saves.md)).
+- **Concurrent events:** each receiving connection reconciles its level from current character experience.
+  An old-area gain cannot suppress a live connection's pending level gain or explicit reset.
+  Level changes reconcile the latest saved tree and refund balance before publishing, including another area's trim.
+  Runtime application derives the target from current experience before publishing stats, independently of Auth latency.
+  Queued Player XP updates also sample current experience at the cipher gate.
+  Gateway Auth requests serialize per character, recheck XP after replies and correct obsolete in-flight requests.
+  A delayed Auth answer cannot apply its captured level or undo an intentional downward control.
 
 ## 2. The Passive Skill Tree
 
@@ -35,7 +42,7 @@ yet confirmed on screen).
   | u16 | +0x274 | `extra_skill_points` (quest points; dev extra points for now) |
   | u16 | +0x27c | ascendancy points |
   | u8 | +0x26c | **the level**: the client's `points_from_level` = (level − 1) × points per level |
-  | u8 | +0x268 | the class byte (Characters.dat IntegerId, ascendancy in bits 5–7): the tree's start |
+  | u8 | +0x268 | class byte: base IntegerId + packed ClassNo (`CharacterClassByte`), the tree's start |
   | u8 | +0x269 | |
   | u8 flags | | bit0 → +0x91, bit1 → no lists (then `0x141ef73e0` sets only the numbers) |
   | vec16 u16 | +0x180 | **allocated nodes**: PassiveSkills.dat `PassiveSkillGraphId`, raw (little-endian), **sorted** (§2 Gold respec) |
@@ -100,7 +107,7 @@ yet confirmed on screen).
 
 ### Ordinary-tree connectivity
 
-`OrdinaryPassiveRules` checks the complete candidate against the selected normal or merged Phrecia graph before
+`OrdinaryPassiveRules` checks the complete candidate against the selected normal or generated Phrecia graph before
 `ChangePassives` saves or charges anything.
 The character's implicit root comes from `PassiveSkills.Characters`, translated through `Characters.IntegerId`.
 Other class starts are not paid allocations or traversal bridges.
@@ -148,8 +155,13 @@ refreshes the snapshot before the next allocation.
 
 The native class byte is `baseIntegerId | ((ClassNo & 3) << 6) | ((ClassNo & 4) << 3)`; zero ClassNo is unascended.
 Phrecia uses world stat 21146 in **the first** optional compact pair list of 0x1d, not 0x33's secondary-ascendancy byte.
-The actual league and account stash remain Standard. `/ascendancy` lists/chooses both families, reloading the area;
-`/ascendancy_points` is a dev award shortcut. The native Labyrinth/Altar flow is still missing.
+The character's actual league and account stash are unchanged.
+`/ascendancy normal <name>` chooses an ordinary class and reloads the area.
+`/ascendancy_points` is a dev award shortcut.
+Phrecia selection and game connections are explicitly gated pending an agreed client-compatible graph.
+The installed alternate graph has older ordinary topology; this slice never installs or recovers a graph in the client.
+Ordinary/unascended connections do not run an alternate-graph compatibility check.
+The native Labyrinth/Altar flow is still separate work (#151).
 [Native addresses, wire layout and live traces](../re/ascendancy-client-3.29.3b.md).
 
 **Book of Skill** (`UseSkillBook`). Right-clicking one (C→S 0x58, as an Orb of Regret) uses it up and adds one extra
@@ -162,9 +174,10 @@ Regret's way but gives two refund points (ClientStrings `ItemFunction2RespecPoin
 ## 3. Loot
 
 `ItemDrops.Roll` (our own table): normal monsters drop 1 item at 35%, magic 1–2, rare 2–4, unique 4–6. Each item is
-currency (45%: Scroll of Wisdom and Portal Scroll most, then the basic orbs, Chaos rarest), a life or mana flask (10%)
-or equipment (45%: any weapon, armour or jewellery base with DropLevel ≤ the monster's level, minus event and league
-bases), item level = the monster's level, normal, with the type's default sockets. `DropLoot` puts each as a WorldItem
+currency (45%: Scroll of Wisdom and Portal Scroll most, then the basic orbs, Chaos rarest), a gem (4%: an obtainable gem
+whose DropLevel is at most the monster's level, from `GemSources`, at gem level 1 like a vendor's), a life or mana flask (10%)
+or equipment (41%: any weapon, armour or jewellery base with DropLevel ≤ the monster's level, minus event and league
+bases), item level = the monster's level (gems keep 1), normal, with the type's default sockets. `DropLoot` puts each as a WorldItem
 ([13](13-items.md) §5) 3–6 cells around the corpse, on a walkable cell when the walk map is known. `Game_DROPS=0` turns
 it off.
 
@@ -173,6 +186,6 @@ it off.
 - All-19 signature mechanics and native Labyrinth/Altar acquisition: [remaining dependencies](../game/phrecia-ascendancies.md#dependencies-of-all-19-classes).
   Choice/points/saves and initial server effects are implemented, but choosing a class does not implement its missing subsystems.
 - The real rarity experience bonuses, the level 95+ penalty, party sharing.
-- Quest passive-point rewards; ordinary tree connectivity and cluster/expansion nodes. Ascendancy connectivity is checked.
+- Quest passive-point rewards and cluster/expansion nodes; ordinary and ascendancy connectivity are checked.
 - Real drop pools (MonsterVarieties / area drop tables), item rarity and mods, quantity and rarity bonuses; ground
   items only exist on the connection that saw them drop.

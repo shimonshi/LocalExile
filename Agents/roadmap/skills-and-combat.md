@@ -11,6 +11,10 @@ validate town/combat/character-switch round trips in the real client (protocol/1
 
 ## 3. Gameplay
 
+- **Fortification extensions:** the hit-generated system is implemented and native-verified separately from Behemoth.
+  Other conditional sources, permanent grants and specialised monster ailment thresholds remain separate work.
+  See [Fortification](../docs/game/fortification.md).
+
 - **Ordinary aura activation:** nine previously rejected self auras now share reservation, presentation and the
   supported stat/damage paths.
   Remaining work: Pride's enemy debuff, conditional consecrated ground, herald/minion/banner
@@ -28,6 +32,10 @@ validate town/combat/character-switch round trips in the real client (protocol/1
 - **Known:** client stat key = Stats.dat row + 1 ([11](../docs/protocol/11-skills.md) §8); `/set_stat` takes names.
   The server must send final values (the client derives none): the attack's are computed in
   `SkillCatalog.Unarmed.Stats`.
+  Mana per complete group of final Strength now has native raw-source/gear controls and automated pool coverage.
+  Raw-source reservation refresh and clamping have decrypted wire coverage; recheck active auras natively.
+  See [Status](../status/skills-and-combat.md) and [11](../docs/protocol/11-skills.md) section 4.
+  Mental Conditioning's other flags, mana-to-armour conversion and Phrecia selection remain separate work.
   Ordinary one-use cooldown recovery now shares the native base/rate and a server base-time budget, with atomic
   preflight before action side effects.
   Initial Dash recovery, early raw rejection, pause and native mid-cooldown rate changes pass live alongside
@@ -56,6 +64,10 @@ validate town/combat/character-switch round trips in the real client (protocol/1
   Native selection, added-damage refresh/clearing, server hit and relog checks pass alongside automated tests.
   Equipment UI refresh remains to be checked separately.
   Off-hand alternation, conditional damage, special support mechanics and modifier-scope corrections remain separate work.
+  Off-hand alternation, conditional damage, supports and modifier-scope corrections remain separate work.
+- **Warcry restriction (#297):** shared actor admission has regression and seven real-client controls in Status.
+  Blocked input, source clearing, paid retries and an accepted cry's release are verified.
+  See [11](../docs/protocol/11-skills.md) section 10b; broader warcry engines and Phrecia enablement remain separate.
 - **Done when:** life, mana, attributes, resistances and their derived values come from the server's own calculation
   (Characters.dat base values, level, items, passives) and are sent in the Stats component.
   The overcapped resistances' derived evasion and critical increases now follow that rule and are native-verified.
@@ -85,6 +97,11 @@ validate town/combat/character-switch round trips in the real client (protocol/1
   Connect it before hit-only increases and rolls when implementing application; never reconstruct it from final hits.
   The default attack, Fireball and monster melee use packets and read the player's/skill's conversion stats
   ([20](../docs/protocol/20-damage.md)).
+  Player hits on monsters take the target's base resistance per type (`MonsterTypes.Resistances` →
+  `MonsterResistances` by the level's difficulty, `MonsterResistanceCatalog`/`HitMitigation`), with the hit's
+  unconditional penetration subtracted from the capped value and no second clamp (`Penetration`): general
+  per-element and elemental stats on every hit, attack-only variants on attacks, the cannot-penetrate flag
+  suppressing the elemental ones; DoT and physical take none. Monster armour is still not modelled.
   The player's real life, resistances, armour and evasion are computed from level, passives and base equipment, and
   armour/evasion mitigate monster hits (Status: Armour and Evasion).
   Ordinary physical monster melee can now trigger native player hit recovery with matching server cancellation.
@@ -108,6 +125,7 @@ validate town/combat/character-switch round trips in the real client (protocol/1
   Native group-peer refusal, cooldown recovery, paid refund, instant dispatch and owner regeneration pass.
   Ally charge/buff sharing, taunt AI, Deathrattle corpses/chests and other warcries remain unfinished.
   Continue charge sharing and remaining gain/consumption without bypassing the shared charge foundation.
+  Recheck the newly merged paths natively before treating earlier branch captures as merged acceptance.
   Ordinary Frostblink's bounded ground-instant acceptance passed actual Q, retry and invalid-request checks.
   Its hovered stationary-monster 0x191 path now uses the native size-aware object aim and object-bound confirmation.
   Automated acceptance/queued rejection checks and manual native endpoint experiments pass.
@@ -119,11 +137,15 @@ validate town/combat/character-switch round trips in the real client (protocol/1
   Production use during an active walk still needs measurement; native manual walk-stop experiments passed.
   Its departure/arrival damage, chilled ground, enemy-dependent recovery and shared Blink groups remain open.
   Extend terrain and movement restrictions from native evidence before accepting other instant movement skills.
-- **Start:** special ES mechanics, exposure and the remaining conditional critical strike stats
+- **Start:** special ES mechanics, exposure, conditional penetration and the remaining critical strike stats
   from the stats both sides already carry; monster skills beyond the first granted effect (ranged, spells).
   Extend player stun rules to ES avoidance, substituted thresholds, conditional defences and monster-specific modifiers.
   Spell base critical chance now comes from each skill's level and shares its panel/combat calculation.
   Native skill switching, combined bonuses, no-crit, relog and hitless-spell controls are verified.
+  The overcapped-resistance modifiers (Sea Legs' flags: cold overcap as increased evasion, lightning overcap as
+  increased critical chance) are implemented through the pools with automated and original-head native checks.
+  Recheck the combined armed 830 +45% =1204 result and extreme signed cancellation on the resolved stack natively.
+  Recheck Purity plus typed/all-element dev replacements and zero maximum overrides after the aura-source correction.
   The pure base overrides are in as a generic stat consumer (`override_weapon_base_critical_strike_chance` and the
   unarmed base in `AttackBaseCriticalStrike`): Slayer Overwhelm, Blind Prophet's Sightless and Behemoth Final Blow
   have native-verified base calculations, active-set isolation and cannot-crit gates (Status and
@@ -137,8 +159,26 @@ validate town/combat/character-switch round trips in the real client (protocol/1
   Complete signed player/skill critical sums now share half-up integer-permyriad calculation.
   Verify the integrated extreme-input, cannot-crit and overcap combination natively.
   Other added-base, more and conditional critical effects remain separate work.
+  Recheck the resolved stack's shared half-up midpoint natively; the original head's native checks remain historical.
+  Recheck development generic/spell increases and rounding live after the input-consistency review fixes.
+  Deliver their nodes through the separate ascendancy lifecycle; Slayer's per-nearby-enemy crit multiplier is separate.
+  Generic conditional rolls and the unarmed melee multiplier are implemented and native-verified separately.
+  Continue native spell/projectile checks and the resolved critical-hit/Fortification composition on `effb797`.
+  Verify successful paid Final Blow refunds once Phrecia play has an agreed client-compatible graph.
+  Focus/curse lifecycles and statistical RNG validation remain separate from the deterministic policy tests.
+  Added-base and other conditional/more crit remain separate work.
   Add support effects through `DamagePacket.Add`, `Scale`, `Convert` and `AddGain`.
 - **Done when:** damage numbers match the character panel and the monsters' levels.
+
+### Rage extensions
+
+- Generic Rage generation, limits, installed buff/count, actual damage, decay, pause and lifecycle are native-verified.
+  Remaining native composition includes supported projectiles, area sweeps, linked/active equipment sources,
+  notification delays beyond the shared interval and slow destination loading.
+  Recheck charge, equipment and command refreshes queued across expiry and separate decay-speed modifiers.
+  The 140-damage/11-Fortification composition has automated accepted-contact coverage; verify it natively.
+  Measure official capped-attempt refresh behavior and area-loading timer parity before replacing policy v1.
+  See [26-rage.md](../docs/protocol/26-rage.md); Vaal costs and whole-class selection remain separate mechanics.
 
 ### Death screen variants
 

@@ -38,9 +38,8 @@ public static class DamageModel
     /// <summary>Fireball's GrantEffectStatSetsPerLevel SpellCritChance (500 = 5.00%).</summary>
     public const int BaseSpellCriticalStrikeChancePerMyriad = 500;
 
-    /// <summary>A hit's integer permyriad critical chance. PoB CalcOffence rounds before the cap and Common.round
-    /// uses floor(value + 0.5). Decimal arithmetic keeps midpoint rounding independent of binary float ordering;
-    /// complete signed source sums remain long until this final calculation.</summary>
+    /// <summary>A hit's integer permyriad critical chance. Nonnegative midpoints round half up, shared by
+    /// attack and spell rolls and panels. Keep the complete signed source sum until this final calculation.</summary>
     public static int CriticalStrikeChancePerMyriad(int basePerMyriad, long increasedPct) =>
         (int)decimal.Round(Math.Clamp(basePerMyriad * (100m + increasedPct) / 100m, 0m, 10_000m),
             0, MidpointRounding.AwayFromZero);

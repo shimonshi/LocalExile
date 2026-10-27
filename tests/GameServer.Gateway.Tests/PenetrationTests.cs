@@ -149,17 +149,14 @@ public class PenetrationTests : IDisposable
         var attackStats = new Dictionary<uint, int>(player)
             { [stats.Key("base_attack_damage_penetrates_elemental_resist_%")!.Value] = 10 };
         var rolled = DamagePacket.Of(DamageType.Fire, 100, 100);
-        int Damage(SpawnedMonster target, DamagePacket hit, Random random, Penetration.PerType pen) =>
-            (int)Math.Round(new GamblerModifiers().MitigateOutgoingHit(hit,
-                type => new(catalog.BaseResistance(target.Variety!, target.Level, type) ?? 0, Penetration: pen.Of(type)), random).MinTotal);
-        Assert.Equal(90, Damage(monster, rolled, new Random(11),
+        Assert.Equal(90, Program.MonsterDamage(monster, rolled, new Random(11),
             Penetration.Of(attackStats, stats, attack: true)));    // 40% base - 30 pen = 10%
-        Assert.Equal(80, Damage(monster, rolled, new Random(11),
+        Assert.Equal(80, Program.MonsterDamage(monster, rolled, new Random(11),
             Penetration.Of(player, stats, attack: false)));        // 40% base - 20 pen = 20%
         // Without penetration the same fixed roll stays at the base 60.
-        Assert.Equal(60, Damage(monster, rolled, new Random(11), default));
+        Assert.Equal(60, Program.MonsterDamage(monster, rolled, new Random(11), default));
         // Chaos on the same monster (25%) with the attack-only chaos pen of 30 takes the effective value to -5%.
-        Assert.Equal(105, Damage(monster, DamagePacket.Of(DamageType.Chaos, 100, 100), new Random(11),
+        Assert.Equal(105, Program.MonsterDamage(monster, DamagePacket.Of(DamageType.Chaos, 100, 100), new Random(11),
             new Penetration.PerType(0, 0, 0, 30)));
     }
 

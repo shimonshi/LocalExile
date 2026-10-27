@@ -51,8 +51,8 @@ partial class Program
             var character = CharacterPlayerStats(conn);
             from = conn.Walk.Position(conn.Clock.Elapsed.TotalSeconds);
             int effect = SkillEffectId(conn, SkillCatalog.FirstSkillId) is { } id ? Skills.EffectRow(id) : -1;
-            // Freeze all offensive inputs after the contact wait, before enqueueing creation. No in-flight weapon swap
-            // or stat change rewrites this arrow; target evasion and existing impales are resolved at actual contact.
+            // Freeze damage, chance and multiplier after the contact wait. Conditional critical luck and prohibitions
+            // read the live owner at impact; target evasion and existing impales also resolve at actual contact.
             shot = OrdinaryBowShot.Capture(WeaponFor(conn), character, Skills.EffectStats(effect, 1), Stats,
                 conn.Pools.Accuracy, conn.Pools.AttackCriticalStrikeChance, CriticalMultiplierFor(conn, spell: false, melee: false)) with
             {
@@ -78,7 +78,8 @@ partial class Program
     {
         if (target.Dead || target.Life == 0 || target.Owned || MonsterBlocks(target, random, spell: false))
             return (null, 0, false);
-        var (packet, critical) = shot.RollPacket(target.Impale, random, CriticalMultiplierOn(target, shot.CriticalMultiplier));
+        var (packet, critical) = shot.RollPacket(target.Impale, random, CriticalMultiplierOn(target, shot.CriticalMultiplier),
+            chance => RollCriticalStrike(conn, chance, shot.Skill));
         packet = ApplyPassiveDamageTaken(conn, target, ApplyMonsterModDamageTaken(target,
             shot.Rolls.MitigateOutgoingHit(packet,
                 HitResistancesFor(conn, target, shot.Character, shot.Skill, critical, attack: true), random), spell: false));
@@ -88,7 +89,7 @@ partial class Program
         {
             ChargeHitCommitted(conn, target, applied, critical, spell: false, melee: false, new(),
                 shot.Character, shot.EffectId, shot.Skill, epoch);
-            GainRageOnHit(conn, shot.Character, attack: true, melee: false, critical);
+            RageOnHitLocked(conn, attack: true, melee: false, critical, shot.Skill);
             if (critical) ReserveWolfLocked(conn, DateTimeOffset.UtcNow);
             if (target.Life == 0) target.Impale.Clear();
         }

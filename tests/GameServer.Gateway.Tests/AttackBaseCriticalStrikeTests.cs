@@ -202,4 +202,13 @@ public class AttackBaseCriticalStrikeTests
         // (SpellCriticalStrike keeps SpellBaseCriticalStrikeChance out of this stat family).
         Assert.Equal(750, pools.SpellCriticalStrikeChance);
     }
+
+    [Fact]
+    public void Extreme_increases_keep_unarmed_base_and_zero_base_chances_bounded()
+    {
+        Assert.Equal(10000, AttackBaseCriticalStrike.Chance(false, 0, int.MaxValue, Raw((UnarmedStat, 1000))));
+        Assert.Equal(0, AttackBaseCriticalStrike.Chance(false, 0, int.MinValue, Raw((UnarmedStat, 1000))));
+        Assert.Equal(0, AttackBaseCriticalStrike.Chance(false, 0, int.MaxValue, Raw()));
+    }
+
 }

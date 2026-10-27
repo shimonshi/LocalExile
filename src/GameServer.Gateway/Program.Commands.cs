@@ -50,10 +50,11 @@ partial class Program
         {
             uint stat = Stats.Key(args[0]) ?? throw new ArgumentException($"unknown stat {args[0]}");
             int value = int.Parse(args[1]);
+            bool rebuildMana = stat == Stats.Key(StrengthMana.PerFourStrength);
             string name = Stats.Name(stat) ?? args[0];
             lock (conn.Monsters) conn.PlayerStats[stat] = value;
             if (AttackBaseCriticalStrike.IsInput(name) || ResistanceOvercap.IsInput(name)
-                || AttackBaseCriticalStrike.IsConditionalInput(name) || ChargeEffects.IsInput(name))
+                || AttackBaseCriticalStrike.IsConditionalInput(name) || ChargeEffects.IsInput(name) || rebuildMana)
             {
                 while (true)
                 {
@@ -65,6 +66,7 @@ partial class Program
                         // A concurrent level/aura rebuild wins; recompute against its current level and inputs.
                         if (!ReferenceEquals(conn.Pools, before)) continue;
                         conn.Pools = rebuilt;
+                        if (rebuildMana) conn.PlayerMana = Math.Min(conn.PlayerMana, (uint)UnreservedMana(conn));
                         break;
                     }
                 }
@@ -79,6 +81,8 @@ partial class Program
                 $"0x01b3 stats: {Stats.Name(stat)} (key 0x{stat:x}) = {value}, and the attack's final stats");
             // Skills compute with their own stats (the attack and the character panel read those), so send them again.
             await SendSkills(remote, stream, ciphers, conn);
+            // Reservation can change with maximum mana even when recovery leaves current mana unchanged.
+            if (rebuildMana) await SendPlayerMana(remote, stream, ciphers, conn, "0x01b1 mana after raw source rebuild");
         })
         .Add("spawn_mob", "/spawn_mob <MonsterVarieties row, Id or name>[@level] [friendly] [normal|magic|rare|unique] [name]", async args =>
         {
@@ -145,12 +149,13 @@ partial class Program
                 if (stacked.Left > 0) await conn.Commands!.Reply($"No room for {stacked.Left} of them");
                 return;
             }
-            var (sockets, links) = Items.DefaultSockets(type);
+            int itemLevel = Math.Clamp(conn.Pools.Level, 1, 100);
             var added = new List<InventoryItem>();
             for (int i = 0; i < count; i++)
             {
                 if (items.FreeCell(PlayerInventories.MainInventory, type.Width, type.Height, ShapeOf) is not { } cell) break;
-                var created = ItemCatalog.Create(type, sockets, links) with { ItemLevel = (byte)Math.Clamp(conn.Pools.Level, 1, 100) };
+                var (sockets, links) = Items.DefaultSockets(type, itemLevel);
+                var created = ItemCatalog.Create(type, sockets, links) with { ItemLevel = (byte)itemLevel };
                 if (rolled != ItemRarity.Normal) created = Rolls.Roll(created, rolled, Random.Shared);
                 added.Add(items.Put(PlayerInventories.MainInventory, new InventoryItem(items.NewItemId(), cell.X, cell.Y, created)));
             }
@@ -347,9 +352,9 @@ partial class Program
         .Add("set_level", "/set_level <1 to 100> (saved to the account; the level's experience and stats are sent at once)", async args =>
         {
             if (args.Length == 0 || !int.TryParse(args[0], out int level) || level is < 1 or > 100) throw new ArgumentException("level 1 to 100");
-            var r = await InstanceControl.CallAsync(new ControlRequest { Op = "set_level", Ticket = conn.Ticket, Level = level });
-            if (!r.Ok) { await conn.Commands!.Reply($"Level not set: {r.Error}"); return; }
             await SetLevel(remote, stream, ciphers, conn, level);
+            var r = await SynchronizeAccountLevel(conn);
+            if (!r.Ok) await conn.Commands!.Reply($"Level saved locally; account update failed: {r.Error}");
         })
         .Add("add_xp", "/add_xp <amount> (experience as from a kill: levels up, saved)", async args =>
         {
@@ -363,7 +368,7 @@ partial class Program
             await conn.Commands!.Reply($"Level {conn.Pools.Level}, {conn.Experience} experience: {points} passive skill point(s), {unspent} unspent, {refundPoints} refund point(s).\n" +
                 string.Join("\n", nodes.Select(n => $"{n} {Passives.Find(n)?.Name}").DefaultIfEmpty("No passives allocated.")));
         })
-        .Add("ascendancy", "/ascendancy [normal|phrecia] [name] (list or choose your main ascendancy; keeps the ordinary alternatives)", async args =>
+        .Add("ascendancy", "/ascendancy [normal|phrecia] [name] (list or choose; Phrecia play is gated pending client compatibility)", async args =>
         {
             byte baseClass = (byte)Skills.ClassFor(conn.ClassRow).IntegerId;
             var choices = Ascendancies.Choices(baseClass).ToArray();
@@ -373,7 +378,7 @@ partial class Program
                 var current = AscendancyRules.Validate(baseClass, conn.MainAscendancy);
                 int spent = AscendancyRules.SpentPoints(baseClass, conn.MainAscendancy);
                 await conn.Commands!.Reply($"Main ascendancy - {current?.Name ?? "none"}. Ascendancy points {spent}/{conn.MainAscendancy.EarnedPoints}.\n" +
-                    string.Join("\n", choices.Select(c => $"/ascendancy {c.Identity.Family.ToString().ToLowerInvariant()} {c.Name}")));
+                    string.Join("\n", choices.Select(c => $"/ascendancy {c.Identity.Family.ToString().ToLowerInvariant()} {c.Name}{(c.Identity.Family == AscendancyFamily.Phrecia ? " (play gated)" : "")}")));
                 return;
             }
             bool hasFamily = Enum.TryParse<AscendancyFamily>(args[0], true, out var family) && Enum.IsDefined(family);
@@ -382,6 +387,7 @@ partial class Program
                 (c.Name.Equals(name, StringComparison.OrdinalIgnoreCase) || c.Identity.Id.Equals(name, StringComparison.OrdinalIgnoreCase))).ToArray();
             if (matching.Length != 1) throw new ArgumentException("choose one name from /ascendancy, including its normal/phrecia family when needed");
             var chosen = matching[0];
+            AscendancyClientCompatibility.RequirePlayable(chosen.Identity);
             if (conn.MainAscendancy.Selection == chosen.Identity)
             {
                 await conn.Commands!.Reply($"{chosen.Name} is already your main ascendancy.");
@@ -443,10 +449,15 @@ partial class Program
             ushort total;
             lock (conn.Monsters)
             {
-                conn.ExtraPassivePoints = (ushort)Math.Min(ushort.MaxValue, conn.ExtraPassivePoints + add);
-                total = conn.ExtraPassivePoints;
+                total = Saves.Atomically(() =>
+                {
+                    ushort current = CharacterSaves.Load(CharacterName(conn))?.ExtraPassivePoints ?? 0;
+                    ushort next = (ushort)Math.Min(ushort.MaxValue, (long)current + add);
+                    CharacterSaves.SetExtraPassivePoints(CharacterName(conn), next);
+                    return next;
+                });
+                conn.ExtraPassivePoints = total;
             }
-            CharacterSaves.SetExtraPassivePoints(CharacterName(conn), total);
             await SendPassives(remote, stream, ciphers, conn);
             await conn.Commands!.Reply($"{add} extra passive point(s) added; {total} extra total.");
         })
@@ -501,8 +512,7 @@ partial class Program
             int resistance = Resistance(conn, type);
             int maxResistance = MaxResistance(conn, type);
             bool immune = PlayerImmunities(conn).Contains(type);
-            int dealt = immune ? 0 : ApplyPlayerArmour(conn, type, type == DamageType.Physical
-                ? amount : DamageModel.Mitigate(amount, resistance, maxResistance));
+            int dealt = immune ? 0 : MitigateTaken(conn, type, amount, resistance, maxResistance);
             string mitigation = immune
                 ? "immunity"
                 : type == DamageType.Physical
@@ -627,8 +637,7 @@ partial class Program
             if (!int.TryParse(args[1], out int amount) || amount <= 0) throw new ArgumentException("a positive amount");
             int resistance = Resistance(conn, type), maxResistance = MaxResistance(conn, type);
             bool immune = PlayerImmunities(conn).Contains(type);
-            int dealt = immune ? 0 : ApplyPlayerArmour(conn, type, type == DamageType.Physical
-                ? amount : DamageModel.Mitigate(amount, resistance, maxResistance));
+            int dealt = immune ? 0 : MitigateTaken(conn, type, amount, resistance, maxResistance);
             string mitigation = immune
                 ? "immunity"
                 : type == DamageType.Physical
@@ -705,7 +714,7 @@ partial class Program
             var p = conn.Pools;
             await conn.Commands!.Reply(
                 $"Attack crit {p.AttackCriticalStrikeChance / 100.0:0.##}% ({p.CriticalStrikeChancePct}% increased), " +
-                $"multiplier {p.CriticalStrikeMultiplier}%. Spell crit reference (5% base) {p.SpellCriticalStrikeChance / 100.0:0.##}% " +
+                $"multiplier {AttackCriticalMultiplier(conn, CharacterPlayerStats(conn))}%. Spell crit reference (5% base) {p.SpellCriticalStrikeChance / 100.0:0.##}% " +
                 $"({p.SpellCriticalStrikeChancePct}% increased), multiplier {p.SpellCriticalStrikeMultiplier}%.");
         })
         .Add("block", "/block (attack and spell block chance and caps)", async _ =>
@@ -743,8 +752,7 @@ partial class Program
             bool unlucky = spell ? conn.Pools.SpellBlockUnlucky : conn.Pools.AttackBlockUnlucky;
             bool blocked = DamageModel.Blocks(chance, Random.Shared.NextDouble() * 100, lucky, unlucky);
             bool immune = PlayerImmunities(conn).Contains(type);
-            int dealt = immune || blocked ? 0 : ApplyPlayerArmour(conn, type, type == DamageType.Physical
-                ? amount : DamageModel.Mitigate(amount, resistance, maxResistance));
+            int dealt = immune || blocked ? 0 : MitigateTaken(conn, type, amount, resistance, maxResistance);
             string mitigation = immune
                 ? "immunity"
                 : type == DamageType.Physical
@@ -1019,7 +1027,12 @@ partial class Program
             float speed = sp is null ? 20f : float.Parse(sp, System.Globalization.CultureInfo.InvariantCulture);
             var (x, y) = NextToPlayer(conn);
             await Send(remote, stream, ciphers, InstanceProtocol.MoveTo(id, x, y, speed), $"0x01ba move monster 0x{id:x} to ({x}, {y}) speed {speed}");
-            lock (conn.Monsters) conn.Monsters[id].Walk = conn.NewWalk(x, y, conn.Monsters[id].Walk.Speed);
+            lock (conn.Monsters)
+            {
+                conn.Monsters[id].Walk = conn.NewMonsterWalk(id, x, y, conn.Monsters[id].Walk.Speed,
+                    LivingCollision.Size(conn.Monsters[id]), conn.Monsters[id].Rarity == MonsterRarity.Unique);
+                conn.Monsters[id].CollisionPosition = (x, y);
+            }
         })
         // Action probe: start the monster's Move action (0x1ab) toward the player, like the echo of a player's click. The skill
         // id is the player's Move (0x2909) unless given (hex); sequence 0xffff (the monster is not client-predicted).
@@ -1058,7 +1071,12 @@ partial class Program
             if (MonsterArg(conn, args, 0) is not { } id) { await conn.Commands!.Reply("No such monster."); return; }
             var (x, y) = NextToPlayer(conn);
             await Send(remote, stream, ciphers, InstanceProtocol.Teleport(id, x, y), $"0x01b7 teleport monster 0x{id:x} to ({x}, {y})");
-            lock (conn.Monsters) conn.Monsters[id].Walk = conn.NewWalk(x, y, conn.Monsters[id].Walk.Speed);
+            lock (conn.Monsters)
+            {
+                conn.Monsters[id].Walk = conn.NewMonsterWalk(id, x, y, conn.Monsters[id].Walk.Speed,
+                    LivingCollision.Size(conn.Monsters[id]), conn.Monsters[id].Rarity == MonsterRarity.Unique);
+                conn.Monsters[id].CollisionPosition = (x, y);
+            }
         })
         .Add("ai", "/ai [on|off] (monsters chase you when you come near; emerge monsters rise either way)", async args =>
         {

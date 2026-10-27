@@ -5,6 +5,41 @@ Part of [Status](../Status.md); what to build next in this area is in
 
 ## Works (verified with the real client)
 
+- Fortification: qualifying melee hits build temporary protection through an explicit LocalExile generation model.
+  Native checks confirmed the buff component, expiry, 20/30-stack limits, attack speed and actual hit protection.
+  Elapsed Life regeneration, stopping at expiry, area carry, death and relog were also verified.
+  The evidence uses a new unascended character with raw inputs; it does not establish Behemoth selection.
+  See [Fortification](../docs/game/fortification.md) for the formula, source coverage and remaining extensions.
+- Conditional critical policy (#242): ordinary, low-life, Focus and Sharp and Brittle sources share a signed clamp.
+  Opposing luck cancels, and multiple lucky sources still add at most one critical draw.
+  The unarmed multiplier applies only to the active empty-hand melee attack, with matching panel values.
+  Fifteen native checks verified real 200/150 critical hits, active-set switching and bonus removal.
+  A 66-Life Marauder verified above, exactly at and below the inclusive 50% boundary.
+  Native virtuals confirmed cancellation, clamping, unlucky state, cannot-crit, healing, death and relog.
+  Native evidence targets `ea24316`; the resolved `effb797` composition has automated coverage and awaits native reruns.
+  The checks use raw inputs on an unascended character; spell/bow contact rules and RNG order have automated coverage.
+  A parsed 200-damage critical hit against 400 Life generates 14 Fortification from the same resolved multiplier.
+  Removing the unarmed bonus gives 150 damage and 12 stacks; cannot-crit gives 100 damage and 10 stacks.
+  Successful paid ascendancy refunds and Focus/curse lifecycles remain separate integration work.
+  See [11-skills.md](../docs/protocol/11-skills.md), conditional critical policy.
+
+- Generic Rage (#281): source-qualified attack/melee/critical and incoming gains share a half-second interval.
+  Maximum, effect, separate delay recovery/loss speed, prevention and final attack multipliers are consumed.
+  Seventeen native checks verify raw-source generation, installed buff/count, actual damage and unchanged speed.
+  Fixed 100 damage at 15 Rage displays and deals 115; prevention, decay, pause, travel, death and relog pass.
+  The checks use an unascended Witch; Behemoth selection and Vaal consumers remain separate.
+  Supported contacts, area-sweep deduplication, queued refreshes and the 140-damage/11-Fortification composition
+  have automated coverage; further native composition checks remain in [26-rage.md](../docs/protocol/26-rage.md).
+  Capped attempted gains and frozen destination-loading time use explicit LocalExile policy v1.
+
+- Mana per final Strength (#287): `X_mana_per_4_strength` joins the ordinary flat mana bucket before increases.
+  Thirteen native controls verify complete four-Strength groups, signed inputs, source removal and relog.
+  A fresh Witch's 56 mana becomes 80 at 14/15 Strength, 88 at 16 Strength and 110 with 25% increased mana.
+  Maximum-mana attack lightning follows the final pool; display-only Strength overrides cannot feed it back.
+  Idle aura reservation and current-mana clamps have decrypted command-wire coverage, including the send gate.
+  Native controls use raw inputs and synthetic gear; the other Mental Conditioning flags and class remain separate.
+  See [11](../docs/protocol/11-skills.md) section 4.
+
 - Skills and combat: the player has the default attack (PlayerMelee, Characters.dat StartingMeleeSkill) in the Actor
   skill list; it goes on the skill bar, walks into range, swings at the unarmed speed (757 ms with dual wielding's
   10%) or faster with `/set_stat attack_speed_+%` (server-computed final stats, 0x2ba skill update, panel's Attacks
@@ -27,8 +62,25 @@ Part of [Status](../Status.md); what to build next in this area is in
   997 → 59–59 at the panel's floor, removal and relog.
   Generic attack increases apply; melee increases follow the actual attack type and active weapon set.
   Native switching between wand and club verified ranged exclusion and melee inclusion of that increase.
+  These native checks belong to original head `378ffde`.
+  The resolved supported-skill path has automated context, effectiveness and spell-isolation checks.
+  Recheck that composition natively.
   Code: `PanelStats.HandDamage`, Gateway (`CharacterPlayerStats`).
   Docs: [11](../docs/protocol/11-skills.md) §14.
+- Whisperer "your mind is destroyed": resolved spell increases/reductions also scale attacks at 150% of their value.
+  Weapon, added-damage and supported attack constructors share the fractional additive contribution.
+  Native panel and target-life checks verify 100 to 250, additive 230, a half-percent endpoint of 203 and reductions.
+  Removal and relog clear the effect; ordinary bows retain release snapshots and supported spells remain isolated.
+  The native check uses development stat inputs; Phrecia node selection and the rest of Whisperer remain separate.
+  Code: `DamageStats`, `SkillCatalog.Unarmed.HitDamage`, `SupportedAttackDamage`.
+  Docs: [20](../docs/protocol/20-damage.md) §2c.
+- Behemoth Steel Willed: each complete group of 450 final armour adds 2% increased attack damage.
+  The contribution joins raw attack increases once and feeds weapon physical, added damage and supported attacks.
+  Native fixed-hit checks verify thresholds, additive 204/214, modifier removal and maximum-mana lightning.
+  Weapon physical panel checks show 2â€“5 becoming 6â€“15; relog clears the development inputs.
+  Native checks use raw stats on an unascended character; selection and recent-hit armour doubling remain separate.
+  Code: `ArmourAttackDamage`, Gateway (`CharacterPlayerStats`), `SkillCatalog.Unarmed.IncreasedDamage`.
+  Docs: [20](../docs/protocol/20-damage.md) Â§2d.
 - Accuracy: the player's final rating includes flat/increased passives, weapon-specific stats and the unconditional
   Accuracy Mastery effects; attacks roll PoB's hit chance against the monster's `DefaultMonsterStats.Evasion`, misses
   send no life update, spells always hit; the Offence panel gets `main_hand_accuracy_rating` /
@@ -153,6 +205,15 @@ Part of [Status](../Status.md); what to build next in this area is in
   ms; server-side mana (cost, regeneration); `/god` (also 200% increased area of effect), `/set_aoe`.
   Code: Gateway (`ActivateRighteousFire`, `RunPlayerTick`), `SkillArea.cs`.
   Docs: [11](../docs/protocol/11-skills.md) §12.
+- Warcry admission restriction (#297): any signed nonzero `your_warcry_skills_are_disabled` blocks new typed warcries.
+  Actual caster passive/equipment/raw dev sources are read before skill overlays, action echoes, costs and cooldowns.
+  Explicit zero and source removal restore admission without rebuilding pools or removing Actor skills.
+  Parsed ground/object, paid Enduring Cry, source, instant safety and queued-send regressions pass.
+  Accepted non-cancellable cry releases retain their existing behavior; Enduring Cry's charge executor stays partial.
+  Seven native checks verify refusal without Mana loss or release, source clearing and paid 13-Mana retries.
+  Native Endurance Charges confirm accepted releases; Fireball remains usable and relog clears the developer flag.
+  Phrecia play stays gated; source precedence, aliases and queued boundaries have additional automated coverage.
+  See [11](../docs/protocol/11-skills.md) section 10b.
 - Spells are released at the cast animation's contact keyframe (Witch 599 of 1066 ms;
   every class's from its rig .amd), with the server duration adjusted once for cast speed.
   Code: `AnimationContacts.cs`, `scripts/re/anim_contacts.py`.
@@ -160,7 +221,7 @@ Part of [Status](../Status.md); what to build next in this area is in
 
 ## Partly working
 
-- Main ascendancy effects execute through the existing combat and skill paths.
+- Archived main ascendancy effects execute through the existing combat and skill paths.
   Initial support includes active-gem level/quality, attributes/requirements, ordinary-point grants,
   lucky/unlucky hit and block rolls, triple damage and hit resistance rules.
   The Phrecia family gem-level stats raise their families' gems too (Herald, Vaal, Link, Raise Zombie), classified
@@ -186,6 +247,7 @@ Part of [Status](../Status.md); what to build next in this area is in
   Native selected Burning Arrow APS changes 10.78 → 14.35 and its DPS follows the emitted rate.
   That earlier build used the wrong 1.8 scalar; it verifies timing, not corrected 2.8 damage scaling.
   Corrected native damage and complete official DPS remain open.
+  Phrecia selection and game connections are currently gated.
   Most Phrecia signature mechanics remain absent; selecting a class does not implement its entire tree.
   Code: `PassiveGemModifiers.cs`, `SkillGemFamilies.cs`, `GamblerModifiers.cs`, `SkillRestrictions.cs`, Gateway skill/combat partials.
   Docs: [implemented effects by class](../docs/game/ascendancies.md#what-this-does-not-complete).
@@ -284,8 +346,8 @@ Part of [Status](../Status.md); what to build next in this area is in
   the two target-conditional effects at the roll), and the final rating value is
   sent as `main_hand_accuracy_rating` / `off_hand_accuracy_rating` for the Offence panel;
   armour and evasion also take their flat/increased passives and the base equipped armour pieces (body, helmet,
-  gloves, boots), while life and mana still ignore passives and items (attack speed is handled below)
-  ([11](../docs/protocol/11-skills.md) §4).
+  gloves, boots); life and mana take their existing flat/increased passive and active item sources.
+  See [11](../docs/protocol/11-skills.md) §4.
 - **Attack speed passives.** Generic, melee, one-/two-handed, weapon-family, shield and dual-wield passive attack
   speed is summed into the client's `main_hand_attack_speed_+%`;
   dual wielding adds PoB's 10% more and the server's unarmed attack uses the same final value.
@@ -387,6 +449,7 @@ Part of [Status](../Status.md); what to build next in this area is in
   Catalog, chance, panel gates, aura sources and hit routing also have automated checks.
   Other timed, enemy-state and added-base crit mechanics are not modelled (low-life conditional crit rolls now
   are, in this entry above).
+  Focus skill and curse lifecycles, other enemy-state/more and added-base crit mechanics remain separate work.
   `/crit` shows the attack values and a pooled 5%-base spell reference ([11](../docs/protocol/11-skills.md) §5).
 - **Overcapped-resistance modifiers.** While the flag stat is set, the uncapped resistance above its maximum is a
   generic increased modifier, exactly PoB's `ResistOverCap` (the maximum capped at 90): +1% increased evasion per 1%
@@ -406,6 +469,10 @@ Part of [Status](../Status.md); what to build next in this area is in
   raised maxima, replacement of global inputs, both Kitava penalties, flag removal and relog.
   Combined Gateway checks retain the same increase after the active weapon's base override calculation:
   830 base with 45% overcap gives 1204, a 900 override gives 1305, and the inactive weapon supplies no armed base.
+  Combined automated checks retain the 830 +45% =1204 armed chance and complete signed critical cancellation.
+  Purity-aware raw replacements now remove the aura contribution for that exact key, including explicit zero maxima.
+  Real aura/catalog/pool regressions pass; the corrected aura-override composition needs a native recheck.
+  The resolved stack needs native rechecking; the following thirteen checks belong to original head `39cbda2`.
   Ascendancy allocation remains part of the separate lifecycle change.
   See [11](../docs/protocol/11-skills.md) §4, §5 and §12.
 - **Projectiles.** Moving targets are checked throughout flight by sweeping observed relative movement.
@@ -477,6 +544,31 @@ Part of [Status](../Status.md); what to build next in this area is in
   every 500 ms.
   Item mods count through the global item stats;
   346 varieties with NPC / ControlZone / ... components are refused.
+- **Critical-strike elemental resistance rules (Inevitable Judgement).** The hit's
+  already-rolled critical boolean decides the resistance: the packet rolls once (the original per-type draws), the
+  existing single critical draw keeps its original place after them, and the mitigation resolves on the
+  already-rolled packet without a second roll — a critical elemental hit with
+  `critical_strikes_ignore_elemental_resistances` mitigates with an effective resistance
+  of zero, negative included, overriding any penetration; the attack-only variant covers attacks only; a
+  non-critical elemental hit keeps its capped resistance and `non_critical_strikes_penetrate_elemental_resistances_%`
+  (10) subtracts after the cap, stacked with the hit's general penetration;
+  `cannot_penetrate_or_ignore_elemental_resistances` restores the plain capped resistance.
+  Physical, chaos and damage over time are outside the rules; Inevitable Judgement (graph node 48214) grants the
+  generic ignore and the 10 penetration through the ordinary passive stat sum.
+  The shared helper (`HitResistances`, the Gateway's `MonsterDamage`) covers default attacks, bows and gem hits.
+  Default and area damage logs name the decision; gem projectiles emit a separate resistance trace.
+  Core and Gateway checks cover positive/negative resistance, maximum independence and the node's exact stat keys.
+  Eight native checks read monster life: fixed 100 fire dealt 60 normally and 70 with non-critical penetration.
+  Guaranteed critical hits dealt 150 with generic or attack-only ignore, and 90 after removal or prohibition.
+  Those captures belong to original head `13c41e5`; combined penetration/modifier/bow paths need native rechecking.
+  Automated checks preserve same-key source sums, fractional totals, target damage taken and the original RNG order.
+  Sequential C24 handler tests read real `/set_stat` changes after a prior hit on the same connection and target.
+  Skill `0x102`, sequence 0 and flags `0x408` give ignore 300, ordinary critical 330 and prohibition 240.
+  Friendly and hostile controls pass without a production hostility change.
+  The combined run labelled `462c883` used a DLL proven by hash to be #225 `4a71968`; its ninth case is not #226 proof.
+  Ascendancy allocation remains in its separate lifecycle change.
+  Code: `HitResistances.cs`, `HitMitigation.cs`, Gateway (`MonsterDamage`).
+  Docs: [20](../docs/protocol/20-damage.md) §4.
 - **Damage model (foundation, with armour/evasion).** A hit is a per-type `DamagePacket`;
   `DamageConversion` handles the game's physical, lightning, cold, fire, chaos order, chained conversion, skill/global
   precedence, the 100% cap and gain-as-extra.
@@ -501,6 +593,17 @@ Part of [Status](../Status.md); what to build next in this area is in
   A separate pure ailment calculator retains raw base/added damage, conversion ancestry and scoped modifiers.
   Its critical DoT multiplier and independent ailment range have oracle tests; runtime application is still absent.
   Monster base resistances now come from the target client's MonsterTypes/MonsterResistances tables.
+  Unconditional penetration works on the player's outgoing hits (general per-element and elemental stats, the
+  attack-only variants, the cannot-penetrate flag; DoT and physical take none).
+  Player and skill contributions to the same raw penetration stat add without overwriting either source.
+  Nine native checks verified fixed 100-fire hits for 60 → 80 → 90 → 100 damage as penetration stacked,
+  the prohibition returning 60, cold penetration giving 120 against zero resistance, and chaos 75 → 105.
+  Each check read the actual native monster life after the authoritative update.
+  Those captures belong to original head `0d800d1`; resolved bow and target-modifier paths need native rechecking.
+  Target mods compose with base resistance before penetration; damage taken follows mitigation and rounds once.
+  Ten fresh composed native groups verify critical rounding, active overcap and default-attack mana lightning.
+  Actual mixed-hit Life losses are 160/220 before criticals, then 300 with ignore, 330 without and 240 prohibited.
+  Build versions and source hashes match `1366f48`; supported-gem, modifier and bow combinations remain automated.
 - Continuous life/mana recovery (2026-10-24): regeneration, flask recovery and self RF now share a 16 ms
   elapsed-game-time loop, replacing regeneration's 250 ms jumps; pool fractions and caps are preserved.
   Implemented with regression tests; real-client visual verification after Gateway restart is pending.

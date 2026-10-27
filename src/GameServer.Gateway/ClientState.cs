@@ -116,6 +116,7 @@ sealed class SpawnedMonster(string label, WalkEstimator walk, int aggroRange, in
     // lock.
     public double FlinchUntil = double.NegativeInfinity;
     public bool Aggro, Dead;
+    public (int X, int Y)? CollisionPosition;
     public (int X, int Y)? LastTarget;
     // A boss's stage (BossFights) and whether a hit has started it.
     public BossFights.Stage? Stage { get; init; }
@@ -159,7 +160,7 @@ sealed record RighteousFireState(ushort Buff, ushort SelfAura, uint? Ring, ushor
 // The last instance list shown (0xae); 0xaf picks a row of it.
 sealed record ChooserList(ushort Area, IReadOnlyList<ulong> Ids, bool AtWaypoint = false);
 
-sealed class ClientState(AreaLayout layout, uint ticket, uint seed)
+sealed partial class ClientState(AreaLayout layout, uint ticket, uint seed)
 {
     public Guid SummonLease { get; } = Guid.NewGuid();
     public SummonRoster? Summons;
@@ -249,7 +250,7 @@ sealed class ClientState(AreaLayout layout, uint ticket, uint seed)
     // The blocking objects the client's pathfinder walks around (Positioned blocking = true), with their Positioned size
     // (object_size − 1): NPCs (NPC.ot 5) and the stashes (Stash.ot, GuildStash.ot 3) by object id, and the living
     // hostile monsters where the server's estimate has them now (MonsterVarieties ObjectSize − 1).
-    public const int NpcBlockerSize = 4, StashBlockerSize = 2;
+    public const int NpcBlockerSize = 4, StashBlockerSize = 2, MapDeviceBlockerSize = 3;
     readonly Dictionary<uint, ClientPathfinder.Blocker> _blockers = [];
     volatile IReadOnlyList<ClientPathfinder.Blocker> _blockerList = [];
     public IReadOnlyList<ClientPathfinder.Blocker> Blockers
@@ -263,17 +264,27 @@ sealed class ClientState(AreaLayout layout, uint ticket, uint seed)
             lock (Monsters)
                 foreach (var m in Monsters.Values)
                 {
-                    if (m.Dead || !m.Hostile || m.Variety is not { } v) continue;
+                    if (!LivingCollision.Blocks(m)) continue;
                     var (x, y) = m.Walk.Position(now);
-                    (all ??= [.. fixedOnes]).Add(new(x, y, Math.Max(0, v.ObjectSize - 1)));
+                    (all ??= [.. fixedOnes]).Add(new(x, y, LivingCollision.Size(m)));
                 }
+            foreach (var peer in Instance?.PlayersExcept(PeerId) ?? [])
+                if (peer.Life > 0) (all ??= [.. fixedOnes]).Add(new(peer.X, peer.Y, LivingCollision.PlayerSize));
             return all ?? fixedOnes;
         }
     }
 
-    public void SetBlocker(uint id, int x, int y, int size)
+    public IReadOnlyList<ClientPathfinder.Blocker> StationaryBlockers => _blockerList;
+
+    public int StationaryInteractionSize(uint id)
     {
-        lock (_blockers) { _blockers[id] = new(x, y, size); _blockerList = [.. _blockers.Values]; }
+        lock (_blockers) return _blockers.TryGetValue(id, out var b)
+            ? Math.Max(b.Size, (int)Math.Ceiling(b.CollisionRadius ?? 0)) : 0;
+    }
+
+    public void SetBlocker(uint id, int x, int y, int size, double? collisionRadius = null)
+    {
+        lock (_blockers) { _blockers[id] = new(x, y, size) { CollisionRadius = collisionRadius }; _blockerList = [.. _blockers.Values]; }
     }
 
     public void RemoveBlocker(uint id)
@@ -343,12 +354,15 @@ sealed class ClientState(AreaLayout layout, uint ticket, uint seed)
     // The stats the server has set on the player after creating it (/set_stat, /set_speed): what the client computes
     // with, so the server can follow it (attack time).
     public readonly Dictionary<uint, int> PlayerStats = [];
+    // Transient Rage belongs to this connection until its destination ticket takes ownership; guarded by Monsters.
+    public readonly RageState Rage = new();
+    public bool RageRetired;
+    public ushort RageBuff;
+    public RageState.Value? SentRage;
     // Running auras by skill id, with their buff instances and reservation. Guarded by the Monsters lock.
     public readonly Dictionary<ushort, AuraCatalog.Aura> Auras = [];
     public readonly Dictionary<int, ushort> PassiveBuffs = [];
     public readonly HashSet<int> ActiveTemporaryBuffs = [];
-    public RageState.Value? SentRage;
-    public ushort? RageBuff;
     public readonly Dictionary<(uint Monster, int Template), ushort> PassivePresences = [];
     // When each skill with a cooldown (GrantedEffects row) may be used again, in Clock seconds. Guarded by the Monsters lock.
     public readonly Dictionary<int, double> SkillReadyAt = [];
@@ -424,6 +438,8 @@ sealed class ClientState(AreaLayout layout, uint ticket, uint seed)
     // The player's life as the server keeps it (PlayerObject's Life, full on creation); 0 = dead.
     public bool AuraDeathHandled;
     public uint PlayerLife;
+    // Defaults to the original shared stream; an isolated connection may supply deterministic critical draws.
+    internal Random CriticalRandom { get; init; } = Random.Shared;
     // The player's mana as the server keeps it: spent by gem skills (mana_cost), regenerated by RunPlayerTick.
     public uint PlayerMana;
     public uint? SentEnergyShield;

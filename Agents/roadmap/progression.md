@@ -19,7 +19,8 @@ Items keep the Roadmap's priority groups, and are in rough priority order within
   accuracy roll; close range is the constant 20-unit radius).
   Minions' Accuracy equals yours is not offered by that target group and remains unsupported with minion accuracy.
   Gem attacks still need their own accuracy rolls before these target conditions can affect them.
-- **Known:** ordinary and Phrecia main choices, separate budgets, ascendancy connectivity and paid refunds work.
+- **Known:** ordinary main choices, separate budgets, ascendancy connectivity and paid refunds work.
+  Phrecia identities have the same server lifecycle, but selection and connections remain gated.
   [Ascendancy usage and limits](../docs/game/ascendancies.md).
 - **Known:** ordinary allocations, masteries and refunds are checked against the character's available starts.
   Level trimming preserves connected branches; unsupported expansion/proxy nodes are refused.

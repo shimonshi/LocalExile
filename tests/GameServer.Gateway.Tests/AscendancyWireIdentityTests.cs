@@ -7,13 +7,8 @@ public class AscendancyWireIdentityTests
     [Fact]
     public void Every_extracted_choice_has_an_unambiguous_family_and_native_identity()
     {
-        string? folder = null;
-        for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
-        {
-            string candidate = Path.Combine(dir.FullName, "data");
-            if (File.Exists(Path.Combine(candidate, AscendancyCatalog.GraphFile))) { folder = candidate; break; }
-        }
-        if (folder is null) return; // The repository supports running without proprietary client data.
+        if (!File.Exists(Path.Combine("data", AscendancyCatalog.GraphFile))) return;
+        string folder = "data";
         var catalog = new AscendancyCatalog(folder);
         Assert.Equal(40, catalog.Definitions.Count);
         var identities = new HashSet<(AscendancyFamily Family, byte Packed)>();

@@ -9,9 +9,36 @@ using DamageType = GameServer.Core.World.DamageType;
 /// </summary>
 static class DamageStats
 {
+    public const string SpellDamageIncreasesApplyToAttacks150 =
+        "additive_spell_damage_modifiers_apply_to_attack_damage_at_150%_value";
+
+    // This stat is a flag. Transfer increased/reduced spell damage into the attack's increased bucket,
+    // retaining half-percent values; spell-only more multipliers and speed never enter this contribution.
+    public static double SpellAttackIncrease(Func<string, int> get) =>
+        SpellAttackIncrease(get(SpellDamageIncreasesApplyToAttacks150), get("spell_damage_+%"));
+
+    public static double SpellAttackIncrease(IReadOnlyDictionary<uint, int>? stats) =>
+        SpellAttackIncrease(stats?.GetValueOrDefault(StatKeys.SpellDamageIncreasesApplyToAttacks150) ?? 0,
+            stats?.GetValueOrDefault(StatKeys.SpellDamagePct) ?? 0);
+
+    static double SpellAttackIncrease(int enabled, int increased) => enabled != 0 ? increased * 1.5 : 0;
+
+    public static DamageRange IncreaseAttackRange(DamageRange range, double increased)
+    {
+        // Multiply before dividing: 200 * 101.5 / 100 is exactly 203, whereas 200 * 1.015 can fall below it
+        // and the panel's final floor would disagree with the hit roll. Non-integral damage stays fractional.
+        double percent = Math.Max(0, 100.0 + increased);
+        return new(range.Min * percent / 100.0, range.Max * percent / 100.0);
+    }
+
     /// <summary>"Attack skills have added lightning damage equal to % of maximum mana" (Stats.dat row 11881, client key
     /// 11882): PassiveSkills.dat graph id 22720, Whisperer "we know all", grants row 11881 with the value 6.</summary>
     public const string MaxManaAddedLightning = "attack_skills_have_added_lightning_damage_equal_to_%_of_maximum_mana";
+
+    // Raw attack-only added damage, before increases, effectiveness, support restrictions and conversion.
+    // Read maximum mana, so spending or reserving the current pool cannot change the grant.
+    public static double ManaAddedLightning(Func<string, int> get) =>
+        get("maximum_mana") is > 0 and var mana ? mana * (get(MaxManaAddedLightning) / 100.0) : 0;
 
     public static DamagePacket Added(DamagePacket hit, Func<string, int> get, bool spell, bool melee,
         double effectiveness = 1, double additionalIncreasedPct = 0)
@@ -24,17 +51,9 @@ static class DamageStats
             {
                 if (type == DamageType.Lightning)
                 {
-                    int manaPercent = get(MaxManaAddedLightning);
-                    if (manaPercent != 0 && get("maximum_mana") is > 0 and var maxMana)
-                    {
-                        // PoB ModParser 16de4b82 lines 5636–5639 maps the node's value to BOTH LightningMin and
-                        // LightningMax as BASE with PercentStat Mana (the maximum, not the current pool) and ModFlag
-                        // Attack. The pools' maximum_mana is already the full pool, so spending and reserving mana
-                        // never change the bonus. Applied before the increases, so increased/decreased attack damage
-                        // scales it like any other added lightning; later conversion treats it as lightning too.
-                        double added = maxMana * (manaPercent / 100.0);
-                        range = range.Add(new DamageRange(added, added));
-                    }
+                    // PoB ModParser 16de4b82 lines 5636–5639 grants both attack LightningMin and LightningMax.
+                    double added = ManaAddedLightning(get);
+                    range = range.Add(new DamageRange(added, added));
                 }
 
                 // attack_damage_+% is a plain Attack-flag increase: every attack, no inference from the weapon or the
@@ -45,7 +64,7 @@ static class DamageStats
                 double increased = additionalIncreasedPct + get("damage_+%") + get("attack_damage_+%") + (melee ? get("melee_damage_+%") : 0)
                     + get($"{slug}_damage_+%")
                     + (DamageTypes.IsElemental(type) ? get("elemental_damage_+%") : 0);
-                range = range.Scale(Math.Max(0, 1 + increased / 100.0));
+                range = IncreaseAttackRange(range, increased);
             }
             hit = hit.Add(type, range.Scale(effectiveness));
         }

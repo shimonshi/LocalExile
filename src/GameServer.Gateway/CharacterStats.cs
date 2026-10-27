@@ -53,7 +53,10 @@ static class CharacterStats
         int LowLifeThresholdOverride = 0, int LowLifeThresholdPct = 0,
         // Final Blow's unarmed melee critical multiplier bonus (percentage points), which only the melee-context
         // consumers add (CriticalMultiplierFor and the main hand's panel row); 0 armed or for spells.
-        int UnarmedCriticalStrikeMultiplierBonus = 0);
+        int UnarmedCriticalStrikeMultiplierBonus = 0)
+    {
+        internal long FortificationRevision { get; init; }
+    }
 
     /// <summary>What allocated passives and equipped base items add to the pools: attributes, flat and increased life,
     /// mana, armour and evasion, increased energy shield and melee physical damage, the base resistances, attack speed's
@@ -128,14 +131,20 @@ static class CharacterStats
         long attackCriticalIncrease = b.CriticalStrikeChancePct + b.LightningOvercapCritPct;
         long spellCriticalIncrease = b.SpellCriticalStrikeChancePct + b.LightningOvercapCritPct;
         level = Math.Clamp(level, 1, Progression.MaxLevel);
-        var (str, dex, intel) = new PassiveAttributeModifiers.Increases(b.StrengthPct, b.DexterityPct, b.IntelligencePct)
-            .Apply((c.Strength + b.Strength, c.Dexterity + b.Dexterity, c.Intelligence + b.Intelligence));
+        var attributes = (c.Strength + b.Strength, c.Dexterity + b.Dexterity, c.Intelligence + b.Intelligence);
+        var (str, dex, intel) = b.StrengthPct == 0 && b.DexterityPct == 0 && b.IntelligencePct == 0
+            ? attributes : new PassiveAttributeModifiers.Increases(b.StrengthPct, b.DexterityPct, b.IntelligencePct)
+                .Apply(attributes);
         if (b.NoIntelligence) intel = 0;
         uint life = (uint)Math.Max(1, (c.BaseMaxLife + (12 + b.LifePerLevel) * level + str / 2 + b.Life) * (100 + b.LifePct) / 100);
-        int manaBase = Math.Max(0, c.BaseMaxMana + 6 * level + (b.NoIntelligenceMana ? 0 : intel / 2)
-            + dex * b.ManaPerDexterity + str / 4 * b.ManaPerFourStrength + b.Mana);
+        decimal manaBase = Math.Max(0m, c.BaseMaxMana + 6m * level + (b.NoIntelligenceMana ? 0 : intel / 2)
+            + dex * (decimal)b.ManaPerDexterity + StrengthMana.Flat(str, b.ManaPerFourStrength) + b.Mana);
         int manaConversion = Math.Clamp(b.ManaConvertedToArmourPct, 0, 100);
-        uint mana = (uint)Math.Max(0, manaBase * (100m + b.ManaPct) * (100 - manaConversion) / 10000m);
+        uint mana = b.ManaPerFourStrength == 0 && manaConversion == 0
+            ? (uint)Math.Max(0, (c.BaseMaxMana + 6 * level + (b.NoIntelligenceMana ? 0 : intel / 2)
+                + dex * b.ManaPerDexterity + b.Mana) * (100 + b.ManaPct) / 100)
+            : (uint)Math.Clamp(manaBase * Math.Max(0m, 100m + b.ManaPct)
+                * (100 - manaConversion) / 10000m, 0m, int.MaxValue);
         // PoB CalcOffence: accuracy = floor(base * (1 + increased / 100)) with no more multiplier modelled. The
         // Accuracy Mastery can replace the 2 per level and 2 per dexterity, and add Accuracy equal to Intelligence.
         int accuracyPerLevel = 2 + b.AccuracyPerLevel;

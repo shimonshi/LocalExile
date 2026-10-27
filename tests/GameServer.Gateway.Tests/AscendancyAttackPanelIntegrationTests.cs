@@ -30,6 +30,8 @@ public sealed partial class AscendancyGatewayIntegrationTests
                 (DamageStats.MaxManaAddedLightning, 6), ("maximum_mana", 1000), ("attack_damage_+%_final_from_rage", 30),
             }) game.State.PlayerStats[Program.Stats.Key(name)!.Value] = value;
         game.State.Pools = Program.PoolsFor(game.State, 1);
+        if (modifiers) game.State.Rage.Gain(30, game.State.Clock.Elapsed.TotalSeconds,
+            RageStats.Inputs(name => Program.Stats.Key(name) is uint key ? game.State.PlayerStats.GetValueOrDefault(key) : 0));
         var gem = game.GemEffects().Single(g => g.Effect == Program.Skills.EffectRow("BurningArrow"));
         var raw = Program.CharacterPlayerStats(game.State);
         var rawBefore = raw.OrderBy(kv => kv.Key).ToArray();

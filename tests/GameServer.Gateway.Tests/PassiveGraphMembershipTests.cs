@@ -25,6 +25,6 @@ public sealed class PassiveGraphMembershipTests
             Assert.Equal(new ushort[] { 10, 20 }, saved);
             catalog.ValidateOrdinaryNodes(AscendancyFamily.Phrecia, [10]);
         }
-        finally { Directory.Delete(folder, recursive: true); }
+        finally { File.Delete(Path.Combine(folder, AscendancyCatalog.GraphFile)); Directory.Delete(folder); }
     }
 }

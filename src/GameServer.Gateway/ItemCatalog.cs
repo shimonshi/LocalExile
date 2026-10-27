@@ -175,6 +175,14 @@ sealed class ItemCatalog
                 && Gem(t) is { } g && g.Colour == colour && g.IsSupport == support && !g.IsVaalOrAwakened && g.Variants is [{ Creatable: true }, ..])
             .DistinctBy(t => t.Name).OrderBy(t => t.DropLevel).ThenBy(t => t.Name)];
 
+    /// <summary>The local full gem shop: every writable, creatable variant, including transfigured and Vaal gems.
+    /// Keep the catalog's creatability checks: placeholder and unsupported awakened rows are not safe to create.</summary>
+    public IReadOnlyList<(BaseType Type, GemVariant Variant)> FullShopGems(int colour, bool support) =>
+        [.. _rows.Value.Rows.Where(t => t.Supported && t.DropLevel > 0 && !t.Name.Contains("Playtest")
+                && Gem(t) is { } g && g.Colour == colour && g.IsSupport == support)
+            .SelectMany(t => Gem(t)!.Variants.Where(v => v.Creatable).Select(v => (Type: t, Variant: v)))
+            .OrderBy(x => x.Type.DropLevel).ThenBy(x => x.Variant.Name)];
+
     /// <summary>A base type's gem (its SkillGems row), or null for items that are not gems.</summary>
     public GemType? Gem(BaseType t) => _gems.Value.GetValueOrDefault(t.Row);
 
@@ -377,18 +385,20 @@ sealed class ItemCatalog
         return result;
     }
 
-    /// <summary>Two linked sockets for a type with a Sockets component, in the colour of its highest attribute
-    /// requirement (ComponentAttributeRequirements: strength red, dexterity green, intelligence blue; none: white); no
-    /// sockets for other types.</summary>
-    public (IReadOnlyList<ItemSocket> Sockets, IReadOnlyList<byte>? Links) DefaultSockets(BaseType t)
+    /// <summary>Two linked sockets for a type with a Sockets component: 3.29 white by default, each with the item-level
+    /// chance to roll a colour proportional to its attribute requirements (ComponentAttributeRequirements:
+    /// strength red, dexterity green, intelligence blue; SocketColours); no sockets for other types.</summary>
+    public (IReadOnlyList<ItemSocket> Sockets, IReadOnlyList<byte>? Links) DefaultSockets(
+        BaseType t, int itemLevel = 1, int quality = 0, Random? random = null)
     {
         if (!t.Components.Contains("Sockets")) return ([], null);
         if (ResonatorSockets(t) > 0) return (ResonatorSocketList(t), null);
-        var colour = _requirements.Value.TryGetValue(t.Id, out var r)
-            ? r.Str >= r.Dex && r.Str >= r.Int && r.Str > 0 ? SocketColour.Red
-              : r.Dex >= r.Int && r.Dex > 0 ? SocketColour.Green : r.Int > 0 ? SocketColour.Blue : SocketColour.White
-            : SocketColour.White;
-        return ([new(colour), new(colour)], [2]);
+        // 3.29: sockets are white by default; each has a chance to roll its attribute colour that rises with item level
+        // (SocketColours). Both sockets of a new item still start linked.
+        var requirements = Requirements(t);
+        random ??= Random.Shared;
+        return ([new(SocketColours.Roll(requirements, itemLevel, quality, random)),
+                 new(SocketColours.Roll(requirements, itemLevel, quality, random))], [2]);
     }
 
     private Lazy<Dictionary<string, (int Str, int Dex, int Int)>> _requirements = null!;

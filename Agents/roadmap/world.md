@@ -14,6 +14,14 @@ Items keep the Roadmap's priority groups, and are in rough priority order within
 - **Known:** `Program.TickRate` (30/s) only bounds attack times; hits use timers, the AI a 500 ms loop.
 - **Done when:** one 30 Hz loop per instance drives movement estimates, AI and combat.
 
+### Remaining client-message layouts
+
+- **Known:** fixed 0x020a and 0x0059 messages retain every partial prefix using their primary client writers.
+  Existing 0x0099 and chat-channel layouts remain unchanged.
+- **Start:** establish each remaining unknown layout from its client writer before adding a fixed length.
+  Do not infer a complete message size from a TCP read or attribute old disconnects without a trace.
+- **Done when:** every supported client request remains framed across split and coalesced reads.
+
 ## 2. The world
 
 ### Every area's layout at seed 1
@@ -82,5 +90,7 @@ Items keep the Roadmap's priority groups, and are in rough priority order within
 - **HNC packets from the client** (type 0xDD): what the server should do with them
   ([07](../docs/protocol/07-latency-visibility-movement.md)).
 - **Server-side world simulation** (monsters, combat): no project for it yet; add one when it is needed.
-- **Several players** in one instance: the instance registry already supports it;
-  the Gateway sends only the local player.
+- **Several players** in one instance: player presence, poses, life, departure and body blockers are published.
+  Verify two authenticated connections together, then add party admission to private instances and shared combat.
+  The native remote-player body and normal/unique monster clearance have single-client checks.
+  See [status/world.md](../status/world.md) and [07](../docs/protocol/07-latency-visibility-movement.md).

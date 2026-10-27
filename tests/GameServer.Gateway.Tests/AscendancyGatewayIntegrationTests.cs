@@ -315,6 +315,9 @@ public sealed partial class AscendancyGatewayIntegrationTests
         var gold = await game.Change([54114], allocate: false, goldRespec: true);
         Assert.Contains("require refund points", gold.Error!);
         Assert.Equal(before, game.SavedJson);
+        var free = await game.Change([54114], allocate: false);
+        Assert.Contains("require refund points", free.Error!);
+        Assert.Equal(before, game.SavedJson);
         Assert.Equal(new ushort[] { 54114 }, game.State.MainAscendancy.Allocated);
     }
 
@@ -1374,6 +1377,7 @@ public sealed partial class AscendancyGatewayIntegrationTests
         }
         game.State.PlayerMana = 0;
         Assert.False(Pay()); Assert.Equal(0, game.PlayerStat("current_rage"));
+        game.State.Clock.Start();
         for (int i = 0; i < 40; i++)
         {
             game.State.PlayerMana = 5;
@@ -1388,10 +1392,10 @@ public sealed partial class AscendancyGatewayIntegrationTests
         var spellBase = Program.Skills.HitDamage(gem.Effect, gem.Level, gem.Quality);
         Assert.Equal(SpellDamage.Packet(spellBase, n => Get(beforeStats, n)).MinTotal,
             SpellDamage.Packet(spellBase, n => Get(afterStats, n)).MinTotal);
-        Assert.Equal(10, Get(Sources(game.Reload()), "current_rage"));
+        Assert.Equal(0, Get(Sources(game.Reload()), "current_rage")); // Fresh login has no accepted transfer ticket.
         Assert.Null((await game.Change([863], allocate: false, refundPoints: true)).Error);
         Assert.Equal(0, game.PlayerStat("gain_x_rage_per_200_mana_spent"));
-        RageState.For(game.Character).Clear();
+        game.State.Rage.Clear();
     }
 
     [Theory]
@@ -1954,6 +1958,92 @@ public sealed partial class AscendancyGatewayIntegrationTests
         });
     }
 
+    [Fact]
+    public async Task Native_allocate_and_paid_refund_dispatch_use_the_ascendancy_budget()
+    {
+        if (!DataAvailable()) return;
+        using var game = new GatewayCharacter();
+        await game.Dispatch(new LoginWriter().U16(0x34).U32(54114).U8(0).ToArray());
+        Assert.Equal(new ushort[] { 54114 }, PassivePacket(game.LastBytes, 1).Nodes);
+        await game.Dispatch(new LoginWriter().U16(0x36).U32(54114).U8(0).U8(0).ToArray());
+        Assert.Empty(game.State.MainAscendancy.Allocated);
+        Assert.Equal((ushort)15, game.State.RefundPoints);
+        Assert.Equal((ushort)15, CharacterSaves.Load(game.Character)!.RefundPoints);
+        Assert.Empty(PassivePacket(game.LastBytes, 0).Nodes);
+    }
+
+    [Theory]
+    [InlineData(1u, (byte)0)]
+    [InlineData(0u, (byte)1)]
+    public async Task Native_unsupported_allocation_ids_cannot_be_interpreted_as_mastery_effects(uint high, byte expansion)
+    {
+        if (!DataAvailable()) return;
+        using var game = new GatewayCharacter(level: 10);
+        string before = game.SavedJson;
+        await game.Dispatch(new LoginWriter().U16(0x34).U32(high << 16 | 39725).U8(expansion).ToArray());
+        Assert.Equal(before, game.SavedJson);
+        Assert.Empty(PassivePacket(game.LastBytes, 0).Nodes);
+    }
+
+    [Fact]
+    public async Task Native_mastery_request_does_not_swallow_the_next_allocation_in_the_same_read()
+    {
+        if (!DataAvailable()) return;
+        using var game = new GatewayCharacter(level: 10);
+        ushort effect = Program.Passives.EffectsFor(42533)[0].Hash;
+        byte[] mastery = new LoginWriter().U16(0x35).U16(42533).U16(effect).ToArray();
+        byte[] allocate = new LoginWriter().U16(0x34).U32(39725).U8(0).ToArray();
+        await game.Dispatch([.. mastery, .. allocate]);
+        Assert.Empty(game.State.MasteryEffects); // This distant mastery is disconnected.
+        Assert.Equal(new ushort[] { 39725 }, game.State.Passives);
+        Assert.Equal(new ushort[] { 39725 }, PassivePacket(game.LastBytes, 1).Nodes);
+    }
+
+    [Fact]
+    public async Task Phrecia_command_and_connection_preflight_keep_the_saved_character_intact()
+    {
+        if (!DataAvailable()) return;
+        using var ordinary = new GatewayCharacter(family: AscendancyFamily.Normal, choice: "Slayer");
+        Program.CheckAscendancyClientCompatibility(ordinary.State);
+        string before = ordinary.SavedJson;
+        await ordinary.Command("/ascendancy phrecia Aristocrat");
+        Assert.Equal(before, ordinary.SavedJson);
+        Assert.Equal(AscendancyFamily.Normal, ordinary.State.MainAscendancy.Selection!.Family);
+        Assert.Null(ordinary.State.PendingTransfer);
+
+        using var phrecia = new GatewayCharacter(); // Lifecycle fixture; does not open a real game connection.
+        before = phrecia.SavedJson;
+        Assert.Throws<AscendancyRuleException>(() => Program.CheckAscendancyClientCompatibility(phrecia.State));
+        Assert.Equal(before, phrecia.SavedJson);
+    }
+
+    [Fact]
+    public void An_old_unascended_save_loads_without_rewriting_unknown_fields_or_adding_a_selection()
+    {
+        if (!DataAvailable()) return;
+        using var game = new GatewayCharacter();
+        var saved = CharacterSaves.Load(game.Character)!;
+        CharacterSaves.Write(game.Character, saved with { MainAscendancy = null, ExtraPassivePoints = 3,
+            Unknown = new() { ["FutureField"] = JsonSerializer.SerializeToElement(new[] { 1, 2 }) } });
+        string before = game.SavedJson;
+        Program.CheckAscendancyClientCompatibility(game.State);
+        var loaded = game.Reload();
+        Assert.Null(loaded.MainAscendancy.Selection);
+        Assert.Empty(loaded.MainAscendancy.Allocated);
+        Assert.Equal((ushort)3, loaded.ExtraPassivePoints);
+        Assert.Equal(before, game.SavedJson);
+    }
+
+    [Fact]
+    public void Native_family_stat_is_absent_for_ordinary_and_unascended_characters()
+    {
+        Assert.Null(Program.LeagueStatsFor(new()));
+        Assert.Null(Program.LeagueStatsFor(new(new(AscendancyFamily.Normal, "Slayer", AscendancyCatalog.Revision))));
+        var stats = Program.LeagueStatsFor(new(new(AscendancyFamily.Phrecia, "Slayer", AscendancyCatalog.Revision)))!;
+        Assert.Equal(1, Assert.Single(stats).Value);
+        Assert.Equal(21146u, Assert.Single(stats).Key);
+    }
+
     static bool DataAvailable()
     {
         // Data-backed tests can run in a fresh clone. When the extraction is present, execute the integration path.
@@ -2205,6 +2295,15 @@ public sealed partial class AscendancyGatewayIntegrationTests
             Task second = ProgramValue<Task>("SendMonsterLife", "ascendancy-integration", stream, cipher, State, id, target, null);
             gate.Release();
             await Task.WhenAll(first, second);
+            return null;
+        });
+
+        public Task<(string? Error, byte[] Bytes)> Dispatch(byte[] bytes) => Exchange(async (stream, cipher) =>
+        {
+            var messages = InstanceProtocol.SplitClientMessages(bytes, out var partial, out var unknown);
+            Assert.Empty(partial);
+            Assert.Empty(unknown);
+            await Program.OnClientMessages("ascendancy-integration", stream, cipher, messages, unknown, State);
             return null;
         });
 

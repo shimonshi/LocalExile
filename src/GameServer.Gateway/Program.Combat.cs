@@ -15,6 +15,7 @@ using TargetAccuracy = GameServer.Core.World.TargetAccuracy;
 using DamageType = GameServer.Core.World.DamageType;
 using DamagePacket = GameServer.Core.World.DamagePacket;
 using DamageRange = GameServer.Core.World.DamageRange;
+using HitResistances = GameServer.Core.World.HitResistances;
 
 partial class Program
 {
@@ -127,7 +128,8 @@ partial class Program
         double arrive;
         lock (conn.Monsters)
         {
-            if (conn.HitRecovery.BlocksInput(requestedAt, conn.Clock.Elapsed.TotalSeconds)) return;
+            if (conn.Closed || conn.LeavingArea || conn.RageRetired || conn.PlayerLife == 0
+                || conn.HitRecovery.BlocksInput(requestedAt, conn.Clock.Elapsed.TotalSeconds)) return;
             action = Interlocked.Increment(ref conn.ActionCount);
             target = m.Walk.Position(now);
             (here, stop, arrive) = conn.Walk.Approach(target.X, target.Y, weapon.Range, now, tolerance: m.StopRange - 2);
@@ -168,13 +170,14 @@ partial class Program
         // The hit lands at the attack animation's contact keyframe (data/animation-contacts.json), not a fixed half: the
         // client stretches the clip to the attack time, so the blood and the weapon impact sound line up with the swing.
         await Task.Delay(TimeSpan.FromSeconds(AttackContactDelay(conn, duration, approach: true)));
+        await WhilePaused(conn);
         uint life;
         bool stageStarts = false;
         int accuracy, evasion;
         lock (conn.Monsters)
         {
             if (m.Life == 0) return;
-            if (conn.ActionCount != action)
+            if (!PlayerActionCurrent(conn, action))
             {
                 Console.WriteLine($"[gateway] {remote} attack on 0x{use.TargetId:x} cancelled by a later action");
                 return;
@@ -205,44 +208,47 @@ partial class Program
             return;
         }
         int attackEffect = SkillEffectId(conn, SkillCatalog.FirstSkillId) is { } attackId ? Skills.EffectRow(attackId) : -1;
-        var player = CharacterPlayerStats(conn);
         var attackOwn = attackEffect >= 0 ? Skills.EffectStats(attackEffect, 1).ToDictionary(kv => kv.Item1, kv => kv.Item2) : null;
-        var hit = AttackHit(weapon, player, WeaponProfileFor(conn, activeSet: true).Melee)
-            .Convert(SkillConversion(player, attackEffect, 1, attack: true));
-        var rolls = GamblerFor(player);
-        hit = rolls.RollOutgoingHit(hit, Random.Shared);
-        bool critical = rolls.IsCritical(conn.Pools.AttackCriticalStrikeChance, Random.Shared, OnLowLife(conn));
-        if (critical) hit = hit.Critical(CriticalMultiplierOn(m,
-            CriticalMultiplierFor(conn, spell: false, melee: MeleeAttack(conn))));
-        // Impale: the stacks already on the target add their stored damage to this hit, this hit uses one of their five
-        // hits, and the hit's own physical damage may store a new stack for the hits after it.
-        double physical = hit[DamageType.Physical].Max;
+        bool critical;
         double stored, impaleStored;
         int impaleStacks, damage;
         bool impaled;
         lock (conn.Monsters)
         {
             if (m.Life == 0) return;
-            if (conn.ActionCount != action)
+            if (!PlayerActionCurrent(conn, action) || conn.Paused)
             {
                 Console.WriteLine($"[gateway] {remote} attack on 0x{use.TargetId:x} cancelled by a later action");
                 return;
             }
+            // Settle Rage at accepted contact before this hit's gain. It is a final multiplier on the attack packet,
+            // never on an existing impale bonus or on generic damage/DoT.
+            var player = CharacterPlayerStats(conn);
+            var hit = AttackHitConverted(weapon, player, MeleeAttack(conn),
+                SkillConversion(player, attackEffect, 1, attack: true));
+            var rolls = GamblerFor(player);
+            hit = rolls.RollOutgoingHit(hit, Random.Shared);
+            critical = RollCriticalStrike(conn, conn.Pools.AttackCriticalStrikeChance, attackOwn);
+            if (critical) hit = hit.Critical(CriticalMultiplierOn(m, AttackCriticalMultiplier(conn, player)));
+            decimal fortificationDamage = RawFortificationDamage(hit, false, 100);
+            double physical = hit[DamageType.Physical].Max;
             stored = m.Impale.Bonus;
-            if (stored > 0) hit = hit.Add(DamageType.Physical, new DamageRange(stored, stored));
             m.Impale.AfterHit();
             int impaleChance = Stats.Key("impale_on_hit_%_chance") is uint impaleKey ? player.GetValueOrDefault(impaleKey) : 0;
             impaled = impaleChance > 0 && Random.Shared.Next(100) < impaleChance && m.Impale.Apply(physical);
             // Read before the hit is applied: a killing blow clears the target's impales.
             impaleStacks = m.Impale.Stacks;
             impaleStored = m.Impale.Bonus;
+            FortificationOnHitLocked(conn, m, fortificationDamage,
+                MeleeAttack(conn), player, attackOwn);
+            if (stored > 0) hit = hit.Add(DamageType.Physical, new DamageRange(stored, stored));
             // Impale reflection joins after outgoing multipliers, before the target's own mitigation.
             hit = ApplyPassiveDamageTaken(conn, m, ApplyMonsterModDamageTaken(m,
                 rolls.MitigateOutgoingHit(hit,
                     HitResistancesFor(conn, m, player, attackOwn, critical, attack: true), Random.Shared), spell: false));
             damage = (int)Math.Round(hit.MinTotal);
             (m.Life, stageStarts) = TakeDamageLocked(m, damage);
-            GainRageOnHit(conn, player, attack: true, WeaponProfileFor(conn, activeSet: true).Melee, critical);
+            RageOnHitLocked(conn, attack: true, WeaponProfileFor(conn, activeSet: true).Melee, critical);
             if (critical) ReserveWolfLocked(conn, DateTimeOffset.UtcNow);
             life = m.Life;
             conn.LastEnemyHitAt = conn.Clock.Elapsed.TotalSeconds;
@@ -382,7 +388,9 @@ partial class Program
         // A gem whose requirements the character's level does not meet is disabled: its skill stays on the skill bar but
         // cannot be used (the client shows the gem red but still sends the use; the server withholds the action, see
         // OnClientMessages). Attributes are not checked yet: their formula is not fitted (19-gems.md "Open").
-        if (gem.Name is not null && GemDisabled(conn, gem.Effect, skillId) is { } disabled)
+        if (gem.Name is not null
+            && !(cooldownUse is not null && EnduringCryUses.TryGetValue(cooldownUse, out _))
+            && GemDisabled(conn, gem.Effect, skillId) is { } disabled)
         {
             Console.WriteLine($"[gateway] {remote} skill 0x{skillId:x4} {gem.Name}: {disabled} (disabled)");
             await SendPlayerMana(remote, stream, ciphers, conn, $"0x01b1 player mana {conn.PlayerMana} (disabled skill, cost back)");
@@ -793,13 +801,13 @@ partial class Program
             var rolls = GamblerFor(stats);
             if (MonsterBlocks(m, Random.Shared, spell)) return (Blocked, false);
             var hit = rolls.RollOutgoingHit(impactPacket, Random.Shared);
-            bool critical = rolls.IsCritical(impactChance, Random.Shared, OnLowLife(conn));
+            bool critical = RollCriticalStrike(conn, impactChance, own, attack: !spell);
             if (critical) hit = hit.Critical(CriticalMultiplierOn(m, impactMultiplier));
             hit = ApplyPassiveDamageTaken(conn, m, ApplyMonsterModDamageTaken(m,
                 rolls.MitigateOutgoingHit(hit,
                     HitResistancesFor(conn, m, player, own, critical, attack: !spell), Random.Shared), spell));
             int damage = (int)Math.Round(hit.MinTotal);
-            GainRageOnHit(conn, stats, attack: !spell, melee: Skills.IsMelee(gem.Effect), critical);
+            RageOnHitLocked(conn, attack: !spell, melee: Skills.IsMelee(gem.Effect), critical, own);
             return (damage, critical);
         }, epoch: epoch, actionToken: cooldownUse is null || cooldownUse.Instant ? null : action,
             onApplied: (target, applied, critical) => ChargeHitCommitted(conn, target, applied, critical,
@@ -883,6 +891,8 @@ partial class Program
         // A channel's hits (Cyclone, C→S 0x197) land at once, where the player is.
         var appliedHits = new List<(uint Id, SpawnedMonster Target, MonsterHit Hit, int Damage, bool Critical)>();
         var chargeUse = new ChargeUse();
+        bool fortificationGranted = false;
+        bool rageGranted = false;
         while (true)
         {
             if (!await WaitProjectileTime(conn, contactAt, epoch)) return;
@@ -912,17 +922,22 @@ partial class Program
                     if (MonsterBlocks(m, Random.Shared, spell)) continue;
                     var rolls = GamblerFor(stats);
                     var hit = rolls.RollOutgoingHit(packet, Random.Shared);
-                    bool critical = rolls.IsCritical(criticalChance, Random.Shared, OnLowLife(conn));
+                    bool critical = RollCriticalStrike(conn, criticalChance, skillStats, attack: !spell);
                     if (critical) hit = hit.Critical(CriticalMultiplierOn(m, criticalMultiplier));
+                    decimal directDamage = RawFortificationDamage(hit, false, 100);
                     hit = ApplyPassiveDamageTaken(conn, m, ApplyMonsterModDamageTaken(m,
                         rolls.MitigateOutgoingHit(hit,
                             HitResistancesFor(conn, m, player, skillStats, critical, attack: !spell), Random.Shared), spell));
                     int damage = (int)Math.Round(hit.MinTotal);
                     if (ApplyMonsterHitLocked(conn, m, damage) is not { } applied) continue;
+                    if (!fortificationGranted)
+                        fortificationGranted = FortificationOnHitLocked(conn, m, directDamage,
+                            !spell && Skills.IsMelee(gem.Effect), characterInputs, skillStats);
                     ChargeHitCommitted(conn, m, applied, critical, spell, MeleeAttack(conn, gem.Effect), chargeUse,
                         player, Skills.EffectId(gem.Effect), skillStats, epoch);
                     if (critical) ReserveWolfLocked(conn, hitAt);
-                    GainRageOnHit(conn, stats, attack: !spell, melee: Skills.IsMelee(gem.Effect), critical);
+                    if (!rageGranted) rageGranted = RageOnHitLocked(conn,
+                        attack: !spell, melee: Skills.IsMelee(gem.Effect), critical, skillStats);
                     appliedHits.Add((id, m, applied, damage, critical));
                 }
                 break;
@@ -1178,6 +1193,38 @@ partial class Program
             if (hit is not null) onApplied?.Invoke();
         }
         if (hit is { } applied) await NotifyMonsterHit(remote, stream, ciphers, conn, id, m, applied, damage, by, log, melee, sequence, critical: critical);
+    }
+
+    // The damage a player's outgoing hit deals to its monster: one roll per type, then each type's own base resistance
+    // with the hit's penetration subtracted from the capped value (HitMitigation), summed to the total the critical
+    // multiplier later applies to. Damage over time has neither here and keeps its own path. Internal for the tests.
+    internal static int MonsterDamage(SpawnedMonster m, DamagePacket hit, Random random, Penetration.PerType pen) =>
+        MonsterTakes(m, hit, random, spell: false, pen);
+
+    // Resolve an already-rolled packet using its single critical draw; target damage taken follows mitigation.
+    internal static (int Damage, string? Resistance) MonsterDamage(SpawnedMonster m, DamagePacket rolled,
+        bool critical, bool attack, HitResistances.Mods mods, Penetration.PerType pen = default)
+    {
+        var described = new List<string>();
+        var strike = new HitResistances.Strike(Critical: critical, Attack: attack);
+        var mitigated = DamageModel.Mitigate(rolled, type =>
+        {
+            var value = MonsterHitResistance(m, type, pen);
+            if (rolled[type].Max > 0 && HitResistances.Describe(type, value, strike, mods) is { } note) described.Add(note);
+            return HitResistances.Effective(type, value, strike, mods);
+        });
+        return (MonsterTakesMitigated(m, mitigated, spell: !attack),
+            described.Count > 0 ? string.Join(", ", described) : null);
+    }
+
+    internal static HitResistances.Mods HitResistMods(IReadOnlyDictionary<uint, int> player,
+        IReadOnlyDictionary<uint, int>? skill = null)
+    {
+        var a = HitResistances.Mods.From(player, Stats.Key);
+        var b = skill is null ? default : HitResistances.Mods.From(skill, Stats.Key);
+        return new(a.CriticalIgnoreElemental | b.CriticalIgnoreElemental,
+            a.AttackCriticalIgnoreElemental | b.AttackCriticalIgnoreElemental,
+            a.NonCriticalPenetration + b.NonCriticalPenetration, a.CannotPenetrateOrIgnore | b.CannotPenetrateOrIgnore);
     }
 
     // The short state mutation is shared with projectile impact; no awaits under Monsters.

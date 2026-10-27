@@ -432,6 +432,9 @@ sealed class SkillCatalog(string folder = "data")
     /// gem's hit takes melee_damage_+% (the default attack does by its weapon profile instead).</summary>
     public bool IsMelee(int effectRow) => _meleeEffects.Value.Contains(effectRow);
 
+    /// <summary>Whether a GrantedEffects row's skill classifies Melee (the ActiveSkillType). Decides whether an attack
+    /// gem's hit takes melee_damage_+% (the default attack does by its weapon profile instead).</summary>
+
     public bool IsSpell(int effectRow) => _spellEffects.Value.Contains(effectRow);
     public bool IsAura(int effectRow) => _auraEffects.Value.Contains(effectRow);
     public bool IsWarcry(int effectRow) => _warcryEffects.Value.Contains(effectRow);
@@ -444,6 +447,8 @@ sealed class SkillCatalog(string folder = "data")
         _stats.Key(stat) is uint key && _families.Value.Raises((int)key - 1, gemRow);
 
     private readonly Lazy<SkillGemFamilies> _families = new(() => new(folder));
+
+    /// <summary>Whether a GrantedEffects row's ActiveSkill has the Warcry type.</summary>
 
     private readonly Lazy<HashSet<int>> _instantEffects = new(() => EffectsOfType(folder, "Instant"));
     private readonly Lazy<HashSet<int>> _movementEffects = new(() => EffectsOfType(folder, "Movement"));
@@ -623,22 +628,23 @@ sealed class SkillCatalog(string folder = "data")
 
         /// <summary>The attack's total increased physical damage: the player's damage, physical, melee and melee physical
         /// damage stats.</summary>
-        public int IncreasedDamage(IReadOnlyDictionary<uint, int>? player, bool melee = true)
+        public long IncreasedDamage(IReadOnlyDictionary<uint, int>? player, bool melee = true)
         {
-            int increased = 0;
+            long increased = 0;
             foreach (uint k in (uint[])[StatKeys.DamagePct, StatKeys.PhysicalDamagePct, StatKeys.AttackDamagePct])
                 increased += player?.GetValueOrDefault(k) ?? 0;
             if (melee)
-                increased += (player?.GetValueOrDefault(StatKeys.MeleeDamagePct) ?? 0)
+                increased += (long)(player?.GetValueOrDefault(StatKeys.MeleeDamagePct) ?? 0)
                     + (player?.GetValueOrDefault(StatKeys.MeleePhysicalDamagePct) ?? 0);
             return increased;
         }
 
         /// <summary>The physical hit packet: Characters.dat MinDamage..MaxDamage × (1 + increased / 100).</summary>
-        public DamagePacket HitDamage(IReadOnlyDictionary<uint, int>? player, bool melee = true, double additionalIncreasedPct = 0)
+        public DamagePacket HitDamage(IReadOnlyDictionary<uint, int>? player, bool melee = true, double? additionalIncreasedPct = null)
         {
-            double scale = Math.Max(0, 100 + IncreasedDamage(player, melee) + additionalIncreasedPct) / 100.0;
-            return DamagePacket.Of(DamageType.Physical, new DamageRange(MinDamage * scale, MaxDamage * scale));
+            double increased = IncreasedDamage(player, melee) + (additionalIncreasedPct ?? DamageStats.SpellAttackIncrease(player));
+            return DamagePacket.Of(DamageType.Physical,
+                DamageStats.IncreaseAttackRange(new(MinDamage, MaxDamage), increased));
         }
 
         /// <summary>The hit's damage range: Characters.dat MinDamage..MaxDamage × (1 + increased / 100), rounded down,

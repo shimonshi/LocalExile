@@ -21,6 +21,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\GameServer.Data\GameServer.Data.csproj" />
     <ProjectReference Include="..\..\scripts\re\passive-graphs\passive-graphs.csproj" />
+    <ProjectReference Include="..\..\scripts\re\passive-graph-maintenance\passive-graph-maintenance.csproj" />
   </ItemGroup>
 
 </Project>

@@ -67,6 +67,11 @@ Part of [Status](../Status.md); what to build next in this area is in
   Code: `InstancePause.cs`, Gateway (`SetPaused`).
   Docs: [22](../docs/protocol/22-pause.md).
 
+- Instance framing retains split 0x020a and 0x0059 messages at their primary-writer lengths of 3 and 16 bytes.
+  Every-split and coalesced tick/chat regressions pass; integrated native transfers preserve subsequent commands.
+  Unknown message layouts and existing 0x0099 handling remain unchanged.
+  Docs: [instance framing](../docs/protocol/02-instance-connection.md#fixed-message-boundaries-across-tcp-reads).
+
 ## Partly working
 
 - Incoming fixed-message framing recognizes C→S `0x020a` (3 bytes), `0x0059` (16) and `0x0099` (4).
@@ -77,8 +82,14 @@ Part of [Status](../Status.md); what to build next in this area is in
   Other unknown message ids still stop framing the current read.
   Code: `InstanceProtocol.cs`, `InstanceFixedMessageFramingTests.cs`.
   Docs: [02](../docs/protocol/02-instance-connection.md#fixed-incoming-messages-without-implemented-semantics).
-- **Positions are estimated, not simulated.** The Gateway estimates where the player is from clicks, walk speed and
-  the walk map; there is no server-side pathing or collision.
+- **Predictive actor collision.** Player paths include living monsters and published players in the same instance.
+  Monster paths use their `MonsterVarieties.ObjectSize` clearance and avoid other living bodies, including friendlies.
+  A 50 ms correction loop sweeps monster movement and separates overlaps; death/removal releases the occupied space.
+  Native-client checks cover a normal zombie, unique Hillock and an injected remote player object.
+  Two authenticated clients in the same instance still need an end-to-end check.
+  Remote player creation, movement, life and departure are replicated; party formation and shared combat remain open.
+  Code: `LivingCollision.cs`, `ClientState.LivingCollision.cs`, `Program.LivingCollision.cs`, `InstancePlayers.cs`.
+  Docs: [07](../docs/protocol/07-latency-visibility-movement.md).
 - **Spawn points.** Logins, Resurrect in Town and one-way entries other than The Twilight Strand → Lioneye's Watch use
   the area's spawn: the town's fixed point, or the walkable cell farthest from any edge in a generated area.
 - **Area seeds.** Non-town areas use seed 1 unless `Game_RANDOM_SEEDS=1`; each new seed needs its own walk map.

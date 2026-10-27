@@ -26,6 +26,13 @@ partial class Program
     {
         uint id;
         lock (conn.Monsters) id = conn.NextObjectId++;
+        int bodySize = Math.Clamp(variety.ObjectSize - 1, -1, 127);
+        if (bodySize >= 0)
+        {
+            bool Floor(int cx, int cy) => conn.Layout.WalkableFor(cx, cy, bodySize) && !conn.Barrier.Contains((cx, cy));
+            if (CollisionEscape.Find((x, y), conn.Layout.GridW, conn.Layout.GridH, Floor,
+                conn.MonsterBlockers(id), moverSize: bodySize) is { } clear) (x, y) = clear;
+        }
         bool owned = summon is not null || companion is not null;
         // Owned actors use their own profile, never hostile rarity rolls or buried/emerge scheduling.
         var emerge = owned ? EmergeKind.None : Emerges.Kind(variety, rarity);
@@ -91,13 +98,13 @@ partial class Program
             Mods = mods.Mods, NameWords = mods.NameWords,
             LifeData = owned ? variety.LifeData with { CorpseUsable = false } : variety.LifeData,
         };
-        SpawnedMonster State() => new($"{variety.Name}@{level}", conn.NewWalk(x, y, mods.Effects.MovementSpeed(variety.MovementSpeed)),
+        SpawnedMonster State() => new($"{variety.Name}@{level}", conn.NewMonsterWalk(id, x, y, mods.Effects.MovementSpeed(variety.MovementSpeed), bodySize, rarity == MonsterRarity.Unique),
             variety.AggroRange, Math.Max(2, variety.ObjectSize + 1), life)
         {
             Attack = skill is null || companion is not null ? null : attack, Hostile = !friendly, Variety = variety, Level = level,
             Rarity = rarity, Summon = summon, Companion = companion,
             Life = Math.Min(damagedLife ?? life, life), Stage = stageSkill is null ? null : stage, States = variety.StateMachine,
-            HitAnimations = Monsters.TakeHit(variety.Id), Mods = mods,
+            HitAnimations = Monsters.TakeHit(variety.Id), Mods = mods, CollisionPosition = (x, y),
         };
         uint type = InstanceEntities.ObjectTypeHash(MonsterObject.TypePath(variety.Id, level));
         if (companion is not null)
@@ -128,6 +135,8 @@ partial class Program
         await Send(remote, stream, ciphers, InstanceEntities.CreateObject(id, type, monster.Blob()), !log ? null :
             $"0x02b9 create {rarity}{(friendly ? " friendly" : "")}{(waits ? $" {emerge.ToString().ToLowerInvariant()}" : "")} monster 0x{id:x} {variety}{(name is null ? "" : $" \"{name}\"")} type=0x{type:x8} at ({x}, {y}), life {life}, components {string.Join(", ", variety.ComponentsOrBase)}");
         await Send(remote, stream, ciphers, InstanceProtocol.EnterWakeZone(id), !log ? null : $"0x01a9 monster 0x{id:x} enters wake zone");
+        if (log && mods.Affixes.Any()) Console.WriteLine($"[gateway] {remote} monster 0x{id:x} mods: {MonsterModRolls.Value.Describe(mods)}" +
+            (mods.NameWords.Count > 0 ? $", named {MonsterModRolls.Value.NameOf(mods.NameWords)}" : ""));
         lock (conn.Monsters) MonsterEmerge.AddLocked(conn, id, State(), emerge, waits);
         if (waits) WatchBuried(remote, stream, ciphers, conn);
         // A kept monster that was hit: its life as a hit sets it (0x1b1).
@@ -335,10 +344,11 @@ partial class Program
                 if (type == DamageType.Chaos) chaosDamage += value;
                 damage += value;
             }
+            damage = FortificationDamageTaken(conn, damage);
+            chaosDamage = FortificationDamageTaken(conn, chaosDamage);
             blocked = DamageModel.Blocks(conn.Pools.BlockChance, Random.Shared.NextDouble() * 100,
                 conn.Pools.AttackBlockLucky, conn.Pools.AttackBlockUnlucky);
             if (blocked) { damage = 0; chaosDamage = 0; }
-            RageOf(conn).EnemyHit(DateTimeOffset.UtcNow, RageInputs(conn, CharacterStatSources(conn)), Random.Shared.Next(100));
             manaBefore = conn.PlayerMana;
             int gainedLife = blocked ? conn.Pools.LifeGainedOnBlock : 0;
             int gainedMana = blocked ? conn.Pools.ManaGainedOnBlock : 0;
@@ -348,6 +358,7 @@ partial class Program
             ChargeIncomingCommitted(conn, blocked, spell: false, playerAtHit);
             life = conn.PlayerLife;
             mana = conn.PlayerMana;
+            RageWhenHitLocked(conn);
         }
         await SendPlayerEnergyShield(remote, stream, ciphers, conn);
         await SendWardState(remote, stream, ciphers, conn);

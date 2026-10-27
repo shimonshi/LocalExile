@@ -32,16 +32,19 @@ partial class Program
         await Send(remote, stream, ciphers, PlayerLifeUpdate(conn), $"0x01b1 player life {conn.PlayerLife}");
         await SendPlayerMana(remote, stream, ciphers, conn, $"0x01b1 player mana {conn.PlayerMana}");
         // UI built on entering caches the attributes (see SendPlayer): send them once more.
-        await Send(remote, stream, ciphers, InstanceEntities.StatsUpdate(PlayerId, [.. BaseStats(conn)]), "0x01b3 player attributes");
+        await SendPlayerStatSnapshot(remote, stream, ciphers, conn,
+            () => InstanceEntities.StatsUpdate(PlayerId, [.. BaseStats(conn)]), "0x01b3 player attributes");
     }
 
     // The player's life per second from regeneration: the flat life regeneration per minute (/god, /set_stat) plus a
     // percentage of maximum life, from the row PanelStats.Recovery sends to the character panel.
     static double LifeRegenPerSecond(ClientState conn)
     {
-        var stats = CharacterPlayerStats(conn);
-        int Get(string name) => Stats.Key(name) is uint k ? stats.GetValueOrDefault(k) : 0;
-        return PanelStats.LifePerMinute(Get, conn.Pools.Life) / 60;
+        lock (conn.Monsters)
+        {
+            CharacterPlayerStatsCore(conn, includeEnduringCry: true, out double baseline);
+            return baseline;
+        }
     }
 
     // The player's mana per second from regeneration: Character.ot's mana_regeneration_rate_per_minute_% (105: 1.75% of
@@ -114,11 +117,12 @@ partial class Program
         ChargesDied(conn);
         EnduringCryDied(conn);
         TemporaryPassiveBuffs.For(CharacterName(conn)).Clear();
-        RageOf(conn).Clear();
+        ClearRageOnDeath(conn);
         conn.Summons?.Clear(conn.SummonLease);
         conn.Companions?.Clear(conn.SummonLease);
         await RefreshSummons(remote, stream, ciphers, conn);
         await RefreshCompanions(remote, stream, ciphers, conn);
+        lock (conn.Monsters) FortificationOf(conn).Clear();
         await EndAurasOnDeath(remote, stream, ciphers, conn);
         await Send(remote, stream, ciphers, InstanceProtocol.DeathScreen(DeathScreenFlags(conn)), label);
     }
@@ -143,7 +147,12 @@ partial class Program
     static async Task SendPlayerMana(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn,
         string? log = null)
     {
-        await Send(remote, stream, ciphers, InstanceProtocol.LifeUpdate(PlayerId, conn.PlayerMana, (uint)ReservedMana(conn), pool: ManaPool), log);
+        await Send(remote, stream, ciphers, [], log, atGate: () =>
+        {
+            // Sample both values together after earlier sends, including a queued pool/reservation rebuild.
+            lock (conn.Monsters)
+                return InstanceProtocol.LifeUpdate(PlayerId, conn.PlayerMana, (uint)ReservedMana(conn), pool: ManaPool);
+        });
         await SendPlayerEnergyShield(remote, stream, ciphers, conn);
     }
 
@@ -197,7 +206,7 @@ partial class Program
             uint mana = conn.PlayerMana, life = conn.PlayerLife;
             if (!cost.Pay(ref mana, ref life)) return false;
             (conn.PlayerMana, conn.PlayerLife) = (mana, life);
-            RageOf(conn).SpendMana(cost.Mana, DateTimeOffset.UtcNow, RageInputs(conn, CharacterStatSources(conn)));
+            RageOnManaSpentLocked(conn, cost.Mana);
             return true;
         }
     }
@@ -408,17 +417,25 @@ partial class Program
     {
         double last = conn.Clock.Elapsed.TotalSeconds;
         int suppression = Suppression(conn).Chance;
+        var criticalContext = CriticalContext(conn);
         while (!conn.Closed)
         {
             await Task.Delay(PlayerTickMs);
             if (conn.Closed) break;
             await RefreshTemporaryPassives(remote, stream, ciphers, conn);
-            await RefreshRage(remote, stream, ciphers, conn);
             await RefreshEnduringCry(remote, stream, ciphers, conn);
             double tickNow = conn.Clock.Elapsed.TotalSeconds;
             double seconds = tickNow - last;
             last = tickNow;
             if (conn.Paused || seconds <= 0) continue;
+            // Keep the selected skill's conditional luck virtuals current across live Life/Focus boundaries too.
+            // Combat still samples the owner at the accepted contact, independently of this panel refresh cadence.
+            if (CriticalContext(conn) is var currentCritical && currentCritical != criticalContext)
+            {
+                criticalContext = currentCritical;
+                await SendCharacterStats(remote, stream, ciphers, conn, "critical strike conditions changed");
+            }
+            await PushOutOfCollision(remote, stream, ciphers, conn);
             var rf = conn.RighteousFire;
             if (conn.PlayerLife == 0)
             {
@@ -490,8 +507,7 @@ partial class Program
                 {
                     // Build a baseline without the timed source. A second expiry sample cannot leave its old
                     // contribution cached for another 250 ms; the exact interval is integrated below.
-                    recoveryStats = CharacterPlayerStatsCore(conn, includeEnduringCry: false);
-                    lifeRate = PanelStats.LifePerMinute(RecoveryStat, conn.Pools.Life) / 60;
+                    recoveryStats = CharacterPlayerStatsCore(conn, includeEnduringCry: false, out lifeRate);
                 }
                 burnPerSecond = rf is null ? 0 : DamageModel.Mitigate((conn.PlayerMaxLife * (double)rf.BurnPctPerMinute + conn.Pools.EnergyShield * (double)rf.EnergyShieldBurnPctPerMinute) / 6000.0,
                     Resistance(conn, DamageType.Fire), MaxResistance(conn, DamageType.Fire))
@@ -513,6 +529,7 @@ partial class Program
                 if (dead)
                 {
                     lifeCarry = manaCarry = burnCarry = 0;
+                    FortificationOf(conn).Clear();
                     conn.EnergyShield.Empty();
                     lifeAfter = lifeBefore;
                     manaAfter = manaBefore;
@@ -523,8 +540,9 @@ partial class Program
                     int burnWhole = (int)Math.Truncate(burnCarry); burnCarry -= burnWhole;
                     int lifeBurn = conn.EnergyShield.Damage(burnWhole, false, now, RecoveryStat);
                     conn.EnergyShield.Advance(recoveryFrom, now, RecoveryStat, true);
+                    double fortificationLife = FortificationOf(conn).TakeRecovery(conn.Clock.Elapsed.TotalSeconds);
                     conn.PlayerLife = lifeAfter = RecoveryPool.Advance(lifeBefore, UnreservedLife(conn),
-                        life + lifeRate * seconds + EnduringCryRecovery(conn, recoveryFrom, now) - lifeBurn,
+                        life + lifeRate * seconds + EnduringCryRecovery(conn, recoveryFrom, now) + fortificationLife - lifeBurn,
                         ref lifeCarry, minimum: 1);
                     conn.PlayerMana = manaAfter = RecoveryPool.Advance(manaBefore, manaCap,
                         mana + manaRate * seconds, ref manaCarry);
@@ -758,9 +776,12 @@ partial class Program
     // (AOFile), class byte (IntegerId), attributes and unarmed attack; the name is the character's.
     static async Task SendPlayer(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn)
     {
+        RestoreFortification(conn);
         PrepareHideoutWaypoint(conn);
         var (layout, name, classRow, pools) = (conn.Layout, conn.Character, conn.ClassRow, conn.Pools);
         var cls = Skills.ClassFor(classRow);
+        // Keep the ticket's remaining Rage timers frozen while the destination loads (before 0x7d).
+        RestoreRage(conn);
         var stats = CharacterPlayerStats(conn);
         // The equipped weapon's attack with its own local mods (WeaponFor), as SendSkills sends it after an equipment change:
         // before, every area started with the class's unarmed attack, so a weapon's added damage and attack speed showed only
@@ -780,8 +801,10 @@ partial class Program
             Equipped: Looks(conn, PlayerInventories.For(string.IsNullOrEmpty(name) ? "Exile" : name, Items)),
             QuestFlags: PlayerQuestFlags(conn), Hideout: HomeHideout(conn)?.Hash16 ?? 0, LeagueQuestFlags: [.. Quests.League.Bits(conn.LeagueQuestFlags)],
             Portrait: WornPortrait(conn), LifeReserved: (uint)ReservedLife(conn));
+        conn.PeerTemplate = player;
         conn.ClientSkillIds = [.. player.Skills!.Select(s => s.Id)];
         uint type = InstanceEntities.ObjectTypeHash(cls.ObjectType);
+        conn.PeerType = type;
         var messages = new List<(string Name, byte[] Bytes)>
         {
             ("0x01f6 campaign hideout unlocks", InstanceMicrotransactions.HideoutUnlocks(
@@ -835,7 +858,12 @@ partial class Program
             // component's getter); live 2026-10-18 the cache held 0 while the getter returned 14/14/32.
             messages.Add(("0x01b3 class attributes", InstanceEntities.StatsUpdate(PlayerId, [.. statList])));
         }
-        foreach (var (label, bytes) in messages) await Send(remote, stream, ciphers, bytes, label);
+        foreach (var (label, bytes) in messages)
+            if (label == "0x01b3 class attributes")
+                await SendPlayerStatSnapshot(remote, stream, ciphers, conn,
+                    () => InstanceEntities.StatsUpdate(PlayerId,
+                        CharacterPlayerStats(conn).Select(kv => (kv.Key, kv.Value)).ToList()), label);
+            else await Send(remote, stream, ciphers, bytes, label);
         await RefreshPassiveBuffs(remote, stream, ciphers, conn);
         // An area change creates a new player object, so the running auras' buffs must be put on it again.
         List<AuraCatalog.Aura> auras;

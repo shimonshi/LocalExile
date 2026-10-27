@@ -37,10 +37,18 @@ partial class Program
         // rebuild the pools and send the stats again, as an aura toggle does.
         if (ChangesResistancePenalty(changed))
         {
-            lock (conn.Monsters)
+            while (true)
             {
-                conn.Pools = PoolsFor(conn, conn.Pools.Level);
-                conn.ApplyMovementSpeed();
+                CharacterStats.Pools before;
+                lock (conn.Monsters) before = conn.Pools;
+                var pools = PoolsFor(conn, before.Level);
+                lock (conn.Monsters)
+                {
+                    if (!ReferenceEquals(conn.Pools, before)) continue;
+                    conn.Pools = pools;
+                    conn.ApplyMovementSpeed();
+                    break;
+                }
             }
             await SendCharacterStats(remote, stream, ciphers, conn, "Kitava resistance penalty changed");
         }

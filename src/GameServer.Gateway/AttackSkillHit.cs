@@ -5,18 +5,20 @@ using GameServer.Core.World;
 static class AttackSkillHit
 {
     public static DamagePacket BaseHit(SkillCatalog.Unarmed weapon, IReadOnlyDictionary<uint, int> character,
-        StatCatalog catalog, bool melee, int baseMultiplier = 10000, int addedEffectiveness = 10000)
+        StatCatalog catalog, bool melee, int baseMultiplier = 10000, int addedEffectiveness = 10000, bool applyRage = true)
     {
         int Get(string name) => catalog.Key(name) is uint key ? character.GetValueOrDefault(key) : 0;
-        var derived = DerivedDamageIncreases.From(Get);
+        var derived = DerivedDamageIncreases.From(Get,
+            includeArmour: character is not AttackDamageSources { ArmourDerived: true });
         var weaponBase = weapon.HitDamage(character, melee, derived.AttackPercent).Scale(Math.Max(0, baseMultiplier) / 10000.0);
-        return DamageStats.Added(weaponBase, Get, spell: false, melee,
+        var hit = DamageStats.Added(weaponBase, Get, spell: false, melee,
                 effectiveness: Math.Max(0, addedEffectiveness) / 10000.0, additionalIncreasedPct: derived.AttackPercent)
-            .Scale(Math.Max(0, 1 + Get("attack_damage_+%_final_from_rage") / 100.0) * ChargeEffects.DamageMore(Get));
+            .Scale(ChargeEffects.DamageMore(Get));
+        return applyRage ? RageStats.ApplyAttack(hit, Get) : hit;
     }
 
     public static DamagePacket Resolve(SkillCatalog.Unarmed weapon, IReadOnlyDictionary<uint, int> character,
-        IEnumerable<(uint, int)> levelConversionInputs, StatCatalog catalog, int effectiveness, bool melee,
+        IEnumerable<(uint, int)> levelConversionInputs, StatCatalog catalog, int effectiveness, bool melee = false,
         IEnumerable<(uint, int)>? qualityConversionInputs = null, int? baseMultiplier = null)
     {
         var level = levelConversionInputs.ToArray();
@@ -37,6 +39,8 @@ static class AttackSkillHit
         var values = character.ToDictionary(kv => kv.Key, kv => (long)kv.Value);
         foreach (var input in inputs)
             foreach (var (key, value) in input) values[key] = values.GetValueOrDefault(key) + value;
-        return values.ToDictionary(kv => kv.Key, kv => (int)Math.Clamp(kv.Value, int.MinValue, int.MaxValue));
+        return new AttackDamageSources(values.ToDictionary(
+            kv => kv.Key, kv => (int)Math.Clamp(kv.Value, int.MinValue, int.MaxValue)))
+        { ArmourDerived = character is AttackDamageSources { ArmourDerived: true } };
     }
 }

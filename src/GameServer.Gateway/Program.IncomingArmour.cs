@@ -2,6 +2,10 @@ using GameServer.Core.World;
 
 partial class Program
 {
+    static int MitigateTaken(ClientState conn, DamageType type, int amount, int resistance, int maximum) =>
+        FortificationDamageTaken(conn, ApplyPlayerArmour(conn, type, type == DamageType.Physical
+            ? amount : DamageModel.Mitigate(amount, resistance, maximum)));
+
     static bool ChaosArmourApplies(ClientState conn) =>
         Stats.Key("base_armour_applies_to_chaos_damage") is uint key && CharacterPlayerStats(conn).GetValueOrDefault(key) != 0;
 

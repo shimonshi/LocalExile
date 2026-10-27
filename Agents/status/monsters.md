@@ -72,6 +72,7 @@ Part of [Status](../Status.md); what to build next in this area is in
   Arcane's effects and Focus's damage reduction execute; ally application and remaining timing effects are incomplete.
   Other summon families and their individual effects remain unfinished.
   Zombie/Spider metadata has typed foreign-key tests and inherited Life eligibility, with explicit false retained.
+  The object-types v4 metadata also retains native stationary collision footprints and models.
   Life creation flags now preserve source corpse/sinking data; owned actors remain unusable as corpses.
   Six native scenarios verify alive/dead eligibility, explicit false, a life-1 stage, sinking and owned false flags.
   Static proof and tests also cover inherited defaults, the Player veto and spectre restrictions.

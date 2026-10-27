@@ -1,6 +1,6 @@
 /// <summary>The ordinary spell hit's critical chance, shared by the selected skill's panel and damage rolls.
 /// Read raw player and raw skill increases once, not the player's final Fireball-based display value.
-/// PoB CalcOffence.lua (16de4b8, line 3023) rounds to integer permyriad before capping the chance.</summary>
+/// Attacks and spells share half-up integer permyriad rounding in DamageModel.</summary>
 static class SpellCriticalStrike
 {
     public const int RollSize = 10_000;

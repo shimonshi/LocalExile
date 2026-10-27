@@ -8,6 +8,13 @@ Items keep the Roadmap's priority groups, and are in rough priority order within
 
 ### Gems: how they work
 
+Nessa's local full-colour assortment, alternative-variant pagination and separate progression-filtered Skills tab
+are implemented; see the gem-vendor entry in [status/gems.md](../status/gems.md). White Skills combines both white
+kinds. Verify the updated multi-page shop in the real client after Gateway restart. Future gameplay restrictions
+belong in Skills; the colour tabs must remain complete development tools independent of campaign progression.
+Gems have unlimited stock on all Nessa tabs; verify the native shop refresh after repeat purchases as part of the
+same live check. Automated payment, replenishment and save/reload coverage is in NessaGemPurchaseTests.
+
 The gem system as agreed on 2026-10-20, built in the parts below (#62, #63, #64).
 What is known about the client and the data is in [19](../docs/protocol/19-gems.md).
 
@@ -69,10 +76,12 @@ What is known about the client and the data is in [19](../docs/protocol/19-gems.
 ### Gems later: quality, getting gems, corruption, bonus levels
 
 - **Quality** from Gemcutter's Prism needs currency on items (C→S 0x4a, "Items" above).
-- **Getting gems:** quest rewards (QuestRewards, QuestRewardOffers: by class), the Act 1–4 vendors whose gems follow
-  the character's level, class and quest progress, Siosa (Act 3) and Lilly Roth (Act 6 and later), and drops.
-  Offers 0 and 8 already grant their supported class gems; remaining offers and vendor progression are open.
-  Needs the quests and NPC shop items.
+- **Getting gems:** quest rewards, the town gem vendors and monster drops are in (every `QuestRewardOffers` row the
+  server can build, by class; the vendors' completed-quest/class progression, Siosa and Lilly, and the 3.29
+  cross-class supports; a 4% gem share of item drops by DropLevel;
+  [19](../docs/protocol/19-gems.md) §5).
+  Remaining: a live check of Lilly and Siosa once Act 6 and The Library are reachable (the towns have no walk-map
+  capture yet).
 - **Corruption and Vaal skills:** Vaal Orb outcomes on gems (one level over the cap, quality up to 23%, the Vaal
   variant), the Lapidary Lens's double corruption, and Vaal souls for the Vaal skills.
   Goes with item corruption (#60).

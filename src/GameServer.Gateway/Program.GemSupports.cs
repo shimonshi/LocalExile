@@ -65,7 +65,7 @@ partial class Program
 
     internal static Dictionary<uint, int> SumSkillInputs(IReadOnlyDictionary<uint, int> player, IEnumerable<(uint, int)> own)
     {
-        var result = new Dictionary<uint, int>(player);
+        var result = new AttackDamageSources(player);
         foreach (var (key, value) in own)
             result[key] = (int)Math.Clamp((long)result.GetValueOrDefault(key) + value, int.MinValue, int.MaxValue);
         return result;
@@ -148,7 +148,8 @@ partial class Program
             if (new[] { "global_cannot_crit", "virtual_global_cannot_crit", "cannot_critical_strike_with_attacks" }
                 .Any(name => Player(name) != 0 || Own(name) != 0)) return 0;
             var weapon = WeaponProfileFor(conn, activeSet: true);
-            int basis = AttackBaseCriticalStrike.OfMainHand(!weapon.Unarmed, weapon.Critical, Player);
+            int basis = weapon.Unarmed && (!Skills.IsMelee(gem.Effect) || Skills.IsSpell(gem.Effect)) ? 0
+                : AttackBaseCriticalStrike.OfMainHand(!weapon.Unarmed, weapon.Critical, Player);
             int totalBase = (int)Math.Clamp((long)basis + Own("additional_base_critical_strike_chance"), int.MinValue, int.MaxValue);
             return DamageModel.CriticalStrikeChancePerMyriad(totalBase,
                 conn.Pools.CriticalStrikeChancePct + AttackBaseCriticalStrike.IncreasedSum(weapon, name => Own(name)));
@@ -169,6 +170,8 @@ partial class Program
     {
         var gem = captured ?? SupportedSkill(conn, skillId);
         int extra = Stats.Key("base_critical_strike_multiplier_+") is uint k ? gem.Stats.GetValueOrDefault(k) : 0;
-        return CriticalMultiplierFor(conn, spell: !Skills.IsAttack(gem.Effect), melee: MeleeAttack(conn, gem.Effect)) + extra;
+        return (int)Math.Clamp((long)(Skills.IsAttack(gem.Effect)
+            ? AttackCriticalMultiplier(conn, CharacterPlayerStats(conn), gem.Effect, gem.Stats)
+            : conn.Pools.SpellCriticalStrikeMultiplier) + extra, int.MinValue, int.MaxValue);
     }
 }

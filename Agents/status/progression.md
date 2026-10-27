@@ -36,10 +36,26 @@ Part of [Status](../Status.md); what to build next in this area is in
   Code: `PassiveTree.cs`, `CharacterSaves.cs`, Gateway (`ChangePassives`, `PassivesMessage`).
   Docs: [15](../docs/protocol/15-progression.md) §2.
 
+- Command-based ordinary ascendancy selection, separate point awards, connected allocations, paid refunds and saves.
+  A native Duelist/Slayer smoke checked ordinary nodes, ascendancy allocation/refund and both point budgets.
+  Choice and progress survived relog and a Gateway process restart; a Phrecia request left the saved JSON unchanged.
+  The read-only client trace observed class bytes, the Default graph, allocated nodes and separate point counters.
+  Automated domain, packet and production-handler tests cover ownership, separate budgets, graph connectivity,
+  multiple-choice effects, atomic refunds, stale connections and old/unknown saves.
+  Area admission validates saved progress before inventory changes, then validates items before gold migration.
+  Level changes recheck concurrent passive mutations before applying; queued tree packets publish current state.
+  Old XP events cannot undo later gains or explicit level resets; Auth follows current XP.
+  Old-area gains cannot suppress the live connection's pending level publication.
+  XP level reconciliation adopts completed saved trims/refunds atomically before updating runtime state.
+  Extra-point grants commit before runtime publication, including concurrent XP updates and failed-write checks.
+  Code: `AscendancyCatalog`, `AscendancyProgress`, `OrdinaryPassiveRules`, `CharacterSaves`, Gateway progression.
+  Docs: [scope, evidence and beginner steps](../docs/game/ascendancies.md).
+
 ## Partly working
 
-- Main ascendancies: `/ascendancy` offers one ordinary or Phrecia specialisation for the character's base class.
-  The catalog contains 21 ordinary and 19 Phrecia choices in the same ordinary league and account stash.
+- Main ascendancies: `/ascendancy` offers the ordinary specialisations for the character's base class.
+  Phrecia selection and game connections stay gated pending a separately agreed client-compatible graph.
+  The server catalog contains 21 ordinary and 19 Phrecia identities in the same ordinary league and account stash.
   Selection, separate point awards, class-owned connected nodes, exclusive choices and paid refunds are saved atomically.
   Old unascended saves retain their fields; stale passive snapshots cannot overwrite newer progress.
   The experimental merged client graph preserves the ordinary tree on the explicitly modified development client.

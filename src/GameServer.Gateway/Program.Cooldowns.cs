@@ -43,6 +43,8 @@ partial class Program
             if (conn.Closed || conn.LeavingArea || conn.PlayerLife == 0 || conn.Paused
                 || requestedAt is double asked && conn.HitRecovery.BlocksInput(asked, conn.Clock.Elapsed.TotalSeconds)
                 || actionToken is int original && conn.ActionCount != original) return false;
+            // Covers object/self and instant routes before creating or spending cooldown state or a new action.
+            if (ActorSkillDisabled(conn, effect) is not null) return false;
             var warcry = Skills.IsWarcry(effect) ? EnduringCryProfile(conn, skillId) : null;
             if (Skills.IsWarcry(effect) && (plan is null || warcry?.CanResolveOwnerEffect != true || !reserve
                 || !EnduringCrySingletonGroup(conn, skillId)
@@ -69,7 +71,7 @@ partial class Program
             {
                 conn.PlayerMana -= paidCost.Mana;
                 conn.PlayerLife -= paidCost.Life;
-                RageOf(conn).SpendMana(paidCost.Mana, DateTimeOffset.UtcNow, RageInputs(conn, CharacterStatSources(conn)));
+                RageOnManaSpentLocked(conn, paidCost.Mana);
             }
             sideEffects();
             if (plan is not null) ticket = new(effect, conn.ActionCount, conn.ProjectileEpoch, instant, reserve,

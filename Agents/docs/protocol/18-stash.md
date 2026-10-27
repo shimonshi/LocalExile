@@ -116,8 +116,19 @@ connection. Later opens send b = 0x16: the panel keeps its own tab while the con
   +0x491), u16 token (raw, changes per request), u64 raw (0). The item's inventory is not sent. The Gateway moves the
   item to the tab's first free cell (column by column) from whichever inventory holds it.
 - **0xe3** (12 bytes, vtable `0x1435c0500`, write `0x141f97e40`, built by `0x142168e20`): Ctrl + click on a tab item.
-  u16 BE tab, u32 BE item id, u8, u8, u8, u8 (live `00 a7 cd 00`: the middle two change per request). The Gateway moves
-  it to the main inventory's first free cell, keeping its stash id.
+  u16 BE tab, u32 BE item id, u8 stash kind, u16 raw token (low byte first), u8 bulk.
+  Live ordinary click suffix: `00 a7 cd 00`; the middle two bytes change per request.
+  Static 3.29.3b evidence: the builder copies argument 4 to kind, argument 5 to the token and argument 6 to bulk;
+  the writer emits these four bytes in order from message +0x18..+0x1b.
+  The ordinary inventory click (`0x14030e3e0`, call at `0x140310c63`) passes bulk 0 to `0x140312810`;
+  its bulk counterpart (`0x140311440`, call at `0x14031172a`) passes 1.
+  The shared handler forwards that boolean to `0x142168e20` at `0x140313444`.
+  This is a separate boolean from the `0xe1` deposit flags; do not use deposit flag 0x02 for withdrawals.
+  The Gateway limits ordinary withdrawals to one normal inventory stack; bulk 1 withdraws as much of the clicked
+  stack as fits, topping up existing stacks before using free cells.
+  Real-client/Gateway logs confirm both modes: bulk 0 takes 40 from a slot holding 218, leaving 178;
+  bulk 1 takes 178 as four stacks of 40 and one of 18.
+  Wire-layout, capacity, transaction rollback and transfer/reload tests cover the remaining edge cases.
 - **0xe1** (vtable `0x1435c00f8`, write `0x141f97810`): Ctrl + click on an inventory item that has an affinity tab
   (currency, maps, gems …) while the stash is open, whatever tab is shown: the client names the tab. Read from live bytes
   (2026-10-20, Scroll of Wisdom, Armourer's Scrap, Orbs of Alteration and Transmutation, the Currency tab at index 5):
@@ -164,12 +175,17 @@ item moved into or out of a tab (0x28, 0x2a, 0xe0, 0xe3). Stacks merge into a ta
   one there; the load-time repair leaves it. Ctrl + click never puts anything there. Currency (from its slot or the inventory) works on the item there: 0x71 / 0x72 name the tab as the target inventory ([13](13-items.md) §4b). 
 - **Spare slots.** The 14 cells under the crafting slot are rows `Generic1`–`Generic14` (no `StoredItem`, slots 30–34
   and 40–48; two rows on screen, YOffset 680 and 770). They take any item the currency tab holds, where dropped, up to
-  the slot size (5000). Ctrl + click (and Ctrl + right click, 0xe1 flags 0x02) puts into them what the item's own slot has
+  the item's currency-tab limit below.
+  Ctrl + click (and Ctrl + right click, 0xe1 flags 0x02) puts into them what the item's own slot has
   no room for: first onto a spare slot of that type with room, then into the first free one, left to right and top to
   bottom (`StashRules.OverflowSlots`, `AccountStash.AddStacked`); what still doesn't fit stays in the inventory.
-- **Stack sizes.** Every slot of a slotted tab (currency, essence, fragment, delve, blight) holds 5000 of its item
-  (`StashRules.SlotStack`, our own number since 2026-10-22; before, CurrencyItems `CurrencyTab_StackSize` for currency
-  and the item's own stack elsewhere, so essences stopped at 10). The Delve (StashType 12, DelveStashTabLayout) and
+- **Stack sizes.** Currency slots use `CurrencyItems.CurrencyTab_StackSize`, keyed by `BaseItemTypesKey`:
+  red, yellow and blue crystallised lifeforce hold 50000, and ordinary currency generally holds 10000.
+  The previous uniform 5000 limit split a 50000 lifeforce deposit across its own slot and nine spare slots.
+  Live client verification: C→S 0xe1 merged 40000 into an existing 10000 in slot 99; S→C 0xbf reported 50000.
+  Automated tests cover manual merging, quick deposits, all five Harvest currency types, overflow and save reloads.
+  Other slotted tabs retain 5000 (`StashRules.SlotStack`), also the fallback for absent or invalid currency limits.
+  The Delve (StashType 12, DelveStashTabLayout) and
   Blight (13, BlightStashTabLayout) and Delirium (15, DeliriumStashTabLayout) tabs are slotted the same way; the
   Divination tab (6) too, a card's slot being its DivinationCardStashTabLayout row (a guess: the table has no slot
   numbers). Unique (4), Breach (22) and Ultimatum (14) tabs exist but take nothing yet (`StashRules.NotShown`: uniques
@@ -179,14 +195,18 @@ item moved into or out of a tab (0x28, 0x2a, 0xe0, 0xe3). Stacks merge into a ta
   appended.
 - **Ctrl + click** into a tab (0xe0, 0xe1) puts a stack onto the tab's stacks of its type first (in a slotted tab, its
   slot), then into free cells; what doesn't fit stays in the inventory. Out of a tab (0xe3), a stack tops up the
-  inventory's stacks of its type first, and what doesn't fit stays in the tab. Each is one transaction
+  inventory's stacks of its type first, withdrawing at most the item's normal inventory stack size for Ctrl + left click.
+  Ctrl + right click (`0xe3` bulk byte 1) instead tries the entire clicked stack.
+  Stash reduction uses the amount actually moved, so an intentionally limited withdrawal leaves its remainder even
+  when every requested item fits (issue #249).
+  Each is one transaction
   (`ItemMoves`, [saves](../saves.md)).
 - **The map tab takes nothing yet.** The 3.29 client lists a map tab's maps by tier ([maps](../game/maps.md)), not at
   grid cells: two Beach Maps saved at (0, 0) and (0, 1) were not shown (live 2026-10-20). Until its layout is known,
   `StashRules.NotShown` refuses every item, and maps already there move out at load.
 - **A plain click on a special tab's item** sends C→S 0x7c (split) with the whole stack (live 2026-10-20, the currency
   tab: `Amount` = the stack, `B` = 0; Shift + click sends `B` = 3 with the amount chosen). The Gateway puts the whole
-  stack on the cursor, keeping its id; a slot holding more than a stack (up to 5000) gives a full stack
+  stack on the cursor, keeping its id; a slot holding more than the item's inventory stack gives a full stack
   (the item's max) and keeps the rest. A Shift + click split takes at most a full stack too.
 - **Repair.** Items a special tab can't show (an earlier build let any item into any tab) move at load into their slot,
   else into the first normal tab with room, and are saved there. One that finds no room stays where it is, saved.
@@ -208,8 +228,7 @@ Gold stays with the personal stash.
 
 - **Last tab:** switching to an already loaded tab sends nothing, so a switch followed by a logout without reopening
   the stash or moving an item is not seen; the next login opens on the tab before it.
-- Not checked live yet: currency into its slot from Ctrl + click (0xe1), the affinity window closing on S→C 0x136, and
-  the special tabs other than currency and map.
+- Not checked live yet: the affinity window closing on S→C 0x136, and the special tabs other than currency and map.
 - Tab folders (0xd1 is logged), 0xe2, the unique, divination and other special tabs, the
   real guilds (shared guild stash, members, rights), stashes per league, and stashes in the other towns.
 
@@ -231,8 +250,11 @@ and all eight resonator families/tiers. The user confirmed the correction in the
 
 ## Lifeforce limits and Delve crafting cells
 
-Currency-tab HarvestSeed slots hold 65,535 units each, the maximum unsigned 16-bit Stack component value.
-Ordinary special slots retain their 5,000 limit; inventory stacks retain their item-defined limit.
+Currency-tab HarvestSeed slots use `CurrencyItems.CurrencyTab_StackSize`, as described in section 7:
+red, yellow and blue lifeforce hold 50,000; Sacred Crystallised Lifeforce and Crystallised Rancour hold 10,000.
+The former HarvestSeed override of 65,535 was the wire maximum, not the data-defined storage limit.
+Saved stacks above the corrected limit are retained without truncation; further deposits use overflow or stay outside.
+Other special tabs retain their 5,000 fallback; inventory stacks retain their item-defined limit.
 Excess lifeforce goes to available overflow cells or remains with the source, without truncation.
 DelveStashTabLayout GenericSlot1 and GenericSlot2 are manual crafting cells at (37,0) and (39,0).
 They accept equipment at its normal stack size; dropping another item swaps the old item onto the cursor.

@@ -17,14 +17,13 @@ using DamageModel = GameServer.Core.World.DamageModel;
 
 partial class Program
 {
+    // Called before inventory loading or any save normalization on a real connection.
+    internal static void CheckAscendancyClientCompatibility(ClientState conn) =>
+        AscendancyClientCompatibility.RequirePlayable(CharacterSaves.Load(CharacterName(conn))?.MainAscendancy?.Selection);
 
-    // The character's experience and passives from its save; returns its level. The saved experience decides the level: the
-    // account's (the ticket's) is only a copy for the character list, which a failed update at a level-up leaves behind. A save
-    // without experience (an older one) starts at the account's level. Passives beyond the level's points are dropped.
-    static int LoadProgress(ClientState conn, int level)
+    // Read-only admission checks, shared with LoadProgress: no inventory loading, normalization or gold migration.
+    static void ValidateSavedProgress(ClientState conn, CharacterSaves.Save? save)
     {
-        var save = CharacterSaves.Load(CharacterName(conn));
-        level = CharacterSaves.LevelOf(save, level);
         // Without the tree the saved passives can't be checked; dropping them would lose them at the next save.
         if (save?.Passives is { Count: > 0 } && !Passives.Loaded)
             throw new UnknownSavedItemException("allocated passives, but the passive tree (data/tables/PassiveSkills.json) is not loaded");
@@ -34,6 +33,18 @@ partial class Program
             throw new UnknownSavedItemException("unknown or ascendancy nodes in the ordinary passive allocation; the save was retained");
         AscendancyRules.Validate((byte)Skills.ClassFor(conn.ClassRow).IntegerId, ascendancy);
         ValidateOrdinaryPassives(conn, ordinary, ascendancy);
+    }
+
+    // The character's experience and passives from its save; returns its level. The saved experience decides the level: the
+    // account's (the ticket's) is only a copy for the character list, which a failed update at a level-up leaves behind. A save
+    // without experience (an older one) starts at the account's level. Passives beyond the level's points are dropped.
+    static int LoadProgress(ClientState conn, int level)
+    {
+        var save = CharacterSaves.Load(CharacterName(conn));
+        level = CharacterSaves.LevelOf(save, level);
+        ValidateSavedProgress(conn, save);
+        var ordinary = save?.Passives ?? [];
+        var ascendancy = save?.MainAscendancy ?? new();
         // Gold is the account's (AccountStash.Gold): gold an older save kept with the character moves into the account, in one
         // transaction with the save letting go of it.
         if (save?.Gold is > 0 and uint oldGold)
@@ -72,7 +83,6 @@ partial class Program
         return level;
     }
 
-    // The pools of the character's class at this level with its passives (call under the Monsters lock).
     // The character's stats from its allocated passives and the global mods of its active equipped items (ItemModStats),
     // by client stat key. Worn items whose requirements the class, the passives and the other active items do not meet are
     // inactive (ItemModStats.Inactive): remembered per character for the weapon profile and the gem skills.
@@ -118,10 +128,19 @@ partial class Program
                     $"{w.Id} {Items.ByHash(w.Item.TypeHash)?.Name} (str {w.Strength}, dex {w.Dexterity}, int {w.Intelligence}, level {w.Level})")));
         var sources = EquipmentConditions(conn, ItemModStats.Plus(passives, ItemModStats.Global(active, Items.Mods, Stats)));
         ChargeStats(conn, sources);
-        return sources;
+        return WithFortification(conn, sources);
     }
 
     internal static CharacterStats.Pools PoolsFor(ClientState conn, int level)
+    {
+        lock (conn.Monsters)
+        {
+            using var snapshot = FortificationOf(conn).Capture(conn.Clock.Elapsed.TotalSeconds);
+            return BuildPoolsFor(conn, level);
+        }
+    }
+
+    static CharacterStats.Pools BuildPoolsFor(ClientState conn, int level)
     {
         // The stat sources first: they decide which worn items are inactive, which the weapon profile reads.
         var sources = CharacterStatSources(conn, level: level);
@@ -142,6 +161,11 @@ partial class Program
         long FlaskStat(string name) => flaskStats.Where(s => s.Stat == name).Sum(s => (long)s.Value);
         Dictionary<uint, int> devStats;
         lock (conn.Monsters) devStats = new(conn.PlayerStats);
+        // Only this raw mana source is replaced here. Final native strength remains a presentation override;
+        // CharacterStats.For consumes its existing final Strength from the production attribute calculation.
+        if (Stats.Key(StrengthMana.PerFourStrength) is uint manaPerStrength
+            && devStats.TryGetValue(manaPerStrength, out int perFourStrength))
+            bonus = bonus with { ManaPerFourStrength = perFourStrength };
         long RawCriticalIncrease(string name)
         {
             if (Stats.Key(name) is not uint key) return 0;
@@ -191,6 +215,8 @@ partial class Program
         foreach (var (name, value) in flaskStats)
             if (ResistanceOvercap.IsInput(name) && Stats.Key(name) is uint key)
                 completeSources[key] = completeSources.GetValueOrDefault(key) + value;
+        foreach (var (key, value) in AuraCatalog.ResistanceStats(auras, bonus.AuraEffectPct, Skills, Stats))
+            completeSources[key] = completeSources.GetValueOrDefault(key) + value;
         bonus = ResistanceOvercap.Applied(bonus, completeSources, devStats, ResistancePenalty(conn), Stats);
         var pools = CharacterStats.For(Skills.ClassFor(conn.ClassRow), level, bonus);
         // The pure base critical stats replace the weapon/unarmed base before increases; overcap is included once.
@@ -254,7 +280,8 @@ partial class Program
                     SpellBlockChance = Math.Min(pools.SpellBlockChance + 2 * overcap, pools.SpellBlockChanceMax)
                 };
         }
-        return pools;
+        ConfigureFortificationRecovery(conn, pools.Life);
+        return pools with { FortificationRevision = FortificationOf(conn).Revision };
     }
 
     // What the allocated passives add to the pools: attributes (base_* and additional_*, all attributes and the pairs),
@@ -389,6 +416,7 @@ partial class Program
             Strength: strength, Dexterity: dexterity, Intelligence: intelligence,
             StrengthPct: attributeIncreases.Strength, DexterityPct: attributeIncreases.Dexterity, IntelligencePct: attributeIncreases.Intelligence,
             Life: Get("base_maximum_life"), LifePct: Get("maximum_life_+%"), Mana: Get("base_maximum_mana"), ManaPct: Get("maximum_mana_+%"),
+            ManaPerFourStrength: Get(StrengthMana.PerFourStrength),
             Armour: Get("base_physical_damage_reduction_rating"), ArmourPct: armourPct,
             Evasion: Get("base_evasion_rating"), EvasionPct: evasionPct,
             SharedDefencesPct: defencesPct, IronReflexes: Get("keystone_iron_reflexes") != 0,
@@ -435,7 +463,6 @@ partial class Program
             NoIntelligence: Get("intelligence_is_0") != 0,
             NoIntelligenceMana: Get("gain_no_maximum_mana_from_intelligence") != 0,
             LifePerLevel: Get("life_per_level"), ManaPerDexterity: Get("X_mana_per_dexterity"),
-            ManaPerFourStrength: Get("X_mana_per_4_strength"),
             ManaConvertedToArmourPct: Get("keystone_mental_conditioning") != 0 ? 80 : 0,
             LifeAsEnergyShieldPct: Get("maximum_life_%_to_add_as_maximum_energy_shield"),
             ManaAsEnergyShieldPct: Get("mana_%_to_add_as_energy_shield"),
@@ -469,9 +496,11 @@ partial class Program
 
     // A batch may list its leaf before its prerequisite. Removing the last allocation alone could orphan that leaf.
     // Keep the historical last-first preference, but only remove a node whose remaining tree is still connected.
-    static void TrimOrdinaryPassives(ClientState conn, List<ushort> nodes, int points)
+    static void TrimOrdinaryPassives(ClientState conn, List<ushort> nodes, int points,
+        AscendancyProgress? ascendancy = null)
     {
-        ValidateOrdinaryPassives(conn, nodes, conn.MainAscendancy);
+        ascendancy ??= conn.MainAscendancy;
+        ValidateOrdinaryPassives(conn, nodes, ascendancy);
         while (nodes.Count > points + Passives.PointsGranted(nodes))
         {
             int removable = -1;
@@ -479,7 +508,7 @@ partial class Program
             {
                 try
                 {
-                    ValidateOrdinaryPassives(conn, nodes.Where((_, index) => index != i), conn.MainAscendancy);
+                    ValidateOrdinaryPassives(conn, nodes.Where((_, index) => index != i), ascendancy);
                     removable = i;
                     break;
                 }
@@ -494,20 +523,28 @@ partial class Program
     // tree's start) and the allocated nodes.
     static async Task SendPassives(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn)
     {
-        var (bytes, label) = PassivesMessage(conn);
-        await Send(remote, stream, ciphers, bytes, label);
+        // A queued publication must not restore a tree captured before a later allocation/refund or level change.
+        await Send(remote, stream, ciphers, [], "0x0033 current passive skill tree",
+            atGate: () => PassivesMessage(conn).Bytes);
     }
 
     static (byte[] Bytes, string Label) PassivesMessage(ClientState conn)
     {
-        var (points, refundPoints, nodes, masteries) = PassiveState(conn);
-        int unspent = points + Passives.PointsGranted(nodes) + AscendancyOrdinaryPoints(conn) - nodes.Count;
-        return (InstanceEntities.CharacterPassives((byte)conn.Pools.Level, PackedClass(conn), [.. nodes, .. conn.MainAscendancy.Allocated],
-                questPoints: conn.ExtraPassivePoints, refundPoints: refundPoints, ascendancyPoints: (ushort)conn.MainAscendancy.EarnedPoints, masteryEffects: masteries),
-            $"0x0033 passive skill tree: level {conn.Pools.Level}, {points} skill point(s) ({conn.ExtraPassivePoints} extra), " +
-            $"{refundPoints} refund point(s), {nodes.Count} allocated, {unspent} unspent; " +
-            $"ascendancy {conn.MainAscendancy.Selection?.Family}/{conn.MainAscendancy.Selection?.Id}, {conn.MainAscendancy.EarnedPoints} earned, {conn.MainAscendancy.Allocated.Count} nodes");
+        lock (conn.Monsters)
+        {
+            var (points, refundPoints, nodes, masteries) = PassiveState(conn);
+            int unspent = points + Passives.PointsGranted(nodes) + AscendancyOrdinaryPoints(conn) - nodes.Count;
+            return (InstanceEntities.CharacterPassives((byte)conn.Pools.Level, PackedClass(conn), [.. nodes, .. conn.MainAscendancy.Allocated],
+                    questPoints: conn.ExtraPassivePoints, refundPoints: refundPoints, ascendancyPoints: (ushort)conn.MainAscendancy.EarnedPoints, masteryEffects: masteries),
+                $"0x0033 passive skill tree: level {conn.Pools.Level}, {points} skill point(s) ({conn.ExtraPassivePoints} extra), " +
+                $"{refundPoints} refund point(s), {nodes.Count} allocated, {unspent} unspent; " +
+                $"ascendancy {conn.MainAscendancy.Selection?.Family}/{conn.MainAscendancy.Selection?.Id}, {conn.MainAscendancy.EarnedPoints} earned, {conn.MainAscendancy.Allocated.Count} nodes");
+        }
     }
+
+    // The native family selector is a world stat, independently of the character's stored league.
+    internal static IReadOnlyDictionary<uint, int>? LeagueStatsFor(AscendancyProgress progress) =>
+        progress.Selection?.Family == AscendancyFamily.Phrecia ? new Dictionary<uint, int> { [21146] = 1 } : null;
 
     static int AscendancyOrdinaryPoints(ClientState conn) =>
         AscendancyRules.OrdinaryPointsGranted((byte)Skills.ClassFor(conn.ClassRow).IntegerId, conn.MainAscendancy);
@@ -537,6 +574,8 @@ partial class Program
         int refundsSpent = 0;
         AscendancyProgress ascendancyNow;
         CharacterSaves.PassiveProgressSnapshot? expectedProgress;
+        // Validate, save and publish under one connection lock; level changes cannot split these phases.
+        // All network sends remain outside it (connection lock -> database, never connection lock -> cipher gate).
         lock (conn.Monsters)
         {
             var next = new List<ushort>(conn.Passives);
@@ -550,7 +589,7 @@ partial class Program
                 if (Passives.Find(n) is not { } node) { error = $"unknown passive {n}"; break; }
                 if (node.IsAscendancy)
                 {
-                    if (goldRespec) { error = "Ascendancy passives require refund points, not gold"; break; }
+                    if (goldRespec || !allocate && !refundPoints) { error = "Ascendancy passives require refund points, not gold or a free reset"; break; }
                     if (masteryEffect is not null) { error = "An ascendancy passive is not an ordinary mastery"; break; }
                     ascendancyNodes.Add(n);
                     continue;
@@ -603,23 +642,20 @@ partial class Program
             ascendancyNow = ascendancy;
             effectsNow = effects;
             refundsNow = (ushort)(conn.RefundPoints - (refundPoints && error is null ? refundsSpent : 0));
-        }
-        // Saved before it applies, in one transaction: the gold (paid last, from the account's gold: nothing is taken when the
-        // change is refused), the passives, their mastery effects and the refund points.
-        if (error is null)
-            error = Saves.Atomically(() =>
-            {
-                if (goldRespec)
+            // Saved before it applies, in one transaction: the gold (paid last, from the account's gold: nothing is taken when the
+            // change is refused), the passives, their mastery effects and the refund points.
+            if (error is null)
+                error = Saves.Atomically(() =>
                 {
-                    if (PersonalStashOf(conn).TrySpendGold(cost) is not uint left) return $"not enough gold ({cost} needed, {PersonalStashOf(conn).Gold} held)";
-                    gold = left;
-                }
-                CharacterSaves.SetMainAscendancy(CharacterName(conn), ascendancyNow, now, effectsNow, refundPoints ? refundsNow : null,
-                    expected: expectedProgress);
-                return null;
-            });
-        lock (conn.Monsters)
-        {
+                    if (goldRespec)
+                    {
+                        if (PersonalStashOf(conn).TrySpendGold(cost) is not uint left) return $"not enough gold ({cost} needed, {PersonalStashOf(conn).Gold} held)";
+                        gold = left;
+                    }
+                    CharacterSaves.SetMainAscendancy(CharacterName(conn), ascendancyNow, now, effectsNow, refundPoints ? refundsNow : null,
+                        expected: expectedProgress);
+                    return null;
+                });
             if (error is null)
             {
                 conn.Passives = now;
@@ -657,25 +693,12 @@ partial class Program
     }
     // Experience from a kill: added (up to the last level), sent as the Player component's experience (0x2ba; the client
     // derives the level and plays the level up from it), saved, and at a new level the level's stats, life and passive
-    // points (ApplyLevel) and the account's level (Auth set_level, for the character list).
-    static async Task GainExperience(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn, uint gain, string why)
+    // points from current experience and the account's level (Auth set_level, for the character list).
+    internal static async Task GainExperience(string remote, NetworkStream stream, ConnectionCiphers ciphers,
+        ClientState conn, uint gain, string why, Func<ControlRequest, Task<ControlResponse>>? control = null)
     {
-        // Added to the character's total (an older connection's or another task's gain is never written over), kept in memory
-        // and saved every few seconds; a new level is saved at once.
-        uint start;
-        int oldLevel;
-        lock (conn.Monsters) (start, oldLevel) = (conn.Experience, conn.Pools.Level);
-        var (before, after) = CharacterSaves.AddExperience(CharacterName(conn), start, xp => Progression.AddExperience(xp, gain, CharacterStats.LevelStarts));
-        if (after == before) return;
-        lock (conn.Monsters) conn.Experience = Math.Max(conn.Experience, after);
-        int level = Progression.LevelFor(after, CharacterStats.LevelStarts);
-        await Send(remote, stream, ciphers, InstanceEntities.PlayerExperienceUpdate(PlayerId, after),
-            $"0x02ba player Player: experience {before} + {after - before} = {after} (level {level}; {why})");
-        if (level <= oldLevel) return;
-        CharacterSaves.SaveExperience(CharacterName(conn));   // a new level is saved at once, before the account hears of it
-        var r = await InstanceControl.CallAsync(new ControlRequest { Op = "set_level", Ticket = conn.Ticket, Level = level });
-        if (!r.Ok) Console.WriteLine($"[gateway] {remote} level {level} not saved to the account: {r.Error}");
-        await ApplyLevel(remote, stream, ciphers, conn, level);
+        if (RecordExperienceGain(conn, gain) is { } change)
+            await CompleteExperienceGain(remote, stream, ciphers, conn, change, why, control);
     }
 
     // A kill's experience goes to the gems too: every one socketed in an equipped item, in either weapon set, gains 10% of the

@@ -10,7 +10,7 @@ readonly record struct DerivedDamageIncreases(double GenericPercent, double Atta
 
     public double AttackPercent => GenericPercent + AttackOnlyPercent;
 
-    public static DerivedDamageIncreases From(Func<string, int> get)
+    public static DerivedDamageIncreases From(Func<string, int> get, bool includeArmour = true)
     {
         // PoB 16de4b82 CalcOffence 613–622 / 651–658 copies Damage INC modifiers only. The two 150% stats are
         // flags, not percentage values: more damage, speed and critical modifiers never enter either transfer.
@@ -20,7 +20,7 @@ readonly record struct DerivedDamageIncreases(double GenericPercent, double Atta
         double attack = get(SpellToAttack) != 0 ? get("spell_damage_+%") * 1.5 : 0;
         // Only complete groups of the final ratings count. In particular, chance to double armour against a hit
         // does not change the character's rating, and base defence inputs must not be counted again here.
-        attack += Math.Max(0, get("physical_damage_reduction_rating")) / 450 * (double)get(AttackPerArmour)
+        attack += (includeArmour ? Math.Max(0, get("physical_damage_reduction_rating")) / 450 * (double)get(AttackPerArmour) : 0)
             + Math.Max(0, get("evasion_rating")) / 450 * (double)get(AttackPerEvasion);
         return new(generic, attack);
     }

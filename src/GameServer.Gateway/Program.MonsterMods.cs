@@ -71,11 +71,24 @@ partial class Program
     /// This mod-only calculation remains for isolated effect controls. Actual combat composes variety resistance,
     /// penetration and critical-ignore through HitResistancesFor before ApplyMonsterModDamageTaken.
     /// </summary>
-    internal static int MonsterTakes(SpawnedMonster m, DamagePacket hit, Random random, bool spell)
+    internal static int MonsterTakes(SpawnedMonster m, DamagePacket hit, Random random, bool spell,
+        Penetration.PerType pen = default) => MonsterTakesRolled(m, hit.Roll(random), spell, pen);
+
+    internal static DamageModel.ResistanceValue MonsterHitResistance(SpawnedMonster m, DamageType type,
+        Penetration.PerType pen)
+    {
+        var resistance = HitMitigation.Resistance(Monsters, m.Variety, m.Level, type);
+        return resistance with { Value = resistance.Value + m.Mods.Effects.Resistance(type),
+            Maximum = MonsterModEffects.MaxResistance, Penetration = pen.Of(type) };
+    }
+
+    // Already rolled: no extra RNG or per-component rounding, including ordinary bow contact snapshots.
+    internal static int MonsterTakesRolled(SpawnedMonster m, DamagePacket rolled, bool spell, Penetration.PerType pen = default)
+        => MonsterTakesMitigated(m, DamageModel.Mitigate(rolled, type => MonsterHitResistance(m, type, pen)), spell);
+
+    internal static int MonsterTakesMitigated(SpawnedMonster m, DamagePacket mitigated, bool spell)
     {
         var e = m.Mods.Effects;
-        var mitigated = DamageModel.Mitigate(hit.Roll(random),
-            type => new DamageModel.ResistanceValue(e.Resistance(type), MonsterModEffects.MaxResistance));
         double physical = mitigated[DamageType.Physical].Min;
         double total = mitigated.MinTotal - physical * e.PhysicalReduction / 100.0;
         return (int)Math.Round(total * e.DamageTaken(spell));
