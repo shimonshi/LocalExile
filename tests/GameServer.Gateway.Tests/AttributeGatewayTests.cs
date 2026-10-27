@@ -103,6 +103,7 @@ public sealed class AttributeGatewayTests : IDisposable
     {
         var conn = Character();
         conn.MainAscendancy = new(Nodes: [38080]); // Raw mana-per-four-Strength source; no Phrecia admission.
+        conn.PlayerStats[Key(PowerOfPurpose.RawFlag)] = 0; // Isolate the independent flat-mana attribute consumer.
         var ring = Inventory.Add(6, 0, 0, Gear("Iron Ring", ("additional_strength", 1), ("strength_+%", 4)));
         var wand = Inventory.Add(PlayerInventories.Weapon1, 0, 0, Gear("Driftwood Wand", ("additional_strength", 9)));
         var chest = Inventory.Add(PlayerInventories.BodyArmour, 0, 0,

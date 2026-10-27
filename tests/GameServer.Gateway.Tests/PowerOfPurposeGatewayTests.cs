@@ -17,12 +17,12 @@ public class PowerOfPurposeGatewayTests
     sealed class Character : IDisposable
     {
         public ClientState State { get; }
-        public Character()
+        public Character(int classRow = SkillCatalog.WitchRow)
         {
             TestSaves.Ensure();
             State = new(new(ushort.MaxValue, "PurposeTest", 128, 128, 32, 32, null, []), 0, 1)
             {
-                Character = "Purpose" + Guid.NewGuid().ToString("N"), ClassRow = SkillCatalog.WitchRow,
+                Character = "Purpose" + Guid.NewGuid().ToString("N"), ClassRow = classRow,
                 PlayerLife = 25, PlayerSent = true,
             };
             State.PlayerStats[Key("mana_regeneration_rate_+%")] = -100;
@@ -338,9 +338,8 @@ public class PowerOfPurposeGatewayTests
         int strengthIncrease, int allIncrease, int manaIncrease, int strength, int intelligence,
         int mana, int armour, int ordinaryMana)
     {
-        using var character = new Character();
+        using var character = new Character(Program.Skills.RowOfClass(1)); // Marauder, matching native controls.
         var conn = character.State;
-        conn.ClassRow = Program.Skills.RowOfClass(1); // Marauder, matching the independent native attribute controls.
         conn.Pools = Program.PoolsFor(conn, 1);
         conn.PlayerMana = 1;
         var items = PlayerInventories.For(conn.Character!, Program.Items);
@@ -357,7 +356,7 @@ public class PowerOfPurposeGatewayTests
         conn.Auras[0x700] = new(0x700, -1, "FixtureReservation", "Reservation", 1, 1, 0, 5000);
         var wire = await Command(conn, "/set_stat keystone_mental_conditioning 1");
         Assert.Equal((strength, intelligence), (conn.Pools.Strength, conn.Pools.Intelligence));
-        AssertWire(wire, mana, armour, 1, (uint)(mana / 2));
+        AssertWire(wire, mana, armour, 1, (uint)((mana + 1) / 2));
         Assert.Equal(conn.Pools, Program.PoolsFor(conn, 1)); // No repeated conversion or compounding.
         await Command(conn, "/set_stat keystone_mental_conditioning 0");
         Assert.Equal((uint)ordinaryMana, conn.Pools.Mana);
