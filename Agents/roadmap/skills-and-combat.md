@@ -38,7 +38,7 @@ The suspend/restore lifecycle is explicit LocalExile policy; see protocol/11-ski
   Raw-source reservation refresh and clamping have decrypted wire coverage; recheck active auras natively.
   See [Status](../status/skills-and-combat.md) and [11](../docs/protocol/11-skills.md) section 4.
   Mental Conditioning now combines mana per Strength with mana-to-armour conversion in current-main tests.
-  Recheck the rebased head and exact #290 → #294 → #296 → #300 composition natively; Phrecia selection stays separate.
+  Ordered joint native conversion controls pass at `c9cd1864`; Phrecia selection stays separate.
   Ordinary one-use cooldown recovery now shares the native base/rate and a server base-time budget, with atomic
   preflight before action side effects.
   Initial Dash recovery, early raw rejection, pause and native mid-cooldown rate changes pass live alongside
@@ -70,7 +70,7 @@ The suspend/restore lifecycle is explicit LocalExile policy; see protocol/11-ski
   Power of Purpose has historical original-head raw-source, armour/mana, actual attack-consumer and relog controls.
   Native idle reservation, Iron Reflexes and MORE compositions remain; their model and automated tests are in
   [the calculation notes](../docs/game/power-of-purpose.md).
-  Combined Mental Conditioning mana-per-Strength has current-main regressions; the new head awaits native checks.
+  Combined final-attribute mana-per-Strength and conversion have current-main regressions and joint native controls.
 
 ### Auras: reservation and effects
 

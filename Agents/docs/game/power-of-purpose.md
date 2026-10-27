@@ -82,8 +82,15 @@ Queued mana publication also checks own-aura restriction with both raw mana sour
 
 The following thirteen native controls are historical evidence for original head
 `7678d60e5020793722556d0689a8f08e58b499f0`, using an unascended Witch and chosen level-one Plate Vest modifiers.
-The candidate rebased on `79cc0337b331b69e49b3c35ea3e34c67e7d547ce` still needs fresh native verification.
-The exact #290 → #294 → #296 → #300 composition also needs joint automated and native verification.
+The ordered #290 / #294 / #296 / #300 composition at `c9cd1864` passes the build and all three suites.
+It also passes 28 fresh native controls, including eight conversion controls on an unascended Marauder.
+At final Strength 40 / Intelligence 14, B=127 gives 25 mana and 222 Armour including the ordinary 19-Armour vest.
+Adding 100% increased mana gives 51 mana / 425 Armour; final Strength 48 / Intelligence 18 gives 58 / 483.
+At final Strength 16 / Intelligence 7, B=75.5 keeps its half point and yields 15 mana / 140 Armour.
+Raw conversion zero restores ordinary truncated mana 75 and vest Armour 19.
+The joint resolution uses final Intelligence in the twice-flat bucket; #290 owns the attribute engine.
+Gateway, Core, Storage and Host hashes/Git versions, listener DLL and working directory were pinned before entry.
+The earlier thirteen controls below remain historical; fresh joint checks do not claim the remaining cases.
 The display-only flag does not enable conversion.
 Naked 56 mana becomes 11 remaining mana and 90 Armour; removing the source restores the ordinary pools.
 With 25% increased mana, 50% increased armour and 19 base Armour, conversion gives 14 mana and 185 Armour.
