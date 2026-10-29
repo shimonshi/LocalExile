@@ -64,6 +64,13 @@ public partial class ConditionalCriticalGatewayTests
             Set("spell_minimum_added_chaos_damage", 1000);
             Set("spell_maximum_added_chaos_damage", 1000);
             Set("attack_speed_+%", 200);
+            // Admission resolves raw attribute inputs before Pools exists; a final Pools overlay cannot qualify
+            // the weapon or a host containing a gem. Give this combat fixture the same actual 1000 attributes
+            // that its damage/critical assertions use, leaving the production requirement checks enabled.
+            var @class = Program.Skills.ClassFor(Conn.ClassRow);
+            Set("base_strength", 1000 - @class.Strength);
+            Set("base_dexterity", 1000 - @class.Dexterity);
+            Set("base_intelligence", 1000 - @class.Intelligence);
             Refresh();
             Target = new("critical target", new(32 + distance, 32, 30), 0, 2, targetLife)
                 { Mods = targetMods ?? MonsterModSet.None, Level = targetLevel };
@@ -92,7 +99,7 @@ public partial class ConditionalCriticalGatewayTests
                 { Mods = [new(ModSection.Explicit, unused.Hash, [30])] });
         }
         public void Refresh() => Conn.Pools = Program.PoolsFor(Conn, 40) with
-        { Life = 100, Mana = 1000, Accuracy = int.MaxValue, Strength = 1000, Dexterity = 1000, Intelligence = 1000 };
+        { Life = 100, Mana = 1000, Accuracy = int.MaxValue };
         public int Multiplier => Skill == SkillCatalog.FirstSkillId
             ? Program.AttackCriticalMultiplier(Conn, Program.CharacterPlayerStats(Conn))
             : (int)Method("SupportedCriticalMultiplier").Invoke(null, [Conn, Skill])!;

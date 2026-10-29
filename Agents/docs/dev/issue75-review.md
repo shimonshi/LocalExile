@@ -987,6 +987,22 @@ secondary hits of Bear Trap and Herald of Ice, Reap's damage over time debuff an
 damaging-ailment application behind the ailment rows (Protocol 20 §3); the ledger's 169 `pending` audit states, which
 are audit coverage, not missing rows.
 
+## Current-main admission reconciliation
+
+The private integration of main `5d5b5150`, PR #318 `ff61e937` and ordinary Inquisitor retains main #361's host admission.
+An unmet socketed gem requirement deactivates its host, including its other socketed skills and equipment sources.
+Restoring the qualifying attribute source, or removing the unmet gem, restores the qualified host and its skills.
+The selected-support regressions now check both refusal and recovery, retaining ordinary actor/default-attack controls.
+Percentage-attribute coverage also checks removing and reinserting the unmet gem at unchanged attributes.
+
+The shared combat-contact fixture supplies actual raw attributes before equipment resolution.
+Its former final `Pools` attribute overlays could not qualify equipment under current-main admission.
+A separate negative/positive regression removes and restores those raw inputs, checking host and skill availability
+without changing the socketed items.
+The client-predicted projectile test supplies the existing captured critical-roll argument to the updated helper.
+These fixture migrations do not bypass production admission or remove its negative assertions.
+Their automated results do not extend the earlier native validation to the combined branch.
+
 ## Remaining review and implementation
 
 Continue from the exact inventory, tracing each stat through raw collection, derivation, publication and gameplay.

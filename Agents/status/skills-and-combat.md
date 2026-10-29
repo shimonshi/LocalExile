@@ -709,9 +709,9 @@ and can require explicit recipes.
   Unsupported Vaal casts are refused before action echoes or cooldown reservation, including effective zero cost.
   No executor, Rage payment or SGP countdown is added.
   See [27-vaal-souls.md](../docs/protocol/27-vaal-souls.md).
-- Aura restoration bootstrap fix: socketed gem requirements no longer deactivate their entire host item during pool
-  initialization.
-  Equipment contributes attributes before individual gem validation;
+- Aura restoration and gem admission use raw equipment/attribute inputs during pool initialization.
+  An unmet socketed gem requirement deactivates its host, following current-main admission rules.
+  Removing that gem or restoring its qualifying source reactivates the same host and skill identities;
   saved auras remain candidates on town/hideout round trips.
   Regression covers fresh-connection Precision/Clarity equipment and all 17 supported self auras.
   Live retest pending.
