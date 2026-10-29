@@ -447,6 +447,7 @@ partial class Program
         CarryCharges(conn, r.Ticket);
         CarryFortification(conn, r.Ticket);
         CarryAntiquarian(conn, r.Ticket);
+        CarryInquisitor(conn, r.Ticket);
         CarryRage(conn, r.Ticket);
         CarryVaalSouls(conn, r.Ticket);
         conn.InvalidateIncomingHits(); // Recent enemy contacts never cross an area connection.

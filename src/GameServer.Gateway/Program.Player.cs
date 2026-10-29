@@ -247,6 +247,7 @@ partial class Program
         var own = skillId == 0 ? new Dictionary<uint, int>() : SupportedSkill(conn, skillId).Stats;
         int speed = CastSpeedPct(CharacterPlayerStats(conn));
         if (Stats.Key("base_cast_speed_+%") is uint k) speed += own.GetValueOrDefault(k);
+        speed = InquisitorCastSpeed(conn, effect, speed);
         return SpellCastTiming.ForSkill(SkillsFor(conn), effect, speed)?.DurationMilliseconds is int duration
             ? (int)Math.Min(int.MaxValue, Math.Ceiling(duration / PlayerActionFactor(conn))) : null;
     }
@@ -406,6 +407,7 @@ partial class Program
                 await SendCharacterStats(remote, stream, ciphers, conn, "elemental ailments changed");
             }
             await SendAntiquarian(remote, stream, ciphers, conn);
+            await SendInquisitor(remote, stream, ciphers, conn);
             await SendRecentEnemyHits(remote, stream, ciphers, conn);
             await PushOutOfCollision(remote, stream, ciphers, conn);
             var rf = conn.RighteousFire;
@@ -591,7 +593,7 @@ partial class Program
                     continue;
                 }
                 if (!rf.Auras.ContainsKey(id)) { rf.Auras[id] = conn.NextBuff; entered.Add((id, conn.NextBuff++)); }
-                var (damage, carry) = MonsterBurn(m, damageOverTime, seconds);   // its mods' fire resistance
+                var (damage, carry) = MonsterBurn(m, damageOverTime, seconds, conn);   // its mods' fire resistance
                 m.Burn = carry;
                 if (damage == 0) continue;
                 (m.Life, bool stageStarts) = TakeDamageLocked(m, damage);
@@ -763,6 +765,7 @@ partial class Program
         var cls = SkillsFor(conn).ClassFor(classRow);
         // Keep the ticket's remaining Rage timers frozen while the destination loads (before 0x7d).
         RestoreRage(conn);
+        RestoreInquisitor(conn);
         RestoreVaalSouls(conn);
         RestoreAntiquarian(conn);
         conn.Ward.SetMaximum(conn.Pools.Ward);

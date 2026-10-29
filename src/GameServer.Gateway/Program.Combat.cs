@@ -41,6 +41,7 @@ partial class Program
             conn.ChannelSkill = skill;
             conn.ChannelSkillSequence = sequence;
             started = (action, x, y);
+            InquisitorSkillUsed(conn, attack: true, spell: false);
             return true;
         }
     }
@@ -140,6 +141,7 @@ partial class Program
             Console.WriteLine($"[gateway] {remote} attack on 0x{use.TargetId:x} out of reach: {Dist(stop, target):0.0} > {weapon.Range}");
             return;
         }
+        InquisitorSkillUsed(conn, attack: true, spell: false);
         var actionBytes = InstanceProtocol.ActionStarted(PlayerId, stop.X, stop.Y, target.X, target.Y, use.SkillId, use.Sequence, use.Flags, targetObjectId: use.TargetId);
         string actionLog = $"0x01ab player skill 0x{use.SkillId:x4} on monster 0x{use.TargetId:x} ({m.Label}, life {m.Life}/{m.MaxLife}), attack time {duration:0.000} s";
         if (bow)
@@ -230,7 +232,7 @@ partial class Program
                 new DamageRange(Math.Floor(stored), Math.Floor(stored))) : ownRolled;
             critical = RollCriticalStrike(conn, conn.Pools.AttackCriticalStrikeChance, ownPenetration);
             int criticalMultiplier = CriticalMultiplierOn(m, AttackCriticalMultiplier(conn, player));
-            (damage, resistance) = MonsterDamage(m, rolled, critical, attack: true, resistanceMods, pen, gambler.InvertsResistance(Random.Shared));
+            (damage, resistance) = MonsterDamage(m, rolled.Scale(InquisitorAttackFactor(conn)), critical, attack: true, resistanceMods, pen, gambler.InvertsResistance(Random.Shared), conn);
             if (critical) damage = DamageModel.CriticalDamage(damage, criticalMultiplier);
             FortificationOnHitLocked(conn, m, RawFortificationDamage(ownRolled, critical, criticalMultiplier),
                 WeaponProfileFor(conn, activeSet: true).Melee, player, ownPenetration);
@@ -476,6 +478,7 @@ partial class Program
             {
                 if (!Current()) return false;
                 paid = PayMana(conn, skillId, out cost);
+                if (paid) InquisitorSkillUsed(conn, SkillsFor(conn).IsAttack(gem.Effect), SkillsFor(conn).IsSpell(gem.Effect), SkillsFor(conn).IsInstant(gem.Effect));
                 if (paid && Supports.Of(gem.Effect)?.Types.Contains(47) == true)
                 {
                     channelGeneration = ++conn.ChannelGeneration;
@@ -872,7 +875,7 @@ partial class Program
                 var rolled = (gambler with { DamageMorePct = 0 }).RollOutgoingHit(sweepHit, Random.Shared);
                 critical = RollCriticalStrike(conn, criticalChance, skillStats, attack: !spell);
                 int multiplier = CriticalMultiplierOn(m, sweepMultiplier);
-                (damage, resistance) = MonsterDamage(m, rolled, critical, attack: !spell, mods, pen, gambler.InvertsResistance(Random.Shared));
+                (damage, resistance) = MonsterDamage(m, rolled, critical, attack: !spell, mods, pen, gambler.InvertsResistance(Random.Shared), conn);
                 if (critical) damage = DamageModel.CriticalDamage(damage, multiplier);
                 applied = ApplyMonsterHitLocked(conn, m, damage);
                 if (applied is { StageStarts: true } staged)
@@ -945,7 +948,7 @@ partial class Program
 
     // Resolve an already-rolled packet using its single critical draw; target damage taken follows mitigation.
     internal static (int Damage, string? Resistance) MonsterDamage(SpawnedMonster m, DamagePacket rolled,
-        bool critical, bool attack, HitResistances.Mods mods, Penetration.PerType pen = default, bool invertElemental = false)
+        bool critical, bool attack, HitResistances.Mods mods, Penetration.PerType pen = default, bool invertElemental = false, ClientState? owner = null)
     {
         var described = new List<string>();
         var strike = new HitResistances.Strike(Critical: critical, Attack: attack);
@@ -956,7 +959,7 @@ partial class Program
             double effective = HitResistances.FinalValue(type, value, strike, mods, invertElemental);
             return range.Scale(Math.Max(0, 1 - effective / 100));
         });
-        return (MonsterTakesMitigated(m, mitigated, spell: !attack),
+        return (MonsterTakesMitigated(m, mitigated, spell: !attack, owner),
             described.Count > 0 ? string.Join(", ", described) : null);
     }
 

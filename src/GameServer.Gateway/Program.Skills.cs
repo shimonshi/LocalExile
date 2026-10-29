@@ -159,6 +159,7 @@ partial class Program
         int FlaskGet(string name) => Stats.Key(name) is uint k ? stats.GetValueOrDefault(k) : 0;
         UtilityFlasks.AddRawStats(stats, UtilityStats(conn, FlaskGet).Concat(conn.FlaskGrounds.PlayerStats()), Stats);
         WithRage(conn, stats);
+        WithInquisitorStats(conn, stats);
         // The character panel's sums of base forms (PanelStats); a stat /set_stat set keeps its value.
         Dictionary<uint, int> dev;
         lock (conn.Monsters) dev = new(conn.PlayerStats);
@@ -182,6 +183,7 @@ partial class Program
                 stats[regen] = (int)Math.Clamp((long)stats.GetValueOrDefault(regen)
                     + value.LifeRegenerationPerMinutePercent(session.RegenPerStack), int.MinValue, int.MaxValue);
         }
+        WithInquisitorRegeneration(conn, stats);
         var (mainLocal, offLocal) = HandLocalStats(conn);
         foreach (var (stat, value) in PanelStats.Compute(Get, n => mainLocal.GetValueOrDefault(n), n => offLocal.GetValueOrDefault(n))
             .Concat(PanelStats.FromPools(Get, conn.Pools))
@@ -216,7 +218,7 @@ partial class Program
         // agrees with the damage the server applies. Only the main hand: the server attacks with it. Those rows are gated by
         // skill_uses_main_hand, which nothing sent before, so the numbers alone would leave them blank.
         if (Stats.Key("skill_uses_main_hand") is uint usesMainHand && !devSet.Contains(usesMainHand)) stats[usesMainHand] = 1;
-        var attack = AttackHit(WeaponFor(conn), stats, MeleeAttack(conn));
+        var attack = AttackHit(WeaponFor(conn), stats, MeleeAttack(conn)).Scale(InquisitorAttackFactor(conn));
         foreach (var (stat, value) in PanelStats.HandDamage(attack, "main_hand"))
             if (Stats.Key(stat) is uint key && !devSet.Contains(key)) stats[key] = value;
         var ailments = conn.ElementalAilments.Snapshot(conn.Clock.Elapsed.TotalSeconds);
@@ -412,9 +414,11 @@ partial class Program
             // The native spell action divides virtual BASE time by cast speed itself. Keep the catalog base
             // intact; only the panel's final casts-per-second stat is adjusted here.
             int supportCastSpeed = Stats.Key("base_cast_speed_+%") is uint cs ? own.GetValueOrDefault(cs) : 0;
-            if (SpellCastTiming.ForSkill(SkillsFor(conn), effect, CastSpeedPct(stats) + supportCastSpeed) is { } spellTiming)
+            if (SpellCastTiming.ForSkill(SkillsFor(conn), effect, InquisitorCastSpeed(conn, effect, CastSpeedPct(stats) + supportCastSpeed)) is { } spellTiming)
             {
                 spellTiming.ApplyTo(stats, Stats);
+                if (Stats.Key("cast_speed_+%") is uint inquisitorSpeed)
+                    stats[inquisitorSpeed] = InquisitorCastSpeed(conn, effect, CastSpeedPct(stats) + supportCastSpeed);
             }
             // Preserve the legacy non-spell/attack display path; attack timing is outside this fix.
             else if ((CastSpeedPct(stats) + supportCastSpeed) is int castSpeed and not 0 && SkillsFor(conn).CastMs(effect) is int castMs and > 0)

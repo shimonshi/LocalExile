@@ -338,6 +338,7 @@ partial class Program
                 var rolled = gambler.RollIncomingHit(a.Damage, conn.IncomingHitRandom);
                 rolled = MonsterModHit(m, rolled, conn.PlayerLife, conn.PlayerMaxLife, conn.IncomingHitRandom, out monsterCritical,
                     () => SelfCriticalReduction(conn));   // its crit, Executioner's
+                rolled = InquisitorEnemyDamage(conn, m, rolled);
                 var mitigated = gambler.MitigateIncomingHit(rolled, type =>
                     new DamageModel.ResistanceValue(Resistance(conn, type), MaxResistance(conn, type)), conn.IncomingHitRandom);
                 var immune = PlayerImmunities(conn);

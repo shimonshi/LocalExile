@@ -76,6 +76,14 @@ partial class Program
                     foreach (string kind in new[] { "attack", "spell" })
                         if (Stats.Key($"{kind}_{bound}_added_{type}_damage") is uint target)
                             own[target] = own.GetValueOrDefault(target) + damage;
+        if (SkillsFor(conn).IsSpell(selected.Effect) && !SkillsFor(conn).IsAttack(selected.Effect))
+        {
+            var fanatic = InquisitorFanaticism(conn, selected.Effect);
+            if (Stats.Key("mana_cost") is uint mana && own.TryGetValue(mana, out int cost))
+                own[mana] = (int)Math.Clamp(decimal.Floor(cost * fanatic.CostFactor), 0, int.MaxValue);
+            if (Stats.Key("spell_area_of_effect_+%") is uint area)
+                own[area] = own.GetValueOrDefault(area) + fanatic.AreaIncreasePct;
+        }
         if (SkillsFor(conn).IsAura(selected.Effect, supports.Select(s => s.Effect.Row)))
             own[OwnAuraRestriction.BaseAura] = 1;
         own[OwnAuraRestriction.Aura] = OwnAuraRestriction.IsAura(own) ? 1 : 0;
@@ -139,6 +147,17 @@ partial class Program
         else if (area is false) types.Remove(7);
         var plan = SkillHitPlan.ForSkill(SkillsFor(conn), gem.Effect, gem.Level, gem.Quality);
         if (!plan.CanHit) return GameServer.Core.World.DamagePacket.Empty;
+        if (!attack)
+        {
+            var added = InquisitorBattlemage(conn, Get);
+            foreach (var (type, range) in added.Components)
+            {
+                string slug = GameServer.Core.World.DamageTypes.Name(type).ToLowerInvariant();
+                foreach (var (bound, amount) in new[] { ("minimum", range.Min), ("maximum", range.Max) })
+                    if (Stats.Key($"spell_{bound}_added_{slug}_damage") is uint key)
+                        stats[key] = (int)Math.Clamp(stats.GetValueOrDefault(key) + amount, int.MinValue, int.MaxValue);
+            }
+        }
         var hit = attack
             ? SpellDamage.WithEffectiveness(SupportedAttackDamage.Hit(WeaponFor(conn), Get, types), SkillsFor(conn).DamageEffectiveness(gem.Effect, gem.Level))
             : SpellDamage.Packet(plan.SpellBase, Get, AddedEffectiveness(conn, gem.Effect, gem.Level));
@@ -146,7 +165,7 @@ partial class Program
         hit = GemSupportDamage.Scale(hit, modifiers, types, afterConversion: false);
         hit = hit.Convert(DamageStats.Conversion(stats, Stats, attack));
         hit = GemSupportDamage.Scale(hit, modifiers, types, afterConversion: true);
-        if (attack) hit = RageStats.ApplyAttack(hit, Get);
+        if (attack) hit = RageStats.ApplyAttack(hit, Get).Scale(InquisitorAttackFactor(conn));
         return suppress ? new SkillDamageContext(plan.Kind, caster).Hit(hit) : hit;
     }
 
@@ -175,7 +194,9 @@ partial class Program
                 + AttackBaseCriticalStrike.IncreasedSum(weapon, name => Own(name));
             return GameServer.Core.World.DamageModel.CriticalStrikeChancePerMyriad(totalBase, increased);
         }
-        return SpellCriticalStrike.Chance((SkillsFor(conn).SpellCritChance(gem.Effect, gem.Level) ?? 0)
+        var main = WeaponProfileFor(conn, activeSet: true);
+        return SpellCriticalStrike.Chance((InquisitorOffense.SpellBase(SkillsFor(conn).SpellCritChance(gem.Effect, gem.Level),
+            main.Unarmed ? null : main.Critical, Player) ?? 0)
             + Own("additional_base_critical_strike_chance"), Player, Own, conn.Pools.SpellCriticalStrikeChancePct);
     }
 

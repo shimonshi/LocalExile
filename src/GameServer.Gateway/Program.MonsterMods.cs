@@ -85,9 +85,16 @@ partial class Program
     internal static int MonsterTakesRolled(SpawnedMonster m, DamagePacket rolled, bool spell, Penetration.PerType pen = default)
         => MonsterTakesMitigated(m, DamageModel.Mitigate(rolled, type => MonsterHitResistance(m, type, pen)), spell);
 
-    internal static int MonsterTakesMitigated(SpawnedMonster m, DamagePacket mitigated, bool spell)
+    internal static int MonsterTakesMitigated(SpawnedMonster m, DamagePacket mitigated, bool spell, ClientState? owner = null)
     {
         var e = m.Mods.Effects;
+        if (owner is not null)
+        {
+            var reduced = mitigated.Select((type, range) => range.Scale(type == DamageType.Physical ? 1 - e.PhysicalReduction / 100d : 1));
+            var taken = InquisitorTargetDamage(owner, m, reduced);
+            double less = spell ? Math.Max(0, 1 + e["rare_monster_mod_spell_damage_taken_+%_final"] / 100d) : 1;
+            return (int)Math.Round(taken.MinTotal * less);
+        }
         double physical = mitigated[DamageType.Physical].Min;
         double total = mitigated.MinTotal - physical * e.PhysicalReduction / 100.0;
         return (int)Math.Round(total * e.DamageTaken(spell));
@@ -117,10 +124,11 @@ partial class Program
     /// <summary>One burn tick on a monster (Righteous Fire, fire damage over time): less its fire resistance and its
     /// damage taken. Spell Resistant counts for hits only: its stat has no description saying it covers damage over
     /// time.</summary>
-    internal static (int Damage, double Carry) MonsterBurn(SpawnedMonster m, DamageOverTime burn, double seconds)
+    internal static (int Damage, double Carry) MonsterBurn(SpawnedMonster m, DamageOverTime burn, double seconds, ClientState? owner = null)
     {
         var e = m.Mods.Effects;
-        double factor = (100 - DamageModel.Capped(e.Resistance(burn.Type), MonsterModEffects.MaxResistance)) / 100.0 * e.DamageTaken(spell: false);
+        double taken = owner is not null && burn.Type == DamageType.Fire ? InquisitorFireTaken(owner, m) : e.DamageTaken(spell: false);
+        double factor = (100 - DamageModel.Capped(e.Resistance(burn.Type), MonsterModEffects.MaxResistance)) / 100.0 * taken;
         return (burn with { DamagePerSecond = burn.DamagePerSecond * factor }).Tick(seconds, m.Burn);
     }
 
