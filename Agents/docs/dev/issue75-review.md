@@ -989,7 +989,7 @@ are audit coverage, not missing rows.
 
 ## Current-main admission reconciliation
 
-The private integration of main `5d5b5150`, PR #318 `ff61e937` and ordinary Inquisitor retains main #361's host admission.
+The private reconciliation of main `5d5b5150` and PR #318 `ff61e937` retains main #361's host admission.
 An unmet socketed gem requirement deactivates its host, including its other socketed skills and equipment sources.
 Restoring the qualifying attribute source, or removing the unmet gem, restores the qualified host and its skills.
 The selected-support regressions now check both refusal and recovery, retaining ordinary actor/default-attack controls.
