@@ -63,7 +63,8 @@ Part of [Status](../Status.md); what to build next in this area is in
 
 - Ordinary Inquisitor has server consumers for all eight notable nodes and production Gateway regression coverage.
   Twenty-seven native checks cover its ordinary lifecycle, selected skill effects, actual payments and ES recovery.
-  Whole-class native acceptance, exact ground departure timing and idle Fanatic charge lifetime remain unverified.
+  Accepted ground departures, natural arrivals and teleports have automated timing and native-sender coverage.
+  Whole-class native acceptance and idle Fanatic charge lifetime remain unverified.
   The exact PR #318 composition retains incompatible current-main host/gem admission expectations and is not ready.
   Native Labyrinth acquisition remains separate; the class uses the original ordinary graph.
   Code: `Program.Inquisitor.cs`, `InquisitorOffense.cs`, `InquisitorCombatState.cs`, `InquisitorGround.cs`.

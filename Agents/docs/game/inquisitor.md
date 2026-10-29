@@ -14,7 +14,7 @@ Native Labyrinth/Altar acquisition remains issue #151; the development commands 
 | Augury of Penitence | 40059 | Hostile living enemies within 60 cells take increased elemental damage and deal 8% less elemental damage |
 | Instruments of Justice | 3154 | Main-hand weapon local critical base replaces the spell base before skill-added critical chance and increases |
 | Sanctuary | 39790 | Radius-18 stationary Consecrated Ground, actual life regeneration/curse mitigation and increased enemy damage taken |
-| Pious Path | 32816 | Four-second per-recipient effect linger; life regeneration also feeds the owner's actual ES regeneration |
+| Pious Path | 32816 | Four-second per-recipient effect linger; life regeneration also feeds the owner's additional ES recovery |
 | Instruments of Virtue | 19417 | Local main-hand weapon damage added to spells before effectiveness/scaling/conversion; recent manual spells give up to 30% more attack damage |
 | Instruments of Zeal | 13851 | Periodic Fanatic charges from attacks; maximum charges grant timed Fanaticism, with self-cast spell speed, cost and area consumers |
 
@@ -38,6 +38,7 @@ The pinned `Metadata/StatDescriptions/stat_descriptions.txt` says Fanaticism las
 The underlying stat name still contains `for_4_seconds`; its name is not a duration source.
 The extracted node grants three maximum Fanatic charges in the ordinary mode and five in Ruthless.
 The buff grants self-cast spells 75% more cast speed, 75% less cost and 75% increased area.
+Active equipped-item buff effect scales all three magnitudes, with developer replacements applied to the raw total.
 It does not speed up attacks.
 The manual skill admission path records attacks and non-instant spell uses; triggered spells are excluded.
 The pausable world clock governs history, periodic gains and effect expiry.
@@ -49,6 +50,11 @@ Pious Path keeps effects on recipients after they leave; it does not leave a sta
 Owner-created Sulphur ground participates without duplicating its numerical regeneration.
 Its native owner buff and the stationary-ground buff have separate ownership, with one displayed ground buff at a time.
 Enemy observations run on the player tick, while damage independently checks current hostility, life and distance.
+Generic `PlayerWalk.Changing` and `Changed` notifications observe ground on both sides of accepted motion mutations.
+A short walk between ticks therefore records departure and arrival instead of appearing permanently stationary.
+Natural arrival starts at `ArrivesAt` only when the previous observation was moving with unchanged live sources.
+New allocations and resurrection start their effects when observed rather than at an older arrival.
+Relocating stationary ground closes old enemy recipients at the teleport time, before the next target query.
 The stationary ground uses the existing extracted Consecrated Ground art.
 Pious Path copies regeneration, including the existing temporary regeneration sources; it does not copy flask recovery.
 This is additional ES recovery, not base ES regeneration: ES regeneration increases do not scale it again.
@@ -101,8 +107,10 @@ Its read-only stat probe is `scripts/re/frida/trace-inquisitor-stats.js`.
 The existing execution engines still bound the class: unsupported triggered skills, totems and allied-player/minion
 recovery do not become supported by forwarding Inquisitor stats.
 Fanatic charges' idle lifetime needs an independent native/reference check before claiming exact retail parity.
-Ground observation and resource-rate refresh follow the existing player tick; exact sub-tick departure recovery has
-not been independently accepted.
+Neither the pinned buff rows nor PoB's configured Fanaticism condition establishes partial-charge idle expiry.
+Automated tests cover accepted motion timestamps, short walks, teleport deadlines and native sender removal at four seconds.
+Those sender tests do not start the game client; independent client acceptance remains required.
+The shared resource-rate cache still refreshes on its existing 250 ms boundary.
 
 ## Ownership and integration
 

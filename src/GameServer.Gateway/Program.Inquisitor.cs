@@ -22,10 +22,10 @@ partial class Program
     static readonly ConditionalWeakTable<ClientState, InquisitorSession> Inquisitors = new();
     static InquisitorSession InquisitorOf(ClientState conn) => Inquisitors.GetValue(conn, _ => new());
 
-    // Only durable allocated sources and developer replacements: never recurse through the final stat builder.
+    // Raw active equipment/passive sources and developer replacements, before the final Inquisitor projection.
     static Dictionary<uint, int> InquisitorInputs(ClientState conn)
     {
-        var sources = PassivesFor(conn).Stats(conn.Passives.Concat(conn.MainAscendancy.Allocated), conn.MasteryEffects);
+        var sources = CharacterStatSources(conn).Stats;
         foreach (var (key, value) in conn.PlayerStats) sources[key] = value;
         return sources;
     }
@@ -36,11 +36,27 @@ partial class Program
         double now = ProjectileWorldTime(conn);
         var state = InquisitorOf(conn);
         bool alive = conn.PlayerLife > 0 && !conn.Closed && !conn.RageRetired;
-        state.Ground.Observe(now, conn.Walk.Position(now), now < conn.Walk.ArrivesAt, alive,
-            InquisitorGround.Sources.From(Get), conn.FlaskGrounds.Covers(FlaskGrounds.Kind.ConsecratedGround, conn.Walk.Position(now)));
+        ObserveInquisitorGround(conn, state.Ground, conn.Walk, now, alive, InquisitorGround.Sources.From(Get));
         var inputs = InquisitorCombatState.Inputs.From(Get, fanaticismSeconds: 5);
         if (!alive) state.Combat.Clear();
         return state.Combat.Read(now, inputs);
+    }
+
+    static void ObserveInquisitorGround(ClientState conn, InquisitorGround ground, PlayerWalk walk, double now,
+        bool alive, InquisitorGround.Sources sources) => ground.Observe(now, walk.Position(now), now < walk.ArrivesAt,
+        alive, sources, conn.FlaskGrounds.Covers(FlaskGrounds.Kind.ConsecratedGround, walk.Position(now)),
+        stationarySince: walk.ArrivesAt);
+
+    // Both sides matter: the old walk may have arrived since its last tick, then this order starts a new one.
+    internal static void InquisitorMotionChanged(ClientState conn, PlayerWalk walk, double now)
+    {
+        lock (conn.Monsters)
+        {
+            var sources = InquisitorInputs(conn);
+            int Get(string name) => Stats.Key(name) is uint key ? sources.GetValueOrDefault(key) : 0;
+            ObserveInquisitorGround(conn, InquisitorOf(conn).Ground, walk, now,
+                conn.PlayerLife > 0 && !conn.Closed && !conn.RageRetired, InquisitorGround.Sources.From(Get));
+        }
     }
 
     internal static void InquisitorSkillUsed(ClientState conn, bool attack, bool spell, bool instant = false)
@@ -81,10 +97,11 @@ partial class Program
     {
         lock (conn.Monsters)
         {
-            var value = ObserveInquisitor(conn, InquisitorInputs(conn));
+            var sources = InquisitorInputs(conn);
+            var value = ObserveInquisitor(conn, sources);
             return InquisitorOffense.Fanaticism(value.Fanaticism(ProjectileWorldTime(conn)),
                 SkillsFor(conn).IsSpell(effect) && !SkillsFor(conn).IsAttack(effect),
-                Stats.Key("buff_effect_on_self_+%") is uint buff ? InquisitorInputs(conn).GetValueOrDefault(buff) : 0);
+                Stats.Key("buff_effect_on_self_+%") is uint buff ? sources.GetValueOrDefault(buff) : 0);
         }
     }
 
