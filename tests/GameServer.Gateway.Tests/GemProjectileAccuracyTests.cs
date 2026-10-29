@@ -149,8 +149,13 @@ public partial class ConditionalCriticalGatewayTests
         f.Conn.AttackAccuracyRandom = accuracy;
         var packet = f.Hit;
         uint firstObject = f.Conn.NextObjectId;
+        var planned = f.CaptureProjectileUse();
+        Assert.Equal(3, planned.Profile.Count);
+        Assert.True(Assert.IsType<ProjectileOffense>(planned.Payload).ClientPredicted);
         await f.Launch();
-        Assert.Equal(firstObject + 3, f.Conn.NextObjectId);
+        // Main #361 lets the native client draw its volley; all three server-simulated primaries therefore
+        // allocate no duplicate server object, while their common hit ledger still permits only one hit.
+        Assert.Equal(firstObject, f.Conn.NextObjectId);
         Assert.Equal((uint)Math.Round(packet.MinTotal * f.Multiplier / 100.0), f.Target.MaxLife - f.Target.Life);
         Assert.Equal(1, critical.Calls);
         Assert.Equal(0, accuracy.Calls);
