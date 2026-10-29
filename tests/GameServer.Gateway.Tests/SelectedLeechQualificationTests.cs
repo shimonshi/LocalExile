@@ -21,19 +21,21 @@ public sealed partial class AscendancyGatewayIntegrationTests
     [InlineData("life", "spell")]
     [InlineData("mana", "attack")]
     [InlineData("energy_shield", "spell")]
-    public void Leech_support_requirement_changes_refresh_selected_sources_without_affecting_other_skills(string pool, string type)
+    public void Leech_support_requirement_changes_remove_host_skills_then_restore_supported_sources(string pool, string type)
     {
         var spec = LeechSpec(pool, type);
         using var game = new SelectedMiscCharacter(spec);
         game.Socket();
         game.AssertSupported(game.Read());
         Assert.Equal(spec.Actor + spec.Own, game.Read().Get(spec.Alias));
+        ushort selected = game.Read().Skill.Id;
+        ushort other = game.Read(other: true).Skill.Id;
         game.SetQualifier(false);
         Assert.NotNull(ProgramValue<string?>("GemRequirementsUnmet", game.State, game.SupportGem));
-        Assert.Empty(game.Read().Applied);
-        Assert.Equal(spec.Actor, game.Read().Get(spec.Alias));
+        game.AssertHostUnavailable(spec.Actor, selected, other);
         game.SetQualifier(true);
         game.AssertSupported(game.Read());
+        Assert.Equal(selected, game.Read().Skill.Id);
         Assert.Equal(spec.Actor + spec.Own, game.Read().Get(spec.Alias));
         game.AssertControls(spec.Actor);
     }

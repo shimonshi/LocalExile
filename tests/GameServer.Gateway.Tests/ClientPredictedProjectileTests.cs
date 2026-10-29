@@ -38,7 +38,8 @@ public partial class SpellNoDamageTests
         var gems = (IEnumerable<(ushort Id, int Effect, string Name, int Level, int Quality, uint Gem)>)
             Method("GemSkillEffects").Invoke(null, [f.Conn])!;
         var use = (GameServer.Core.Projectiles.ProjectileUse)Method("CaptureGemProjectile").Invoke(null,
-            [f.Conn, runtime.Session, f.Skill, gems.Single(g => g.Id == f.Skill), (100, 32)])!;
+            [f.Conn, runtime.Session, f.Skill, gems.Single(g => g.Id == f.Skill), (100, 32),
+                Method("CaptureSkillCriticalRoll").Invoke(null, [f.Conn, f.Skill])])!;
         Assert.True(Assert.IsType<ProjectileOffense>(use.Payload).ClientPredicted);
     }
 }

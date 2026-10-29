@@ -190,7 +190,7 @@ public sealed partial class AscendancyGatewayIntegrationTests
     }
 
     [Fact]
-    public void A_percentage_source_qualifies_a_real_socketed_gem_without_disabling_its_host_when_the_source_is_removed()
+    public void A_percentage_source_qualifies_a_socketed_gem_and_its_host_and_removal_disables_both()
     {
         using var game = PercentageCharacter();
         var (catalog, inventory) = PercentageEquipment(game);
@@ -204,20 +204,32 @@ public sealed partial class AscendancyGatewayIntegrationTests
         AssertPercentageAttributes(game.State, PercentageRefresh(game), 14, 14, 62);
         Assert.Contains("67 intelligence", ProgramValue<string?>("GemRequirementsUnmet", game.State, gem)!);
         Assert.NotNull(ProgramValue<string?>("GemDisabled", game.State, effect));
-        Assert.DoesNotContain(body.Id, Program.InactiveItems[game.Character]);
+        Assert.Contains(body.Id, Program.InactiveItems[game.Character]);
 
         var source = PercentageRing(catalog, ("intelligence_+%", 10));
         var ring = inventory.Add(7, 0, 0, source);
         AssertPercentageAttributes(game.State, PercentageRefresh(game), 14, 14, 68);
         Assert.Null(ProgramValue<string?>("GemRequirementsUnmet", game.State, gem));
         Assert.Null(ProgramValue<string?>("GemDisabled", game.State, effect));
+        Assert.DoesNotContain(body.Id, Program.InactiveItems[game.Character]);
         Assert.NotNull(inventory.Remove(7, ring.Id));
         AssertPercentageAttributes(game.State, PercentageRefresh(game), 14, 14, 62);
         Assert.NotNull(ProgramValue<string?>("GemDisabled", game.State, effect));
+        Assert.Contains(body.Id, Program.InactiveItems[game.Character]);
+
+        // Removing the unmet gem leaves the same Plate Vest qualified at the unchanged 62 Intelligence.
+        Assert.NotNull(inventory.Change(PlayerInventories.BodyArmour, body.Id,
+            item => item with { Sockets = [new(SocketColour.White)], Links = [1] }));
+        AssertPercentageAttributes(game.State, PercentageRefresh(game), 14, 14, 62);
         Assert.DoesNotContain(body.Id, Program.InactiveItems[game.Character]);
+        Assert.NotNull(inventory.Change(PlayerInventories.BodyArmour, body.Id,
+            item => item with { Sockets = [new(SocketColour.White, gem)], Links = [1] }));
+        AssertPercentageAttributes(game.State, PercentageRefresh(game), 14, 14, 62);
+        Assert.Contains(body.Id, Program.InactiveItems[game.Character]);
         inventory.Add(7, 0, 0, source);
         AssertPercentageAttributes(game.State, PercentageRefresh(game), 14, 14, 68);
         Assert.Null(ProgramValue<string?>("GemDisabled", game.State, effect));
+        Assert.DoesNotContain(body.Id, Program.InactiveItems[game.Character]);
     }
 
     [Fact]
