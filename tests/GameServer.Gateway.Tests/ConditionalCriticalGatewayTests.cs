@@ -147,6 +147,18 @@ public partial class ConditionalCriticalGatewayTests
                     false, (ushort)0, Conn.ActionCount, null, null, 1.0, 0u, null, null])!).WaitAsync(TimeSpan.FromSeconds(5));
         }
 
+        public ProjectileUse CaptureProjectileUse((int X, int Y)? aim = null)
+        {
+            var session = Conn.ProjectileRuntime ??= new("contact-fixture", writer.GetStream(), ciphers, Conn);
+            var gems = (IEnumerable<(ushort Id, int Effect, string Name, int Level, int Quality, uint Gem)>)
+                typeof(Program).GetMethod("GemSkillEffects", BindingFlags.Static | BindingFlags.NonPublic,
+                    binder: null, types: [typeof(ClientState)], modifiers: null)!.Invoke(null, [Conn])!;
+            return (ProjectileUse)Method("CaptureGemProjectile").Invoke(null,
+                [Conn, session, Skill, gems.Single(g => g.Id == Skill),
+                    aim ?? Target.Walk.Position(Conn.Clock.Elapsed.TotalSeconds),
+                    Method("CaptureSkillCriticalRoll").Invoke(null, [Conn, Skill])])!;
+        }
+
         public async Task Launch((int X, int Y)? aim = null)
         {
             // Release/contacts are simulation work; draining native output no longer drives gameplay time.

@@ -108,6 +108,10 @@ public partial class ConditionalCriticalGatewayTests
     {
         using var f = new Contact(new Draws(), "BurningArrow", "Crude Bow");
         f.Set("global_cannot_crit", 1);
+        // The shared fixture now qualifies gear through real raw attributes. Use a qualifying Dexterity below
+        // the reference-monster hit cap so this test still measures the support's strict improvement.
+        f.Set("base_dexterity", 50 - Program.Skills.ClassFor(f.Conn.ClassRow).Dexterity);
+        f.Refresh();
         f.Conn.Pools = f.Conn.Pools with
         { Accuracy = AccuracyRating.Calculate(f.Conn.Pools.AccuracyBase, f.Conn.Pools.AccuracyPct) };
         var inventory = PlayerInventories.For(f.Conn.Character!, Program.Items);
