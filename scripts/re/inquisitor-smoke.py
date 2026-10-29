@@ -78,6 +78,9 @@ def self_check():
     return {'offlineSelfCheck':'passed','clientAccess':False,'paths':{str(n):path(n) for n in (53884,32816,40059,3154)}}
 
 def run(options):
+    # Load Frida before large table allocations/subprocess work; late extension loading crashes Python 3.13 on Windows.
+    sys.path.insert(0,str(ROOT/'scripts/dev'))
+    import client_control
     if options.private_file is None: raise ValueError('--private-file is required for --run')
     actual=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip()
     assert options.expected_head and actual==options.expected_head,'Pin the exact checkout HEAD before runtime access'
@@ -93,8 +96,6 @@ def run(options):
     def record(name,**evidence):
         results.append({'check':name,**evidence});persist();print(json.dumps({'check':name,'passed':len(results)}),flush=True)
     keys,path,raw,class_no=data()
-    sys.path.insert(0,str(ROOT/'scripts/dev'))
-    import client_control
     source=extend_api(client_control.AGENT.read_text(encoding='utf-8'))
     source=source.replace('args[0].add(0x34).writeByteArray(value.digest);', 'args[0].add(0x34).writeByteArray(value.digest); args[0].add(0x94).writeU8(0); args[0].add(0x95).writeU8(0);')
     client_control.AGENT=SimpleNamespace(read_text=lambda **_:source)
