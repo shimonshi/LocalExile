@@ -32,7 +32,8 @@ Items keep the Roadmap's priority groups, and are in rough priority order within
   Current-base tests and exact related-head composition pass; preserve the manual lethal-ignite Recoup resolution
   when composing Whisperer, as recorded in [Gambler](../docs/game/gambler.md).
 - **Known:** ordinary Inquisitor node consumers have automated allocation/refund/reload coverage in issue #363.
-  Complete the [native and integration checklist](../docs/game/inquisitor.md) before whole-class acceptance.
+  Representative native skill/payment/recovery checks pass; reconcile the exact #318/current-main admission conflict.
+  Complete the [remaining native and integration checklist](../docs/game/inquisitor.md) before whole-class acceptance.
   Other ordinary classes still need individual mechanic audits; selection alone is not gameplay implementation.
 - **Start:** quest passive/refund rewards and the native Labyrinth/Altar flow (#151).
   Phrecia play stays gated by default; Gambler's explicit opt-in verifies the separately installed graph read-only.

@@ -62,6 +62,42 @@ five-point refunds, reloads, main-hand critical base, Battlemage damage, recipie
 Client evidence must distinguish received numerical state, accepted actions and actual elapsed/resource behavior.
 Passing these tests alone is not whole-class native acceptance.
 
+### Recorded checks
+
+Production source `187baf840f216e74906484a29243d9495cb41ce5` is based on main
+`5d5b5150e1b2e287c642edcaf75a49d075b9b4fe`.
+The solution builds with zero warnings/errors; Core **353**, Data **34** and Gateway **1291** pass.
+Gateway was run with test-collection parallelism disabled after a load-sensitive chill timer failed in a parallel run.
+The isolated chill check and the complete serial suite pass.
+The 37 Inquisitor checks are included in that Gateway total.
+The local object-type data was regenerated through `extract-data.ps1 -Only object-types` before the final run.
+No production data paths or test working-directory rules were changed.
+
+The received native observations and actual resource checks on this production source comprise:
+
+- Nine ordinary choice/point, Providence, five-point refund, Pious recovery projection, Justice and relog checks.
+  Augury's entry here proves connected allocation only, not enemy damage.
+- Four accepted-bow attack, native Fanatic charge/buff duration, natural expiry and paid-refund checks.
+- Nine manual Fireball checks: actual mana payment, received Battlemage physical damage, Virtue's three stages,
+  expiry/refund, and Fanaticism's actual 1-mana payment versus 5, received cast speed/CPS and increased spell area.
+  The controlled attack comparison explicitly replaces Strength's melee physical damage input with zero.
+  These skill-record checks do not independently time projectile contact or assert outgoing damage on an enemy.
+- Four recovery/persistence preparation checks, including actual Pious ES recovery while ordinary ES regeneration
+  and recharge are disabled and an additional 1000% ES regeneration modifier is present.
+  Paid refund stops the additional recovery.
+- One actual Gateway-process restart check: saved ordinary Providence nodes restore attributes and critical increase.
+
+Gateway DLL SHA-256 for these checks:
+`ecc4b50097dc897a91c32ca6042f25b6f6718d2e978a7e6dc9add8a1ecaa62a9`.
+Logs are separate from source and contain local game/account data; they are not committed.
+The basic lifecycle can be reproduced with `scripts/re/inquisitor-smoke.py` on a fresh isolated Templar, started only
+through `scripts/dev/live.ps1`.
+Its default invocation checks protocol/path assumptions offline; `--run --expected-head <sha> --private-file <json>`
+requires a locally created test account/character and running matching services/database.
+The private JSON contains `account`, `password` and `character`; do not commit it.
+The script does not start services or install game assets.
+Its read-only stat probe is `scripts/re/frida/trace-inquisitor-stats.js`.
+
 The existing execution engines still bound the class: unsupported triggered skills, totems and allied-player/minion
 recovery do not become supported by forwarding Inquisitor stats.
 Fanatic charges' idle lifetime needs an independent native/reference check before claiming exact retail parity.
@@ -78,3 +114,24 @@ Before readiness, recheck exact related heads at stat assembly, spell cost, dama
 In particular, a future life/mana cost engine must apply Fanaticism's less-cost factor before final rounding to both
 cost pools, rather than retaining the current mana-only supported payment approximation.
 Do not call the class complete while native acceptance or its intended integration order remains unverified.
+
+### Exact related-head composition
+
+A disposable checkout composed main `5d5b5150`, PR #318
+`ff61e93791682558d25f4dc609c2217e9245772c`, then Inquisitor `187baf84`.
+The manually resolved private candidate is `baa66da96e2b402fa6d4f70e4d1e3e1fc3fb29f0`.
+It preserves leech's direct-hit type proportions, critical snapshots, off-hand calculations, separate Impale,
+Inquisitor target modifiers and a pre-life-recovery Pious baseline with ES recovery scaling only.
+It builds cleanly and passes Core 389, Data 34 and 38 Inquisitor checks, including a composition-specific regression.
+That is **not** a full combined green result.
+
+An earlier full combined run on `c467777dcb90e510bb336539d4e5f54ef0388550` passed 2471 and failed 125 Gateway checks.
+The final Pious revision's full combined Gateway suite was not repeated while those base incompatibilities remained.
+Main's #361 inactivates a host when a socketed gem fails requirements; #318 expects the qualified host to stay active.
+Ten assertions directly disagree on that policy; 114 contact cases inject final pool attributes without the raw
+requirement inputs now required by main; one projectile reflection adapter has an outdated argument count.
+No tests were weakened to label this combination green.
+The #318 owner must reconcile its current base, admission expectations and fixtures before this sequence is ready.
+Related heads #328 `07699a51`, #333 `7b9e1061` and #339 `e7d4cf43` were inspected, but their combined order remains
+untested behind that first incompatible prerequisite.
+Keep these candidate resolutions private; do not publish an independent overlapping sibling PR or claim readiness.
