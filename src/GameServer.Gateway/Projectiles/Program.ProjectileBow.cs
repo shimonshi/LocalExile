@@ -26,7 +26,7 @@ partial class Program
                     : conn.Pools.AttackCriticalStrikeChance;
                 var captured = OrdinaryBowShot.Capture(WeaponFor(conn), character, SkillsFor(conn).EffectStats(effect, 1), Stats,
                     conn.Pools.Accuracy, criticalChance, conn.Pools.CriticalStrikeMultiplier);
-                var shot = new ProjectileOffense(captured.Hit, false, captured.Accuracy, captured.CriticalChance,
+                var shot = new ProjectileOffense(captured.Hit.Scale(InquisitorAttackFactor(conn)), false, captured.Accuracy, captured.CriticalChance,
                     captured.CriticalMultiplier, "ordinary bow")
                 { SkillStats = SkillsFor(conn).EffectStats(effect, 1).ToDictionary(s => s.Item1, s => s.Item2),
                     Penetration = captured.Penetration, ResistanceMods = captured.ResistanceMods, ImpaleChance = captured.ImpaleChance,

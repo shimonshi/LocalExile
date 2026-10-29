@@ -67,6 +67,8 @@ partial class Program
                     : own.GetValueOrDefault(key) + value;
             }
         double costMultiplier = supports.Aggregate(1.0, (v, s) => v * s.CostMultiplier / 100.0);
+        var inquisitorFanatic = InquisitorFanaticism(conn, selected.Effect);
+        costMultiplier *= (double)inquisitorFanatic.CostFactor;
         foreach (string stat in new[] { "mana_cost", "base_mana_cost" })
             if (Stats.Key(stat) is uint k && own.TryGetValue(k, out int cost)) own[k] = (int)Math.Floor(cost * costMultiplier);
         // Global added damage on support gems applies to this skill, not to the character or other link groups.
@@ -76,6 +78,11 @@ partial class Program
                     foreach (string kind in new[] { "attack", "spell" })
                         if (Stats.Key($"{kind}_{bound}_added_{type}_damage") is uint target)
                             own[target] = own.GetValueOrDefault(target) + damage;
+        if (SkillsFor(conn).IsSpell(selected.Effect) && !SkillsFor(conn).IsAttack(selected.Effect))
+        {
+            if (Stats.Key("spell_area_of_effect_+%") is uint area)
+                own[area] = own.GetValueOrDefault(area) + inquisitorFanatic.AreaIncreasePct;
+        }
         if (SkillsFor(conn).IsAura(selected.Effect, supports.Select(s => s.Effect.Row)))
             own[OwnAuraRestriction.BaseAura] = 1;
         own[OwnAuraRestriction.Aura] = OwnAuraRestriction.IsAura(own) ? 1 : 0;
@@ -144,7 +151,8 @@ partial class Program
     // rows, which apply their own buckets to the same raw packet and conversion. Null when the skill cannot hit.
     sealed record SupportedHitInputs(GameServer.Core.World.DamagePacket Raw, Func<string, int> Get,
         GameServer.Core.World.DamageConversion Conversion, bool Attack, bool Melee, bool Area, bool Projectile,
-        List<(string Name, int Value)> Modifiers, HashSet<int> Types, SkillHitPlan Plan, Dictionary<uint, int> Caster);
+        List<(string Name, int Value)> Modifiers, HashSet<int> Types, SkillHitPlan Plan, Dictionary<uint, int> Caster,
+        double InquisitorAttackMore);
 
     static SupportedHitInputs? SupportedHitInputsFor(ClientState conn, ushort skillId, bool? area = null,
         SkillCatalog.Unarmed? weapon = null)
@@ -160,13 +168,24 @@ partial class Program
         else if (area is false) types.Remove(7);
         var plan = SkillHitPlan.ForSkill(SkillsFor(conn), gem.Effect, gem.Level, gem.Quality);
         if (!plan.CanHit) return null;
+        if (!attack)
+        {
+            foreach (var (type, range) in InquisitorBattlemage(conn, Get).Components)
+            {
+                string slug = GameServer.Core.World.DamageTypes.Name(type).ToLowerInvariant();
+                foreach (var (bound, amount) in new[] { ("minimum", range.Min), ("maximum", range.Max) })
+                    if (Stats.Key($"spell_{bound}_added_{slug}_damage") is uint key)
+                        stats[key] = (int)Math.Clamp(stats.GetValueOrDefault(key) + amount, int.MinValue, int.MaxValue);
+            }
+        }
         var raw = attack
             ? SpellDamage.WithEffectiveness(SupportedAttackDamage.Raw(weapon ?? WeaponFor(conn), Get), SkillsFor(conn).DamageEffectiveness(gem.Effect, gem.Level))
             : DamageStats.RawAdded(plan.SpellBase, Get, spell: true, AddedEffectiveness(conn, gem.Effect, gem.Level));
         var modifiers = gem.Supports.SelectMany(s => s.Stats).Select(s => (Stats.Name(s.Key) ?? "", s.Value)).ToList();
         return new(raw, Get, DamageStats.Conversion(stats, Stats, attack), attack,
             Melee: attack && types.Contains(19), Area: attack ? types.Contains(7) : Get("is_area_damage") != 0,
-            Projectile: attack ? types.Contains(2) : Get("base_is_projectile") != 0, modifiers, types, plan, caster);
+            Projectile: attack ? types.Contains(2) : Get("base_is_projectile") != 0, modifiers, types, plan, caster,
+            attack ? InquisitorAttackFactor(conn) : 1);
     }
 
     static GameServer.Core.World.DamagePacket SupportedHitFor(ClientState conn, ushort skillId, bool suppress, bool? area = null,
@@ -179,7 +198,7 @@ partial class Program
         var hit = PlayerHitDamage.Resolve(inputs.Raw, inputs.Get, inputs.Conversion, spell: !inputs.Attack,
             melee: inputs.Melee, area: inputs.Area, projectile: inputs.Projectile,
             supportModifiers: inputs.Modifiers, skillTypes: inputs.Types);
-        if (inputs.Attack) hit = RageStats.ApplyAttack(hit, inputs.Get);
+        if (inputs.Attack) hit = RageStats.ApplyAttack(hit, inputs.Get).Scale(inputs.InquisitorAttackMore);
         return suppress ? new SkillDamageContext(inputs.Plan.Kind, inputs.Caster).Hit(hit) : hit;
     }
 
@@ -229,7 +248,9 @@ partial class Program
                 + AttackBaseCriticalStrike.IncreasedSum(weapon, name => Own(name));
             return AttackBaseCriticalStrike.ChanceOfBase(basis, increased, Player, Own);
         }
-        return SpellCriticalStrike.Chance(SkillsFor(conn).SpellCritChance(gem.Effect, gem.Level),
+        var main = WeaponProfileFor(conn, activeSet: true);
+        return SpellCriticalStrike.Chance(InquisitorOffense.SpellBase(SkillsFor(conn).SpellCritChance(gem.Effect, gem.Level),
+            main.Unarmed ? null : main.Critical, Player),
             Player, Own, conn.Pools.SpellCriticalStrikeChancePct);
     }
 

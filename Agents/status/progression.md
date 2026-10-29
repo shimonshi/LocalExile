@@ -61,6 +61,12 @@ Part of [Status](../Status.md); what to build next in this area is in
 
 ## Partly working
 
+- Ordinary Inquisitor has server consumers for all eight notable nodes and production Gateway regression coverage.
+  Whole-class native acceptance, exact ground departure timing and idle Fanatic charge lifetime remain unverified.
+  Native Labyrinth acquisition remains separate; the class uses the original ordinary graph.
+  Code: `Program.Inquisitor.cs`, `InquisitorOffense.cs`, `InquisitorCombatState.cs`, `InquisitorGround.cs`.
+  Docs: [node audit, verification and integration limits](../docs/game/inquisitor.md).
+
 - Aristocrat: every node in its installed graph has a server consumer (gem levels and quality, attribute requirements,
   conditional ailment immunity, lowest-attribute damage, granted passive points), with Gateway coverage of legal builds,
   paid refunds and reload. Not yet checked with the real client: that needs the reviewed combined graph installed.
