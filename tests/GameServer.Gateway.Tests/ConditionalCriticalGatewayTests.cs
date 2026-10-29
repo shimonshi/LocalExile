@@ -59,6 +59,9 @@ public partial class ConditionalCriticalGatewayTests
             Set(AttackBaseCriticalStrike.WeaponOverrideStat, 1000);
             Set("extra_critical_rolls_while_on_low_life", 1);
             Set("physical_damage_+%", -100);
+            // These critical/contact tests isolate their added chaos hit. Qualifying real Strength must not
+            // reintroduce weapon physical damage through its separate derived melee-physical increase.
+            Set("melee_physical_damage_+%", 0);
             Set("attack_minimum_added_chaos_damage", 1000);
             Set("attack_maximum_added_chaos_damage", 1000);
             Set("spell_minimum_added_chaos_damage", 1000);
