@@ -6,6 +6,42 @@ public class InquisitorGroundTests
     static readonly InquisitorGround.Sources Pious = new(18, 15, 4000, true);
 
     [Fact]
+    public void Stationary_teleport_closes_old_recipients_at_the_teleport_instead_of_the_next_target_query()
+    {
+        var state = new InquisitorGround();
+        state.Observe(0, (0, 0), false, true, Pious);
+        Assert.Equal(15, state.EnemyDamageTaken(0, 1, (0, 0), true));
+        state.Observe(1, (100, 0), false, true, Pious);
+        Assert.True(state.Covers((100, 0)));
+        Assert.False(state.Covers((0, 0)));
+        Assert.True(state.OwnerAffected(20));
+        Assert.Equal(15, state.EnemyDamageTaken(4.999, 1, (0, 0), true));
+        Assert.Equal(0, state.EnemyDamageTaken(5, 1, (0, 0), true));
+        Assert.Equal(15, state.EnemyDamageTaken(5, 2, (100, 0), true));
+    }
+
+    [Fact]
+    public void Natural_arrival_between_ticks_begins_recovery_at_arrival_with_unchanged_live_sources()
+    {
+        var state = new InquisitorGround();
+        state.Observe(0, (0, 0), true, true, Pious);
+        state.Observe(0.25, (1, 0), false, true, Pious, stationarySince: 0.1);
+        Assert.Equal(1.5, state.MirroredLifeRegeneration(0, 0.25, 10), 8);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Newly_allocated_source_or_resurrection_does_not_backdate_ground_to_an_old_arrival(bool resurrection)
+    {
+        var state = new InquisitorGround();
+        state.Observe(0, (0, 0), true, !resurrection, resurrection ? Pious : default);
+        state.Observe(1, (1, 0), false, true, Pious, stationarySince: 0.1);
+        Assert.Equal(0, state.MirroredLifeRegeneration(0, 1, 10));
+        Assert.Equal(1, state.MirroredLifeRegeneration(1, 1.1, 10), 8);
+    }
+
+    [Fact]
     public void Sanctuary_only_exists_while_stationary_and_checks_the_radius_boundary()
     {
         var state = new InquisitorGround();

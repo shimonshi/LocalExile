@@ -14,7 +14,7 @@ Native Labyrinth/Altar acquisition remains issue #151; the development commands 
 | Augury of Penitence | 40059 | Hostile living enemies within 60 cells take increased elemental damage and deal 8% less elemental damage |
 | Instruments of Justice | 3154 | Main-hand weapon local critical base replaces the spell base before skill-added critical chance and increases |
 | Sanctuary | 39790 | Radius-18 stationary Consecrated Ground, actual life regeneration/curse mitigation and increased enemy damage taken |
-| Pious Path | 32816 | Four-second per-recipient effect linger; life regeneration also feeds the owner's actual ES regeneration |
+| Pious Path | 32816 | Four-second per-recipient effect linger; life regeneration also feeds the owner's additional ES recovery |
 | Instruments of Virtue | 19417 | Local main-hand weapon damage added to spells before effectiveness/scaling/conversion; recent manual spells give up to 30% more attack damage |
 | Instruments of Zeal | 13851 | Periodic Fanatic charges from attacks; maximum charges grant timed Fanaticism, with self-cast spell speed, cost and area consumers |
 
@@ -38,6 +38,7 @@ The pinned `Metadata/StatDescriptions/stat_descriptions.txt` says Fanaticism las
 The underlying stat name still contains `for_4_seconds`; its name is not a duration source.
 The extracted node grants three maximum Fanatic charges in the ordinary mode and five in Ruthless.
 The buff grants self-cast spells 75% more cast speed, 75% less cost and 75% increased area.
+Active equipped-item buff effect scales all three magnitudes, with developer replacements applied to the raw total.
 It does not speed up attacks.
 The manual skill admission path records attacks and non-instant spell uses; triggered spells are excluded.
 The pausable world clock governs history, periodic gains and effect expiry.
@@ -49,6 +50,11 @@ Pious Path keeps effects on recipients after they leave; it does not leave a sta
 Owner-created Sulphur ground participates without duplicating its numerical regeneration.
 Its native owner buff and the stationary-ground buff have separate ownership, with one displayed ground buff at a time.
 Enemy observations run on the player tick, while damage independently checks current hostility, life and distance.
+Generic `PlayerWalk.Changing` and `Changed` notifications observe ground on both sides of accepted motion mutations.
+A short walk between ticks therefore records departure and arrival instead of appearing permanently stationary.
+Natural arrival starts at `ArrivesAt` only when the previous observation was moving with unchanged live sources.
+New allocations and resurrection start their effects when observed rather than at an older arrival.
+Relocating stationary ground closes old enemy recipients at the teleport time, before the next target query.
 The stationary ground uses the existing extracted Consecrated Ground art.
 Pious Path copies regeneration, including the existing temporary regeneration sources; it does not copy flask recovery.
 This is additional ES recovery, not base ES regeneration: ES regeneration increases do not scale it again.
@@ -62,11 +68,49 @@ five-point refunds, reloads, main-hand critical base, Battlemage damage, recipie
 Client evidence must distinguish received numerical state, accepted actions and actual elapsed/resource behavior.
 Passing these tests alone is not whole-class native acceptance.
 
+### Recorded checks
+
+Production source `187baf840f216e74906484a29243d9495cb41ce5` is based on main
+`5d5b5150e1b2e287c642edcaf75a49d075b9b4fe`.
+The solution builds with zero warnings/errors; Core **353**, Data **34** and Gateway **1291** pass.
+Gateway was run with test-collection parallelism disabled after a load-sensitive chill timer failed in a parallel run.
+The isolated chill check and the complete serial suite pass.
+The 37 Inquisitor checks are included in that Gateway total.
+The local object-type data was regenerated through `extract-data.ps1 -Only object-types` before the final run.
+No production data paths or test working-directory rules were changed.
+
+The received native observations and actual resource checks on this production source comprise:
+
+- Nine ordinary choice/point, Providence, five-point refund, Pious recovery projection, Justice and relog checks.
+  Augury's entry here proves connected allocation only, not enemy damage.
+- Four accepted-bow attack, native Fanatic charge/buff duration, natural expiry and paid-refund checks.
+- Nine manual Fireball checks: actual mana payment, received Battlemage physical damage, Virtue's three stages,
+  expiry/refund, and Fanaticism's actual 1-mana payment versus 5, received cast speed/CPS and increased spell area.
+  The controlled attack comparison explicitly replaces Strength's melee physical damage input with zero.
+  These skill-record checks do not independently time projectile contact or assert outgoing damage on an enemy.
+- Four recovery/persistence preparation checks, including actual Pious ES recovery while ordinary ES regeneration
+  and recharge are disabled and an additional 1000% ES regeneration modifier is present.
+  Paid refund stops the additional recovery.
+- One actual Gateway-process restart check: saved ordinary Providence nodes restore attributes and critical increase.
+
+Gateway DLL SHA-256 for these checks:
+`ecc4b50097dc897a91c32ca6042f25b6f6718d2e978a7e6dc9add8a1ecaa62a9`.
+Logs are separate from source and contain local game/account data; they are not committed.
+The basic lifecycle can be reproduced with `scripts/re/inquisitor-smoke.py` on a fresh isolated Templar, started only
+through `scripts/dev/live.ps1`.
+Its default invocation checks protocol/path assumptions offline; `--run --expected-head <sha> --private-file <json>`
+requires a locally created test account/character and running matching services/database.
+The private JSON contains `account`, `password` and `character`; do not commit it.
+The script does not start services or install game assets.
+Its read-only stat probe is `scripts/re/frida/trace-inquisitor-stats.js`.
+
 The existing execution engines still bound the class: unsupported triggered skills, totems and allied-player/minion
 recovery do not become supported by forwarding Inquisitor stats.
 Fanatic charges' idle lifetime needs an independent native/reference check before claiming exact retail parity.
-Ground observation and resource-rate refresh follow the existing player tick; exact sub-tick departure recovery has
-not been independently accepted.
+Neither the pinned buff rows nor PoB's configured Fanaticism condition establishes partial-charge idle expiry.
+Automated tests cover accepted motion timestamps, short walks, teleport deadlines and native sender removal at four seconds.
+Those sender tests do not start the game client; independent client acceptance remains required.
+The shared resource-rate cache still refreshes on its existing 250 ms boundary.
 
 ## Ownership and integration
 
@@ -78,3 +122,24 @@ Before readiness, recheck exact related heads at stat assembly, spell cost, dama
 In particular, a future life/mana cost engine must apply Fanaticism's less-cost factor before final rounding to both
 cost pools, rather than retaining the current mana-only supported payment approximation.
 Do not call the class complete while native acceptance or its intended integration order remains unverified.
+
+### Exact related-head composition
+
+A disposable checkout composed main `5d5b5150`, PR #318
+`ff61e93791682558d25f4dc609c2217e9245772c`, then Inquisitor `187baf84`.
+The manually resolved private candidate is `baa66da96e2b402fa6d4f70e4d1e3e1fc3fb29f0`.
+It preserves leech's direct-hit type proportions, critical snapshots, off-hand calculations, separate Impale,
+Inquisitor target modifiers and a pre-life-recovery Pious baseline with ES recovery scaling only.
+It builds cleanly and passes Core 389, Data 34 and 38 Inquisitor checks, including a composition-specific regression.
+That is **not** a full combined green result.
+
+An earlier full combined run on `c467777dcb90e510bb336539d4e5f54ef0388550` passed 2471 and failed 125 Gateway checks.
+The final Pious revision's full combined Gateway suite was not repeated while those base incompatibilities remained.
+Main's #361 inactivates a host when a socketed gem fails requirements; #318 expects the qualified host to stay active.
+Ten assertions directly disagree on that policy; 114 contact cases inject final pool attributes without the raw
+requirement inputs now required by main; one projectile reflection adapter has an outdated argument count.
+No tests were weakened to label this combination green.
+The #318 owner must reconcile its current base, admission expectations and fixtures before this sequence is ready.
+Related heads #328 `07699a51`, #333 `7b9e1061` and #339 `e7d4cf43` were inspected, but their combined order remains
+untested behind that first incompatible prerequisite.
+Keep these candidate resolutions private; do not publish an independent overlapping sibling PR or claim readiness.

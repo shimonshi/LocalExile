@@ -36,6 +36,7 @@ sealed class InquisitorGround
     readonly Recipient owner = new();
     readonly Dictionary<uint, Recipient> enemies = [];
     bool alive, stationary;
+    double observedAt = double.NegativeInfinity;
     (int X, int Y) position;
 
     public bool HasStationaryGround => alive && stationary && sources.Radius > 0;
@@ -52,17 +53,23 @@ sealed class InquisitorGround
     /// Refunds use the new source vector immediately, so removing Pious Path also removes its old linger.
     /// </summary>
     public void Observe(double now, (int X, int Y) at, bool moving, bool living, Sources value,
-        bool externalOwnGround = false)
+        bool externalOwnGround = false, double? stationarySince = null)
     {
         if (!double.IsFinite(now)) throw new ArgumentOutOfRangeException(nameof(now));
         bool oldGround = HasStationaryGround;
+        bool relocated = oldGround && position != at;
+        // A natural arrival can fall between ticks. Only the unchanged live source that observed the walk
+        // may start at its actual arrival; a freshly allocated source starts when it is first observed.
+        double transitionAt = alive && living && !stationary && !moving && sources == value
+            && stationarySince is double arrival && arrival >= observedAt && arrival <= now ? arrival : now;
         alive = living;
         sources = value;
         position = at;
         stationary = !moving;
+        observedAt = now;
         if (!alive || !sources.Any) { Clear(); return; }
-        owner.Observe(now, HasStationaryGround || externalOwnGround, sources.LingerSeconds);
-        if (oldGround && !HasStationaryGround)
+        owner.Observe(transitionAt, HasStationaryGround || externalOwnGround, sources.LingerSeconds);
+        if (oldGround && (!HasStationaryGround || relocated))
             foreach (var recipient in enemies.Values)
                 recipient.Observe(now, false, sources.LingerSeconds);
         if (sources.EnemyDamageTaken == 0) enemies.Clear();
