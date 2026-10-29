@@ -263,6 +263,7 @@ partial class Program
             conn.Closed = true;
             conn.InvalidateIncomingHits();
             FortificationOf(conn).Clear();
+            LeechOf(conn).Clear(conn.Clock.Elapsed.TotalSeconds);
             conn.Rage.Clear();
         }
         reading.Cancel();

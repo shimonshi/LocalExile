@@ -29,13 +29,13 @@ partial class Program
 
     static async Task ConfirmAndLaunchOrdinaryBow(string remote, NetworkStream stream, ConnectionCiphers ciphers,
         ClientState conn, byte[] actionBytes, string actionLog, (int X, int Y) from, (int X, int Y) aim,
-        double attackSeconds, int action, int epoch)
+        double attackSeconds, int action, int epoch, SkillCriticalRoll criticalRoll)
     {
-        await LaunchOrdinaryBow(remote, stream, ciphers, conn, from, aim, attackSeconds, action, epoch);
+        await LaunchOrdinaryBow(remote, stream, ciphers, conn, from, aim, attackSeconds, action, epoch, criticalRoll);
         await SendOrdinaryBowAction(remote, stream, ciphers, conn, actionBytes, actionLog, action, epoch);
     }
 
     static Task LaunchOrdinaryBow(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn,
-        (int X, int Y) from, (int X, int Y) aim, double attackSeconds, int action, int epoch) =>
-        ScheduleOrdinaryBow(remote, stream, ciphers, conn, aim, attackSeconds, action, epoch);
+        (int X, int Y) from, (int X, int Y) aim, double attackSeconds, int action, int epoch, SkillCriticalRoll criticalRoll) =>
+        ScheduleOrdinaryBow(remote, stream, ciphers, conn, aim, attackSeconds, action, epoch, criticalRoll);
 }

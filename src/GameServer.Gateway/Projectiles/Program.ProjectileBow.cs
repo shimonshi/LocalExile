@@ -6,7 +6,7 @@ using GameServer.Core.World;
 partial class Program
 {
     static Task ScheduleOrdinaryBow(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn,
-        (int X, int Y) aim, double attackSeconds, int action, int epoch)
+        (int X, int Y) aim, double attackSeconds, int action, int epoch, SkillCriticalRoll criticalRoll)
     {
         var session = ProjectilesFor(remote, stream, ciphers, conn);
         session.Advance();
@@ -30,6 +30,8 @@ partial class Program
                     captured.CriticalMultiplier, "ordinary bow")
                 { SkillStats = SkillsFor(conn).EffectStats(effect, 1).ToDictionary(s => s.Item1, s => s.Item2),
                     Penetration = captured.Penetration, ResistanceMods = captured.ResistanceMods, ImpaleChance = captured.ImpaleChance,
+                    ImpaleSettings = captured.ImpaleSettings, AccuracyProfile = captured.AccuracyProfile,
+                    CriticalRoll = criticalRoll, Leech = captured.Leech,
                     AccuracyMoreUnique = conn.Pools.AccuracyMoreVsUniquePct, AccuracyMoreClose = conn.Pools.AccuracyMoreInCloseRangePct,
                     AlwaysHits = Get("global_always_hit") != 0, FarShot = Get("player_far_shot") != 0,
                     ReturnMultiplier = ProjectileReturn.DamageMore(Get) };

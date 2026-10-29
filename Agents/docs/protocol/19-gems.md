@@ -130,10 +130,18 @@ the transfigured item-name display still needs a native retest.
   (Haste, Fireball, Arc, Wrath, Grace, Discipline, Determination, Clarity, Anger, Hatred, Enfeeble, Flammability, the
   transforms' 60/40 and 33/33/34 splits, and five supports) with no mismatch: 100% at 70 is 155, 75% 119, 60%/40%
   98/68, a support at 70 is 111 and at 8 is 18, and low-level gems fall under 14 and show none. The server checks the
-  same values at socketing and for worn items (`GemAttributeRequirements`, `GemRequirementsUnmet`), against
+  same values at socketing and skill use (`GemAttributeRequirements`, `GemRequirementsUnmet`), against
   `virtual_strength/dexterity/intelligence_for_requirements` as the client does. Checked live 2026-10-23: a level 20
-  Fireball socketed at `/set_stat intelligence 200`, then 130 — at 130 the client reds the gem, the wand's mods stop
-  counting, and a use is refused.
+  Fireball socketed at `/set_stat intelligence 200`, then 130 — at 130 the client reds the gem and a use is refused.
+  The historical host-deactivation behavior is superseded: current per-gem admission retains a qualified host's mods.
+  Ordinary percentage attributes feed the final pool and requirement fields used here. Automated source-removal
+  controls verify Fireball 9's 67-Intelligence threshold while its Plate Vest remains active. Historical LocalExile native controls in both
+  Standard and Ruthless independently confirm ordinary Q input starts Fireball at Intelligence 68, is explicitly
+  refused at 62, and starts again after recovery. The qualified Plate Vest retains 19 Armour in all three states.
+  The acceptance cases include the normal action, Mana cost and projectile; the refusal includes the requirement
+  diagnostic and no accepted action/projectile. Separate aura transitions still need their own lifecycle evidence.
+  These captures precede this port; the ordinary-mode integration checks and fresh-native limitation are recorded
+  in [the port record](../dev/issue75-port.md).
 - **Supports:** GrantedEffects holds what a support applies to (`AllowedActiveSkillTypes`, `ExcludedActiveSkillTypes`,
   `AddedActiveSkillTypes`, `SupportsGemsOnly`) and its skill-bar letter (`SupportGemLetter`); a skill's types come from
   its ActiveSkills row.
