@@ -114,7 +114,7 @@ partial class Program
     {
         var weapon = WeaponIn(conn, ActiveMainHand(conn));
         return InquisitorOffense.BattlemageDamage(weapon is null ? null
-            : DamagePacket.Of(DamageType.Physical, weapon.MinDamage, weapon.MaxDamage).Add(weapon.LocalAdded), get);
+            : weapon.LocalDamage ?? DamagePacket.Of(DamageType.Physical, weapon.MinDamage, weapon.MaxDamage).Add(weapon.LocalAdded), get);
     }
 
     static double InquisitorElementalTaken(ClientState conn, SpawnedMonster target)

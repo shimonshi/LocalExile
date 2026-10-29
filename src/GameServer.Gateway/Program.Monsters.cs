@@ -375,7 +375,7 @@ partial class Program
                 conn.PlayerLife = (uint)Math.Min(conn.PlayerMaxLife, Math.Max(0, (long)conn.PlayerLife - DamagePlayerHit(conn, damage - chaosDamage, chaosDamage, now, stats) + gainedLife));
                 conn.PlayerMana = (uint)Math.Min((uint)UnreservedMana(conn), (long)conn.PlayerMana + gainedMana);
                 TrimLeechLocked(conn);
-                ApplyPlayerAilmentsLocked(conn, a.Damage, ailmentTaken.Select((_, r) =>
+                ApplyPlayerAilmentsLocked(conn, InquisitorEnemyDamage(conn, m, a.Damage), ailmentTaken.Select((_, r) =>
                     new(FortificationDamageTaken(conn, (int)r.Min), FortificationDamageTaken(conn, (int)r.Max))),
                     monsterCritical, blocked, now, stats);
                 conn.RecentEnemyHits.Record(now);
