@@ -173,9 +173,9 @@ def run(options):
             regen=raw(path(32816),'life_regeneration_rate_per_minute_%')+300
             received=stat(**{'life_regeneration_rate_per_minute_%':regen})
             expected=math.floor(raw(path(32816),'base_life_regeneration_rate_per_minute')+received['maximum_life']*regen/100)
-            record('Sanctuary-Pious-received-life-and-energy-shield-regeneration',native=stat(**{'energy_shield_recovery_per_minute':expected}),expectedPerMinute=expected)
+            record('Sanctuary-Pious-received-life-regeneration-and-additional-ES-recovery',native=stat(**{'energy_shield_recovery_per_minute':expected}),expectedPerMinute=expected)
             control.rpc('interaction',bytes=packets(32816)[1]);wait(lambda:32816 not in tree()['allocated'],'paid Pious removal')
-            record('Pious-paid-refund-clears-ES-regeneration',native=stat(**{'energy_shield_recovery_per_minute':0}))
+            record('Pious-paid-refund-clears-additional-ES-recovery',native=stat(**{'energy_shield_recovery_per_minute':0}))
             reset();allocate(40059);record('Augury-native-connected-allocation-only',native=tree(),effectAccepted=False)
             reset();equip_wand();allocate(3154)
             record('Justice-native-main-weapon-base-crit',native=stat(spell_critical_strike_chance=830))
