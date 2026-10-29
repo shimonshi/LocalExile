@@ -22,10 +22,12 @@ partial class Program
     static readonly ConditionalWeakTable<ClientState, InquisitorSession> Inquisitors = new();
     static InquisitorSession InquisitorOf(ClientState conn) => Inquisitors.GetValue(conn, _ => new());
 
-    // Raw active equipment/passive sources and developer replacements, before the final Inquisitor projection.
+    // Raw active equipment/passive sources and developer replacements. Observing this connection must not publish
+    // character-global equipment qualification: an old area's attributes may differ from the current connection's.
+    // Charge, Fortification and Adrenaline projections add none of these source flags or self-buff effect.
     static Dictionary<uint, int> InquisitorInputs(ClientState conn)
     {
-        var sources = CharacterStatSources(conn).Stats;
+        var sources = EquipmentStatSources(conn, ItemsOf(conn).EquipmentSnapshot()).Sources;
         foreach (var (key, value) in conn.PlayerStats) sources[key] = value;
         return sources;
     }
@@ -52,6 +54,7 @@ partial class Program
     {
         lock (conn.Monsters)
         {
+            if (conn.Closed || conn.LeavingArea || conn.RageRetired) return;
             var sources = InquisitorInputs(conn);
             int Get(string name) => Stats.Key(name) is uint key ? sources.GetValueOrDefault(key) : 0;
             ObserveInquisitorGround(conn, InquisitorOf(conn).Ground, walk, now,
@@ -143,7 +146,8 @@ partial class Program
 
     static double InquisitorMirroredRecovery(ClientState conn, double from, double to, Func<string, int> get)
     {
-        if (get("cannot_recover_energy_shield") != 0 || get("no_life_regeneration") != 0) return 0;
+        if (conn.Closed || conn.LeavingArea || conn.RageRetired
+            || get("cannot_recover_energy_shield") != 0 || get("no_life_regeneration") != 0) return 0;
         ObserveInquisitor(conn, InquisitorInputs(conn));
         return InquisitorOf(conn).Ground.MirroredLifeRegeneration(from, to,
             InquisitorLifeRegenerationBeforeRecovery(conn, get) / 60)
