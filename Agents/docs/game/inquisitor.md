@@ -148,7 +148,8 @@ Shared feature edits call `Program.Inquisitor.cs`, propagate the reflected-hit o
 The retirement guards also close the existing slower resource/critical/charge/flask publication paths.
 No client graph, archive maintenance, extraction format or production data-path change is added.
 
-The Inquisitor PR is a declared dependent draft based on `candidate/pr318-main361-admission` in the contributor fork.
+The [Inquisitor draft PR](https://github.com/shimonshi/LocalExile/pull/1) is based on
+`candidate/pr318-main361-admission` in the contributor fork.
 Its base is the standalone reconciliation candidate `f651d0e6`, proposed to the #318 owner in
 [evrydayjunglist/evryPath#1](https://github.com/evrydayjunglist/evryPath/pull/1).
 That candidate includes exact #318 head `ff61e93791682558d25f4dc609c2217e9245772c` and current main.

@@ -64,7 +64,8 @@ Part of [Status](../Status.md); what to build next in this area is in
   Fanaticism, equipped buff effect and ground movement/linger.
   Production-path regressions include typed Battlemage, reflected Impale, incoming ignite and stale area publishers.
   Native acquisition and unsupported shared executors retain the documented model boundaries.
-  The separate class PR is a dependent draft awaiting the #318 owner's reconciliation and upstream recheck.
+  The [class PR](https://github.com/shimonshi/LocalExile/pull/1) awaits the #318 owner's reconciliation
+  and an upstream readiness recheck.
   Code: `Program.Inquisitor.cs`, `InquisitorOffense.cs`, `InquisitorCombatState.cs`, `InquisitorGround.cs`.
   Docs: [node audit, verification and integration limits](../docs/game/inquisitor.md).
 
