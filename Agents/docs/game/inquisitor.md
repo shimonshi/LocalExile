@@ -24,6 +24,7 @@ Augury uses its separate Ruthless attachment: 8% rather than 16% increased eleme
 It remains a separate buff from Sanctuary's increased damage taken.
 These increases add to the monster's existing increased/reduced damage taken before separate more/less multipliers.
 Physical/chaos damage does not receive Augury's elemental effect.
+Sanctuary also affects reflected Impale; Augury reduces the pre-critical base of supported incoming ignite.
 Critical resistance ignore continues to respect the common prohibition against penetrating or ignoring resistances.
 
 Justice reads only the active usable main-hand weapon, including its local critical modifiers.
@@ -43,8 +44,14 @@ It does not speed up attacks.
 The manual skill admission path records attacks and non-instant spell uses; triggered spells are excluded.
 The pausable world clock governs history, periodic gains and effect expiry.
 Source removal clears its transient state immediately on the next authoritative observation.
-Death clears it; accepted area tickets carry combat history, charges and remaining Fanaticism once, freezing loading time.
+Death clears it; accepted area tickets carry combat history, charges and remaining Fanaticism once.
+Loading time is frozen.
 Transient state is not saved across logout or a process restart.
+Raw Inquisitor observations resolve equipment sources without publishing character-global qualification.
+Retired resource/player/charge/flask writers stop, and queued publications reject retired connections.
+The common source publisher checks ownership under the connection lock.
+An old area therefore cannot remove the live connection's qualified gear or socketed Fireball.
+Temporary leaving can roll back and resume recovery; accepted combat history still carries after leaving is set.
 
 Pious Path keeps effects on recipients after they leave; it does not leave a stationary ground at an old position.
 Owner-created Sulphur ground participates without duplicating its numerical regeneration.
@@ -61,85 +68,114 @@ This is additional ES recovery, not base ES regeneration: ES regeneration increa
 ES recovery rate applies once, while life recovery rate does not scale the copy.
 Client corrections publish the combined recovery rate; the resource writer adds the separate recovery integral.
 
-## Verification and limits
+## Verification and supported model
 
-The new tests cover pure state timing and production Gateway paths, including actual connected ordinary allocation,
-five-point refunds, reloads, main-hand critical base, Battlemage damage, recipient effects and additive damage taken.
-Client evidence must distinguish received numerical state, accepted actions and actual elapsed/resource behavior.
-Passing these tests alone is not whole-class native acceptance.
+The Gateway regressions exercise connected ordinary allocation, five-point refunds, reloads and actual consumers.
+They include all five equipped weapon damage types, reflected Impale, incoming critical ignite, accepted motion,
+four-second native-sender removal and the separation of life regeneration from life-only recovery multipliers.
+Pure timing tests additionally cover pause, death, source removal and one-use area carry.
 
 ### Recorded checks
 
-Production source `187baf840f216e74906484a29243d9495cb41ce5` is based on main
-`5d5b5150e1b2e287c642edcaf75a49d075b9b4fe`.
-The solution builds with zero warnings/errors; Core **353**, Data **34** and Gateway **1291** pass.
-Gateway was run with test-collection parallelism disabled after a load-sensitive chill timer failed in a parallel run.
-The isolated chill check and the complete serial suite pass.
-The 37 Inquisitor checks are included in that Gateway total.
-The local object-type data was regenerated through `extract-data.ps1 -Only object-types` before the final run.
-No production data paths or test working-directory rules were changed.
+Final production source `6b3c7a2fd86505cd48d9e89692e4c5d5432554f3` contains main
+`5d5b5150e1b2e287c642edcaf75a49d075b9b4fe` and the declared panel prerequisite
+`f651d0e6af8ea42614a8a137fced4b005a23b189`.
+The solution builds with zero warnings/errors; Core **390**, Data **34** and Gateway **2629** pass.
+The 67 Inquisitor checks are included in that Gateway total.
+Gateway test collections run serially because the existing chill timer is sensitive to parallel machine load.
+Game data was generated through `extract-data.ps1`; production paths and shared test setup are unchanged.
 
-The received native observations and actual resource checks on this production source comprise:
+Native verification uses an isolated account/database through `scripts/dev/live.ps1` and ordinary client actions.
+Read-only probes distinguish received stats and buffs from actual resource changes and enemy life loss.
+All **39** final-source checks pass and cover:
 
-- Nine ordinary choice/point, Providence, five-point refund, Pious recovery projection, Justice and relog checks.
-  Augury's entry here proves connected allocation only, not enemy damage.
-- Four accepted-bow attack, native Fanatic charge/buff duration, natural expiry and paid-refund checks.
-- Nine manual Fireball checks: actual mana payment, received Battlemage physical damage, Virtue's three stages,
-  expiry/refund, and Fanaticism's actual 1-mana payment versus 5, received cast speed/CPS and increased spell area.
-  The controlled attack comparison explicitly replaces Strength's melee physical damage input with zero.
-  These skill-record checks do not independently time projectile contact or assert outgoing damage on an enemy.
-- Four recovery/persistence preparation checks, including actual Pious ES recovery while ordinary ES regeneration
-  and recharge are disabled and an additional 1000% ES regeneration modifier is present.
-  Paid refund stops the additional recovery.
-- One actual Gateway-process restart check: saved ordinary Providence nodes restore attributes and critical increase.
+- Ordinary choice and eight separate points; Providence attributes/critical chance; five-point refunds;
+  Pious recovery publication; Justice main-hand critical base, cannot-crit and relog.
+- Actual fixed fire hits against a level-70 Goatman with 40% fire resistance: baseline 60, Augury 70,
+  Sanctuary 69, additive Sanctuary/Augury 79, Judgement noncritical penetration 70 and critical ignore 170.
+  The critical-ignore prohibition restores 102; full Judgement refund restores the resisted base critical hit of 90.
+  Judgement's connected small node supplies the extra 20 critical multiplier in the 170/102 controls.
+- Accepted bow attacks, one/two partial Fanatic charges, the consumed maximum, the five-second native buff,
+  natural expiry, paid refund and no idle resurrection of a removed source.
+- Actual Fireball mana payments, Virtue's three attack stages and natural expiry, Battlemage and paid refund.
+  The comparisons replace independent Strength/melee and connected elemental-increase inputs with zero.
+  A controlled active-item buff-effect source of 10% raises Fanaticism's magnitudes from 75 to 82.
+  The native self-cast values and actual mana payment change accordingly; refunds restore the baseline.
+  These are received skill records and real payments, not independently timed projectile contacts.
+- Pious owner-buff/marker removal while walking, stationary teleport and a short arrival followed by a new departure.
+  The server deadline is four seconds; native observations include the existing tick/cache and probe latency.
+- Actual Pious ES recovery with ordinary ES regeneration/recharge disabled and a 1000% ES-regeneration increase.
+  Life-only recovery and ES recovery controls verify the copy's separate scaling; paid refund stops it.
+- A real Gateway-process restart restoring saved Providence nodes, attributes and critical increase.
 
-Gateway DLL SHA-256 for these checks:
-`ecc4b50097dc897a91c32ca6042f25b6f6718d2e978a7e6dc9add8a1ecaa62a9`.
-Logs are separate from source and contain local game/account data; they are not committed.
-The basic lifecycle can be reproduced with `scripts/re/inquisitor-smoke.py` on a fresh isolated Templar, started only
-through `scripts/dev/live.ps1`.
-Its default invocation checks protocol/path assumptions offline; `--run --expected-head <sha> --private-file <json>`
-requires a locally created test account/character and running matching services/database.
+Final native Gateway DLL SHA-256:
+`7eb64825efc60cbf073bbbb12743ea6f77d9ee9de525a87676456801ddc39048`.
+Source/build metadata and local logs are retained under `logs/` and contain local game/account data.
+They are not committed.
+Earlier isolated source revisions also supplied native evidence; they are superseded for final combined acceptance.
+
+The basic lifecycle is reproducible with `scripts/re/inquisitor-smoke.py` on a fresh isolated Templar.
+Its default invocation checks protocol/path assumptions offline.
+`--run --expected-head <sha> --private-file <json>` requires matching running services and an isolated database.
 The private JSON contains `account`, `password` and `character`; do not commit it.
 The script does not start services or install game assets.
-Its read-only stat probe is `scripts/re/frida/trace-inquisitor-stats.js`.
+Its instance-only read probe is `scripts/re/frida/trace-inquisitor-stats.js`.
+The final spell observations use `scripts/re/frida/trace-inquisitor-skill-stats.js`: the local Actor's current
+Fireball instance, with matching received stat containers at +0xf8 and +0x138.
+The runtime CLI excludes its RE script directory from module lookup so the sibling `dis.py` cannot shadow
+the standard-library module while Frida initializes.
+The offline self-check does not load Frida.
 
-The existing execution engines still bound the class: unsupported triggered skills, totems and allied-player/minion
-recovery do not become supported by forwarding Inquisitor stats.
-Fanatic charges' idle lifetime needs an independent native/reference check before claiming exact retail parity.
-Neither the pinned buff rows nor PoB's configured Fanaticism condition establishes partial-charge idle expiry.
-Automated tests cover accepted motion timestamps, short walks, teleport deadlines and native sender removal at four seconds.
-Those sender tests do not start the game client; independent client acceptance remains required.
-The shared resource-rate cache still refreshes on its existing 250 ms boundary.
+### Explicit engine boundaries
+
+This acceptance covers the supported server executors above.
+Native Labyrinth/Altar acquisition remains #151; selection and point awards use development commands.
+Unsupported allied-player/minion recovery, totems, proxies and triggered skills remain shared engine work.
+Current skill payment supports mana.
+A future life-cost engine must apply Fanaticism before final rounding to both pools.
+An accepted paid non-instant manual spell counts at admission, including one whose later animation is cancelled.
+Refused uses and instant spells do not count.
+Partial Fanatic charges persist until consumption, death, source removal or session cleanup in this server model.
+The pinned buff rows and PoB's configured condition do not establish a retail partial-charge idle duration.
+The shared resource-rate cache retains its existing 250 ms refresh boundary.
+These boundaries do not claim exact official-server rounding or sub-tick timing.
 
 ## Ownership and integration
 
 Issue #363 owns this class and its feature-specific helpers/tests.
-Juggernaut (#152), native acquisition (#151), and the leech implementation in PR #318 are not taken over.
-The branch starts at main `5d5b5150e1b2e287c642edcaf75a49d075b9b4fe`.
-Shared edits are minimal calls into `Program.Inquisitor.cs`; there are no copied unmerged Phrecia implementations.
-Before readiness, recheck exact related heads at stat assembly, spell cost, damage and transfer hooks.
-In particular, a future life/mana cost engine must apply Fanaticism's less-cost factor before final rounding to both
-cost pools, rather than retaining the current mana-only supported payment approximation.
-Do not call the class complete while native acceptance or its intended integration order remains unverified.
+Juggernaut (#152), native acquisition (#151) and the panel/leech implementation in PR #318 keep their existing owners.
+Shared feature edits call `Program.Inquisitor.cs`, propagate the reflected-hit owner and reject stale publishers.
+The retirement guards also close the existing slower resource/critical/charge/flask publication paths.
+No client graph, archive maintenance, extraction format or production data-path change is added.
 
-### Exact related-head composition
+The Inquisitor PR is a declared dependent draft based on `candidate/pr318-main361-admission` in the contributor fork.
+Its base is the standalone reconciliation candidate `f651d0e6`, proposed to the #318 owner in
+[evrydayjunglist/evryPath#1](https://github.com/evrydayjunglist/evryPath/pull/1).
+That candidate includes exact #318 head `ff61e93791682558d25f4dc609c2217e9245772c` and current main.
+The post-merge fixture migrations change tests/docs only and contain no Inquisitor source or tests.
+Its independent build and Core **389**, Data **34**, Gateway **2562** tests pass.
+They preserve main's host inactivation for unmet socketed gems and the client-predicted projectile policy.
 
-A disposable checkout composed main `5d5b5150`, PR #318
-`ff61e93791682558d25f4dc609c2217e9245772c`, then Inquisitor `187baf84`.
-The manually resolved private candidate is `baa66da96e2b402fa6d4f70e4d1e3e1fc3fb29f0`.
-It preserves leech's direct-hit type proportions, critical snapshots, off-hand calculations, separate Impale,
-Inquisitor target modifiers and a pre-life-recovery Pious baseline with ES recovery scaling only.
-It builds cleanly and passes Core 389, Data 34 and 38 Inquisitor checks, including a composition-specific regression.
-That is **not** a full combined green result.
+Intended upstream order: the owner reconciles/accepts the proposal into #318, #318 merges, then Inquisitor rebases
+onto the resulting main and repeats the required checks before upstream readiness.
+No other owner's published branch is modified.
+The contributor-fork draft provides a class-only review diff while the upstream prerequisite is pending.
+It is not an upstream merge-ready PR.
 
-An earlier full combined run on `c467777dcb90e510bb336539d4e5f54ef0388550` passed 2471 and failed 125 Gateway checks.
-The final Pious revision's full combined Gateway suite was not repeated while those base incompatibilities remained.
-Main's #361 inactivates a host when a socketed gem fails requirements; #318 expects the qualified host to stay active.
-Ten assertions directly disagree on that policy; 114 contact cases inject final pool attributes without the raw
-requirement inputs now required by main; one projectile reflection adapter has an outdated argument count.
-No tests were weakened to label this combination green.
-The #318 owner must reconcile its current base, admission expectations and fixtures before this sequence is ready.
-Related heads #328 `07699a51`, #333 `7b9e1061` and #339 `e7d4cf43` were inspected, but their combined order remains
-untested behind that first incompatible prerequisite.
-Keep these candidate resolutions private; do not publish an independent overlapping sibling PR or claim readiness.
+A disposable checkout tested main `5d5b5150` -> repaired #318 `f651d0e6` -> Inquisitor `6b3c7a2f` ->
+#328 `07699a51a0b235ca668c6223a51d1362d375d7e9` ->
+#333 `7b9e1061862ea410d05f2304bd8ebb43a0b554de` ->
+#339 `e7d4cf43013e6175157970c13c3c1aed4292b62a`.
+The private candidate is `161cad85cce341c07b6cce59b9319e0694574560`.
+It builds with zero warnings/errors and passes Core **394**, Data **34**, Gateway **3025**,
+including **72** Inquisitor checks in that composition.
+Resolutions retain Vaal/Rampage, lethal-ignite Recoup cleanup, mana-recovery precision, typed ES bypass,
+recipient clocks and the new retirement guards.
+Private regressions cover the combined Inquisitor paths and retirement during queued #339 refreshes.
+Those related features and their fixture migrations are kept out of the published Inquisitor diff.
+
+This does not establish readiness for the entire future merge block.
+#339 introduces typed recipient expiry; its interaction with Inquisitor's world-clock Fanaticism and ground linger
+needs an explicit adapter/oracle and native validation before that combination is accepted.
+The candidate preserves the existing five-second Fanaticism and four-second linger rather than guessing new semantics.
+Recheck exact downstream heads after each prerequisite merge; do not substitute isolated green checks for that work.

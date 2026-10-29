@@ -3,16 +3,22 @@ Parent owns the runtime window and starts the pinned build through scripts/dev/l
 Run: .venv/Scripts/python.exe scripts/re/inquisitor-smoke.py --run --expected-head <full SHA>
 Credentials come from --private-file and are never copied to results/stdout.
 """
+import sys
+from pathlib import Path
+
+# The sibling RE tool dis.py must not shadow the standard-library module used by Frida/inspect.
+if __name__ == '__main__':
+    script_directory = Path(__file__).resolve().parent
+    sys.path[:] = [entry for entry in sys.path if Path(entry).resolve() != script_directory]
+
 import argparse
 from collections import deque
 import hashlib
 import json
 import math
-from pathlib import Path
 import sqlite3
 import struct
 import subprocess
-import sys
 import time
 from types import SimpleNamespace
 
@@ -78,7 +84,6 @@ def self_check():
     return {'offlineSelfCheck':'passed','clientAccess':False,'paths':{str(n):path(n) for n in (53884,32816,40059,3154)}}
 
 def run(options):
-    # Load Frida before large table allocations/subprocess work; late extension loading crashes Python 3.13 on Windows.
     sys.path.insert(0,str(ROOT/'scripts/dev'))
     import client_control
     if options.private_file is None: raise ValueError('--private-file is required for --run')

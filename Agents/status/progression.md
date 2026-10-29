@@ -59,16 +59,16 @@ Part of [Status](../Status.md); what to build next in this area is in
   Default Phrecia admission is gated; the explicit Gambler opt-in verifies installed graph bytes read-only.
   Docs: [Gambler checklist, scope and verification](../docs/game/gambler.md).
 
-## Partly working
-
-- Ordinary Inquisitor has server consumers for all eight notable nodes and production Gateway regression coverage.
-  Twenty-seven native checks cover its ordinary lifecycle, selected skill effects, actual payments and ES recovery.
-  Accepted ground departures, natural arrivals and teleports have automated timing and native-sender coverage.
-  Whole-class native acceptance and idle Fanatic charge lifetime remain unverified.
-  The exact PR #318 composition retains incompatible current-main host/gem admission expectations and is not ready.
-  Native Labyrinth acquisition remains separate; the class uses the original ordinary graph.
+- Ordinary Inquisitor: all eight notables have supported server consumers on the original Default graph.
+  Thirty-nine real-client checks cover choice/points, refunds, relog/restart, enemy life loss, mana/ES recovery,
+  Fanaticism, equipped buff effect and ground movement/linger.
+  Production-path regressions include typed Battlemage, reflected Impale, incoming ignite and stale area publishers.
+  Native acquisition and unsupported shared executors retain the documented model boundaries.
+  The separate class PR is a dependent draft awaiting the #318 owner's reconciliation and upstream recheck.
   Code: `Program.Inquisitor.cs`, `InquisitorOffense.cs`, `InquisitorCombatState.cs`, `InquisitorGround.cs`.
   Docs: [node audit, verification and integration limits](../docs/game/inquisitor.md).
+
+## Partly working
 
 - Aristocrat: every node in its installed graph has a server consumer (gem levels and quality, attribute requirements,
   conditional ailment immunity, lowest-attribute damage, granted passive points), with Gateway coverage of legal builds,

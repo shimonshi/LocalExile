@@ -31,10 +31,9 @@ Items keep the Roadmap's priority groups, and are in rough priority order within
   Ordinary incoming elemental ailments give Risk Aversion an actual avoidance consumer.
   Current-base tests and exact related-head composition pass; preserve the manual lethal-ignite Recoup resolution
   when composing Whisperer, as recorded in [Gambler](../docs/game/gambler.md).
-- **Known:** ordinary Inquisitor node consumers have automated allocation/refund/reload coverage in issue #363.
-  Ground transitions use accepted movement timestamps, with short-walk and teleport-deadline regressions.
-  Representative native skill/payment/recovery checks pass; reconcile the exact #318/current-main admission conflict.
-  Complete the [remaining native and integration checklist](../docs/game/inquisitor.md) before whole-class acceptance.
+- **Known:** ordinary Inquisitor's supported eight-notable implementation and native acceptance are recorded in
+  [Status](../status/progression.md) and its [node/model audit](../docs/game/inquisitor.md) (#363).
+  Its PR is stacked on the #318 reconciliation; finish that dependency and repeat upstream readiness checks.
   Other ordinary classes still need individual mechanic audits; selection alone is not gameplay implementation.
 - **Start:** quest passive/refund rewards and the native Labyrinth/Altar flow (#151).
   Phrecia play stays gated by default; Gambler's explicit opt-in verifies the separately installed graph read-only.
