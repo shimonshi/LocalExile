@@ -216,7 +216,7 @@ partial class Program
                 uint current = conn.EnergyShield.Current;
                 bool active = conn.EnergyShield.Recharging;
                 int rate = conn.PlayerLife == 0 ? 0 : (int)Math.Round(
-                    EnergyShield.PredictionPerMinute(conn.Pools.EnergyShield, Get, active));
+                    EnergyShield.PredictionPerMinute(conn.Pools.EnergyShield, Get, active) + InquisitorMirroredPerMinute(conn, Get));
                 if (conn.SentEnergyShield == current && conn.SentRechargeActive == active && conn.SentEsRecoveryRate == rate)
                     return null;
                 bool rateChanged = conn.SentEsRecoveryRate != rate;
@@ -558,7 +558,8 @@ partial class Program
                     burnCarry += (InGracePeriod(conn) ? 0 : burnPerSecond * conn.ElementalAilments.DamageTakenFactor(now)) * seconds;
                     int burnWhole = (int)Math.Truncate(burnCarry); burnCarry -= burnWhole;
                     int lifeBurn = conn.EnergyShield.Damage(burnWhole, false, now);
-                    conn.EnergyShield.Advance(recoveryFrom, now, RecoveryStat, true);
+                    conn.EnergyShield.Advance(recoveryFrom, now, RecoveryStat, true,
+                        InquisitorMirroredRecovery(conn, recoveryFrom, now, RecoveryStat));
                     conn.EnergyShield.Gain(leeched.EnergyShield);
                     double fortificationLife = FortificationOf(conn).TakeRecovery(conn.Clock.Elapsed.TotalSeconds);
                     conn.PlayerLife = lifeAfter = RecoveryPool.Advance(lifeBefore, conn.PlayerMaxLife,

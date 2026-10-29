@@ -113,18 +113,18 @@ public sealed partial class AscendancyGatewayIntegrationTests
         using var game = InquisitorGame();
         InquisitorSet(game.State, "base_maximum_energy_shield", 100);
         game.State.Pools = Program.PoolsFor(game.State, 60);
-        Assert.Equal(0, InquisitorStat(game.State, "base_energy_shield_regeneration_rate_per_minute"));
+        Assert.Equal(0, InquisitorStat(game.State, "energy_shield_recovery_per_minute"));
         Assert.Null((await game.Change(InquisitorPath(32816), true)).Error);
         var stats = Program.CharacterPlayerStats(game.State);
         int Get(string name) => stats.GetValueOrDefault(InquisitorKey(name));
         Assert.True(Get("life_regeneration_rate_per_minute_%") >= 300);
         Assert.Equal((int)PanelStats.LifePerMinute(Get, game.State.Pools.Life),
-            Get("base_energy_shield_regeneration_rate_per_minute"));
-        Assert.True(InquisitorStat(game.Reload(), "base_energy_shield_regeneration_rate_per_minute") > 0);
+            Get("energy_shield_recovery_per_minute"));
+        Assert.True(InquisitorStat(game.Reload(), "energy_shield_recovery_per_minute") > 0);
         Assert.Null((await game.Change([(ushort)32816], false, refundPoints: true)).Error);
-        Assert.Equal(0, InquisitorStat(game.State, "base_energy_shield_regeneration_rate_per_minute"));
+        Assert.Equal(0, InquisitorStat(game.State, "energy_shield_recovery_per_minute"));
         Assert.True(InquisitorStat(game.State, "life_regeneration_rate_per_minute_%") >= 300);
-        Assert.Equal(0, InquisitorStat(game.Reload(), "base_energy_shield_regeneration_rate_per_minute"));
+        Assert.Equal(0, InquisitorStat(game.Reload(), "energy_shield_recovery_per_minute"));
     }
 
     [Fact]

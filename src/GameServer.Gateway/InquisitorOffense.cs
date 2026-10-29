@@ -23,6 +23,9 @@ static class InquisitorOffense
     public static DamagePacket BattlemageDamage(DamagePacket? mainHandWeapon, Func<string, int> get) =>
         get(Battlemage) == 0 || mainHandWeapon is null ? DamagePacket.Empty : mainHandWeapon;
 
+    public static int Cost(int basis, double supportMultiplier, FanaticismModifiers fanaticism) =>
+        (int)Math.Clamp(Math.Floor(Math.Max(0, basis) * Math.Max(0, supportMultiplier) * (double)fanaticism.CostFactor), 0, int.MaxValue);
+
     public readonly record struct FanaticismModifiers(int CastSpeedMorePct, int CostMorePct, int AreaIncreasePct)
     {
         public double CastSpeedFactor => Math.Max(0, 1 + CastSpeedMorePct / 100.0);
