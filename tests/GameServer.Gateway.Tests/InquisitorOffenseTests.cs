@@ -74,4 +74,23 @@ public class InquisitorOffenseTests
         Assert.Equal(13536u, stats.Key("fanaticism_hand_cast_speed_+%_final"));
         Assert.Equal(13575u, stats.Key("fanaticism_hand_cast_mana_cost_+%"));
     }
+
+    [Fact]
+    public void Fanaticism_cost_rounds_once_after_supports_and_buff_effect()
+    {
+        Assert.Equal(3, InquisitorOffense.Cost(7, 2, InquisitorOffense.Fanaticism(true, true)));
+        Assert.Equal(2, InquisitorOffense.Cost(7, 1.25, new(76, -76, 76)));
+        Assert.Equal(8, InquisitorOffense.Cost(7, 1.25, default));
+    }
+
+    [Fact]
+    public void Additional_pious_recovery_is_not_scaled_as_es_regeneration()
+    {
+        var shield = new EnergyShield();
+        shield.SetMaximum(1000, refill: true);
+        shield.Damage(500, false, 0);
+        int Get(string name) => name == "energy_shield_regeneration_rate_+%" ? 100 : 0;
+        shield.Advance(0, 1, Get, alive: true, extraRecovery: 150);
+        Assert.Equal((uint)650, shield.Current);
+    }
 }

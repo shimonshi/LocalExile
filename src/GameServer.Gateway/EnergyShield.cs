@@ -39,7 +39,7 @@ sealed class EnergyShield
     // verified native recovery input during the recharge phase instead; keep the recharge-rate stat for the panel.
     public static double PredictionPerMinute(uint max, Func<string,int> get, bool recharging) =>
         RegenPerMinute(max,get) + (recharging ? RechargePerMinute(max,get) : 0);
-    public void Advance(double from, double to, Func<string, int> get, bool alive)
+    public void Advance(double from, double to, Func<string, int> get, bool alive, double extraRecovery = 0)
     {
         if (!alive) { Empty(); return; }
         if (to <= from || Current >= Maximum) { Recharging = false; return; }
@@ -47,7 +47,7 @@ sealed class EnergyShield
         double recharge = RechargePerMinute(Maximum, get);
         Recharging = to >= start && recharge > 0;
         double rechargeSeconds = Math.Max(0, to - Math.Max(from, start));
-        double change = fraction + RegenPerMinute(Maximum, get) * (to - from) / 60 + recharge * rechargeSeconds / 60;
+        double change = fraction + Math.Max(0, extraRecovery) + RegenPerMinute(Maximum, get) * (to - from) / 60 + recharge * rechargeSeconds / 60;
         uint whole = (uint)Math.Min(uint.MaxValue, Math.Floor(change));
         Current = (uint)Math.Min(Maximum, (long)Current + whole);
         fraction = Current == Maximum ? 0 : change - whole;

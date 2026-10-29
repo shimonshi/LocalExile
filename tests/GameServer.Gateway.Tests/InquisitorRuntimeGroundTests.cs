@@ -26,8 +26,8 @@ public sealed partial class AscendancyGatewayIntegrationTests
         int percent = Raw("life_regeneration_rate_per_minute_%") + 300;
         int expectedMirror = (int)(Raw("base_life_regeneration_rate_per_minute") + state.Pools.Life * percent / 100d);
         Assert.Equal(percent, Value(first, "life_regeneration_rate_per_minute_%"));
-        Assert.Equal(Raw("base_energy_shield_regeneration_rate_per_minute") + expectedMirror,
-            Value(first, "base_energy_shield_regeneration_rate_per_minute"));
+        Assert.Equal(Raw("energy_shield_recovery_per_minute") + expectedMirror,
+            Value(first, "energy_shield_recovery_per_minute"));
         Assert.Equal(1, Value(first, "on_consecrated_ground"));
         Assert.Equal(first.OrderBy(kv => kv.Key), second.OrderBy(kv => kv.Key));
     }
@@ -38,7 +38,7 @@ public sealed partial class AscendancyGatewayIntegrationTests
         if (!DataAvailable()) return;
         using var game = InquisitorWith(32816);
         var before = Program.CharacterPlayerStats(game.State);
-        uint es = Program.Stats.Key("base_energy_shield_regeneration_rate_per_minute")!.Value;
+        uint es = Program.Stats.Key("energy_shield_recovery_per_minute")!.Value;
         Assert.True(before.GetValueOrDefault(es) > 0);
         var refunded = await game.Change([32816], allocate: false, refundPoints: true);
         Assert.Null(refunded.Error);

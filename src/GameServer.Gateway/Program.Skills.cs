@@ -99,20 +99,21 @@ partial class Program
     static List<(uint, int)> WeaponStats(ClientState conn, SkillCatalog.Unarmed weapon, IReadOnlyDictionary<uint, int> stats)
     {
         var conversion = DamageStats.Conversion(stats, Stats, attack: true);
-        var list = weapon.Stats(stats, AttackHitConverted(weapon, stats, MeleeAttack(conn), conversion)).ToList();
+        double virtue = InquisitorAttackFactor(conn);
+        var list = weapon.Stats(stats, AttackHitConverted(weapon, stats, MeleeAttack(conn), conversion).Scale(virtue)).ToList();
         if (OffhandWeaponFor(conn) is { } off)
-            list.AddRange(off.OffStats(stats, AttackHitConverted(off, stats, MeleeAttack(conn), conversion), WeaponProfileFor(conn).LocalAttackSpeedPct));
+            list.AddRange(off.OffStats(stats, AttackHitConverted(off, stats, MeleeAttack(conn), conversion).Scale(virtue), WeaponProfileFor(conn).LocalAttackSpeedPct));
         // Unarmed.Stats emits its physical bounds separately from the supplied final total. Rage must also reach
         // those native bounds, without multiplying the already-final total or added elemental damage a second time.
         int Get(string name) => RageStat(stats, name);
-        if (Get("attack_damage_+%_final_from_rage") != 0)
+        if (Get("attack_damage_+%_final_from_rage") != 0 || virtue != 1)
         {
-            var main = RageStats.ApplyAttack(weapon.HitDamage(stats), Get)[GameServer.Core.World.DamageType.Physical];
+            var main = RageStats.ApplyAttack(weapon.HitDamage(stats), Get).Scale(virtue)[GameServer.Core.World.DamageType.Physical];
             Replace(StatKeys.MainHandMinPhysical, (int)Math.Floor(main.Min));
             Replace(StatKeys.MainHandMaxPhysical, (int)Math.Floor(main.Max));
             if (OffhandWeaponFor(conn) is { } offhand)
             {
-                var other = RageStats.ApplyAttack(offhand.HitDamage(stats), Get)[GameServer.Core.World.DamageType.Physical];
+                var other = RageStats.ApplyAttack(offhand.HitDamage(stats), Get).Scale(virtue)[GameServer.Core.World.DamageType.Physical];
                 Replace(StatKeys.OffHandMinPhysical, (int)Math.Floor(other.Min));
                 Replace(StatKeys.OffHandMaxPhysical, (int)Math.Floor(other.Max));
             }
@@ -183,12 +184,11 @@ partial class Program
                 stats[regen] = (int)Math.Clamp((long)stats.GetValueOrDefault(regen)
                     + value.LifeRegenerationPerMinutePercent(session.RegenPerStack), int.MinValue, int.MaxValue);
         }
-        WithInquisitorRegeneration(conn, stats);
         var (mainLocal, offLocal) = HandLocalStats(conn);
         foreach (var (stat, value) in PanelStats.Compute(Get, n => mainLocal.GetValueOrDefault(n), n => offLocal.GetValueOrDefault(n))
             .Concat(PanelStats.FromPools(Get, conn.Pools))
             .Concat(PanelStats.Recovery(Get, conn.Pools.Life, conn.Pools.Mana))
-            .Concat(new[] { ("energy_shield_recovery_per_minute", (int)Math.Round(EnergyShield.PredictionPerMinute(conn.Pools.EnergyShield, Get, conn.EnergyShield.Recharging))),
+            .Concat(new[] { ("energy_shield_recovery_per_minute", (int)Math.Round(EnergyShield.PredictionPerMinute(conn.Pools.EnergyShield, Get, conn.EnergyShield.Recharging) + InquisitorMirroredPerMinute(conn, Get))),
                 ("energy_shield_recharge_rate_per_minute", (int)Math.Round(EnergyShield.RechargePerMinute(conn.Pools.EnergyShield, Get))),
                 ("energy_shield_recharge_active", 0) })
             .Concat(ChargePanelStats.Compute(Get)))

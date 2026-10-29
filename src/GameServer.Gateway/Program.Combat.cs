@@ -216,7 +216,7 @@ partial class Program
             var pen = Penetration.Of(player, Stats, attack: true, ownPenetration);
             var resistanceMods = HitResistMods(player, ownPenetration);
             var hit = AttackHitConverted(weapon, player, WeaponProfileFor(conn, activeSet: true).Melee,
-                ConversionFor(conn, attackEffect, 1, attack: true));
+                ConversionFor(conn, attackEffect, 1, attack: true)).Scale(InquisitorAttackFactor(conn));
             double physical = hit[DamageType.Physical].Max;
             stored = m.Impale.Bonus;
             m.Impale.AfterHit();
@@ -232,7 +232,7 @@ partial class Program
                 new DamageRange(Math.Floor(stored), Math.Floor(stored))) : ownRolled;
             critical = RollCriticalStrike(conn, conn.Pools.AttackCriticalStrikeChance, ownPenetration);
             int criticalMultiplier = CriticalMultiplierOn(m, AttackCriticalMultiplier(conn, player));
-            (damage, resistance) = MonsterDamage(m, rolled.Scale(InquisitorAttackFactor(conn)), critical, attack: true, resistanceMods, pen, gambler.InvertsResistance(Random.Shared), conn);
+            (damage, resistance) = MonsterDamage(m, rolled, critical, attack: true, resistanceMods, pen, gambler.InvertsResistance(Random.Shared), conn);
             if (critical) damage = DamageModel.CriticalDamage(damage, criticalMultiplier);
             FortificationOnHitLocked(conn, m, RawFortificationDamage(ownRolled, critical, criticalMultiplier),
                 WeaponProfileFor(conn, activeSet: true).Melee, player, ownPenetration);

@@ -205,7 +205,7 @@ partial class Program
         uint current; bool active, rateChanged;
         var stats = CharacterPlayerStats(conn);
         int Get(string name) => Stats.Key(name) is uint key ? stats.GetValueOrDefault(key) : 0;
-        int rate = conn.PlayerLife == 0 ? 0 : (int)Math.Round(EnergyShield.PredictionPerMinute(conn.Pools.EnergyShield,Get,conn.EnergyShield.Recharging));
+        int rate = conn.PlayerLife == 0 ? 0 : (int)Math.Round(EnergyShield.PredictionPerMinute(conn.Pools.EnergyShield,Get,conn.EnergyShield.Recharging) + InquisitorMirroredPerMinute(conn, Get));
         lock (conn.Monsters)
         {
             if (conn.PlayerLife == 0) conn.EnergyShield.Empty();
@@ -524,7 +524,8 @@ partial class Program
                     burnCarry += (InGracePeriod(conn) ? 0 : burnPerSecond * conn.ElementalAilments.DamageTakenFactor(now)) * seconds;
                     int burnWhole = (int)Math.Truncate(burnCarry); burnCarry -= burnWhole;
                     int lifeBurn = conn.EnergyShield.Damage(burnWhole, false, now);
-                    conn.EnergyShield.Advance(recoveryFrom, now, RecoveryStat, true);
+                    conn.EnergyShield.Advance(recoveryFrom, now, RecoveryStat, true,
+                        InquisitorMirroredRecovery(conn, recoveryFrom, now, RecoveryStat));
                     double fortificationLife = FortificationOf(conn).TakeRecovery(conn.Clock.Elapsed.TotalSeconds);
                     conn.PlayerLife = lifeAfter = RecoveryPool.Advance(lifeBefore, conn.PlayerMaxLife,
                         life + lifeRate * seconds + fortificationLife + conn.Antiquarian.TakeRecovery(now)

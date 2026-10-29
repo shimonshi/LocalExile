@@ -51,7 +51,9 @@ Its native owner buff and the stationary-ground buff have separate ownership, wi
 Enemy observations run on the player tick, while damage independently checks current hostility, life and distance.
 The stationary ground uses the existing extracted Consecrated Ground art.
 Pious Path copies regeneration, including the existing temporary regeneration sources; it does not copy flask recovery.
-Client corrections use the same ES regeneration input as the resource writer.
+This is additional ES recovery, not base ES regeneration: ES regeneration increases do not scale it again.
+ES recovery rate applies once, while life recovery rate does not scale the copy.
+Client corrections publish the combined recovery rate; the resource writer adds the separate recovery integral.
 
 ## Verification and limits
 

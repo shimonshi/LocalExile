@@ -66,9 +66,10 @@ partial class Program
                     ? (int)Math.Round(100 * ((1 + previous / 100.0) * (1 + value / 100.0) - 1))
                     : own.GetValueOrDefault(key) + value;
             }
+        var fanatic = InquisitorFanaticism(conn, selected.Effect);
         double costMultiplier = supports.Aggregate(1.0, (v, s) => v * s.CostMultiplier / 100.0);
         foreach (string stat in new[] { "mana_cost", "base_mana_cost" })
-            if (Stats.Key(stat) is uint k && own.TryGetValue(k, out int cost)) own[k] = (int)Math.Floor(cost * costMultiplier);
+            if (Stats.Key(stat) is uint k && own.TryGetValue(k, out int cost)) own[k] = InquisitorOffense.Cost(cost, costMultiplier, fanatic);
         // Global added damage on support gems applies to this skill, not to the character or other link groups.
         foreach (string type in new[] { "physical", "fire", "cold", "lightning", "chaos" })
             foreach (string bound in new[] { "minimum", "maximum" })
@@ -78,9 +79,6 @@ partial class Program
                             own[target] = own.GetValueOrDefault(target) + damage;
         if (SkillsFor(conn).IsSpell(selected.Effect) && !SkillsFor(conn).IsAttack(selected.Effect))
         {
-            var fanatic = InquisitorFanaticism(conn, selected.Effect);
-            if (Stats.Key("mana_cost") is uint mana && own.TryGetValue(mana, out int cost))
-                own[mana] = (int)Math.Clamp(decimal.Floor(cost * fanatic.CostFactor), 0, int.MaxValue);
             if (Stats.Key("spell_area_of_effect_+%") is uint area)
                 own[area] = own.GetValueOrDefault(area) + fanatic.AreaIncreasePct;
         }

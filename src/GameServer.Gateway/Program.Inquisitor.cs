@@ -108,15 +108,23 @@ partial class Program
         return Dist(conn.Walk.Position(now), target.Walk.Position(now)) <= 60 ? 1 + (conn.Ruthless ? 8 : 16) / 100d : 1;
     }
 
-    static void WithInquisitorRegeneration(ClientState conn, Dictionary<uint, int> stats)
+    static double InquisitorMirroredPerMinute(ClientState conn, Func<string, int> get)
     {
-        lock (conn.Monsters)
-        {
-            if (!InquisitorOf(conn).Ground.OwnerMirrorsLifeRegeneration(ProjectileWorldTime(conn))) return;
-            int Get(string name) => Stats.Key(name) is uint key ? stats.GetValueOrDefault(key) : 0;
-            if (Stats.Key("base_energy_shield_regeneration_rate_per_minute") is uint regen)
-                stats[regen] = (int)Math.Clamp(stats.GetValueOrDefault(regen) + PanelStats.LifePerMinute(Get, conn.Pools.Life), 0, int.MaxValue);
-        }
+        if (!InquisitorOf(conn).Ground.OwnerMirrorsLifeRegeneration(ProjectileWorldTime(conn))
+            || get("cannot_recover_energy_shield") != 0 || get("no_life_regeneration") != 0) return 0;
+        // Pious is additional ES recovery from life regeneration, not ES regeneration.
+        // The current common life baseline has not applied a life-only recovery multiplier.
+        return Math.Max(0, PanelStats.LifePerMinute(get, conn.Pools.Life))
+            * Math.Max(0, 1 + get("energy_shield_recovery_rate_+%") / 100d);
+    }
+
+    static double InquisitorMirroredRecovery(ClientState conn, double from, double to, Func<string, int> get)
+    {
+        if (get("cannot_recover_energy_shield") != 0 || get("no_life_regeneration") != 0) return 0;
+        ObserveInquisitor(conn, InquisitorInputs(conn));
+        return InquisitorOf(conn).Ground.MirroredLifeRegeneration(from, to,
+            Math.Max(0, PanelStats.LifePerMinute(get, conn.Pools.Life)) / 60)
+            * Math.Max(0, 1 + get("energy_shield_recovery_rate_+%") / 100d);
     }
 
     static int InquisitorCastSpeed(ClientState conn, int effect, int increased) =>
