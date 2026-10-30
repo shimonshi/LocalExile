@@ -77,11 +77,14 @@ Pure timing tests additionally cover pause, death, source removal and one-use ar
 
 ### Recorded checks
 
-Current contributor composition `6872b6f90353978ffee7969f8051d5470e9d3949` contains owner head `cb8ff7ee`
-and the shared lifecycle prerequisite `ada116ae`.
-Its solution builds with zero warnings/errors; Core **390**, Data **34** and Gateway **2645** pass.
-This includes 67 Inquisitor checks and the prerequisite's 17 generic lifecycle regressions.
+Current contributor composition `7f7ee79d774261d756cfd18e17909dab2f1fd19f` contains owner head `58edf093`
+and the shared lifecycle prerequisite `da2668a5`.
+Its solution builds with zero warnings/errors; Core **395**, Data **34** and Gateway **3260** pass.
+This includes 68 Inquisitor checks and the prerequisite's 20 generic lifecycle regressions.
 Nine native choice/refund/Providence/Pious/Justice/relog controls pass again on this composition.
+The supported-attack merge retains Arcane Might's wand and retaliation inputs alongside Virtue's more multiplier.
+A combined Kinetic Blast regression checks the wand ratio, Virtue, removal and paid refund in the actual hit path.
+The Battlemage fixture follows the owner's corrected Fireball added-damage effectiveness of 300%.
 The detailed 39-check matrix below retains its original revision and scope.
 
 The 39-check production source `6b3c7a2fd86505cd48d9e89692e4c5d5432554f3` contains main
@@ -158,11 +161,13 @@ No client graph, archive maintenance, extraction format or production data-path 
 
 The [Inquisitor draft PR](https://github.com/shimonshi/LocalExile/pull/1) is based on
 `candidate/pr318-main361-admission` in the contributor fork.
-Its base is the shared lifecycle candidate `ada116ae2a26bbd674d322fc49f9f2375fc0fdd9`, proposed to the #318 owner in
+Its base is the shared lifecycle candidate `da2668a5046e31e94ebc102dfff38827201d1197`, proposed to the #318 owner in
 [evrydayjunglist/evryPath#1](https://github.com/evrydayjunglist/evryPath/pull/1).
 The owner independently integrated main; the earlier `f651d0e6` admission proposal is superseded.
-The current candidate includes exact #318 head `cb8ff7ee6b416b9b1d4e05acb510c3d57285ffb8` and current main.
-Its independent build and Core **389**, Data **34**, Gateway **2578** tests pass, with 12 native lifecycle controls.
+The current candidate includes exact #318 head `58edf093c7885082bf70d4ec3bc0847e27fb4ce5` and its main `c1b112e4`.
+Its independent build and Core **394**, Data **34**, Gateway **3192** tests pass, with 12 repeated native controls.
+The owner's two blocking review requests are addressed: loading discards independent recovery accumulators and
+`CriticalContext` retains its original implementation; successful transfer also explicitly retires the connection.
 It contains no Inquisitor source or fixtures.
 The dependent merge retains the owner's current requirement/projectile fixtures and the new generic regressions.
 See [character stat lifecycle](../dev/character-stat-lifecycle.md) for exact evidence and scope.
@@ -172,14 +177,22 @@ onto the resulting main and repeats the required checks before upstream readines
 No other owner's published branch is modified.
 The contributor-fork draft provides a class-only review diff while the upstream prerequisite is pending.
 It is not an upstream merge-ready PR.
+Current main `4602dd8ff8321574dfc8e26de0610bd77b931186` contains the #375 combat/panel block.
+#318 has nine conflicted paths against it and still needs its owner's reconciliation before downstream readiness.
 
-The updated composition `6872b6f9` is tested after merging that prerequisite into the class branch.
-Its production diff from the previous published class head `5f79e568` changes only requirement-related comments
-in `Program.Progression.cs` and `Program.Skills.cs`; class mechanics and the common lifecycle fix are preserved.
+The updated composition `7f7ee79d` is tested after merging the reviewed prerequisite into the class branch.
+It preserves both the owner base's Arcane Might composition and the class consumers at their shared hit-input seam.
 The fresh nine-check native Gateway SHA-256 is
-`f5c1d4c8690212024d8d642bea1465bbe9e79d3c9b065f9197f7e38880674951`.
-Evidence: `logs/inquisitor-panel-update-{build,core,data,gateway,native-run}.log` and
-`logs/inquisitor-native-20261030-032644/{metadata,results}.json`.
+`95d1fe9e51f113a9a37c6cbdab208ed73cb8404a04e6c80bae7e5cac3c1449a3`.
+Evidence: `logs/inquisitor-review-{build,core,data,gateway,native}.log` and
+`logs/inquisitor-native-20261030-145038/{metadata,results}.json`.
+Nine additional current-code controls pass in
+`logs/inquisitor-equipment-native-20261030-145157/{metadata,results}.json`.
+They cover actual Fireball payment, all three Virtue stages and expiry, typed Battlemage with 300% effectiveness
+(local fire 1-3 adds 3-9 to the received spell), paid removal, and equipped-effect Fanaticism payment/speed/area.
+This repeats the affected spell/equipment matrix after the owner's effectiveness correction.
+The initial automation attempt encountered stale Frida process-inventory entries.
+The ignored runner selects the single actual Windows process and retains the bridge's module-path validation.
 This smoke checks class/panel lifecycle, while the larger damage/timing matrix above retains its original revision.
 The isolated runtime is restored to its initial stopped state.
 
@@ -196,6 +209,7 @@ Private regressions cover the combined Inquisitor paths and retirement during qu
 Those related features and their fixture migrations are kept out of the published Inquisitor diff.
 
 This does not establish readiness for the entire future merge block.
+The unchanged #328, #333 and #339 heads all conflict with current main `4602dd8f`.
 #339 introduces typed recipient expiry; its interaction with Inquisitor's world-clock Fanaticism and ground linger
 needs an explicit adapter/oracle and native validation before that combination is accepted.
 The candidate preserves the existing five-second Fanaticism and four-second linger rather than guessing new semantics.
