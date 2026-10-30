@@ -47,7 +47,9 @@ public sealed partial class AscendancyGatewayIntegrationTests
             Assert.Equal((int)((rate - 1) * 100), stats[Program.Stats.Key("buff_time_passed_+%")!.Value]);
             // The optional duration precedes this row's recovery GrantedStats word.
             float remaining = BitConverter.UInt32BitsToSingle(BinaryPrimitives.ReadUInt32BigEndian(bytes.AsSpan(prefix + 23, 4)));
-            Assert.Equal(budget - (gateTime - start) * rate, remaining, 6);
+            // The protocol carries Single precision; compare the encoded value without a decimal-rounding tie.
+            Assert.Equal(BitConverter.SingleToUInt32Bits((float)(budget - (gateTime - start) * rate)),
+                BitConverter.SingleToUInt32Bits(remaining));
         }
         Assert.True(conn.FlaskEffects.Any);
         Assert.Equal(budget, conn.FlaskEffects.Remaining(source), 8);

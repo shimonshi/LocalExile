@@ -97,7 +97,7 @@ partial class Program
                     && !SkillsFor(conn).IsProjectile(gem.Effect) && WeaponProfileFor(conn).Melee)
                 {
                     var here = conn.Walk.Position(at);
-                    if (GroundAttackWalks(here, (use.X, use.Y), WeaponFor(conn).Range))
+                    if (GroundAttackWalks(here, (use.X, use.Y), SlayerMeleeRange(conn, WeaponFor(conn).Range)))
                     {
                         int walkAction = 0;
                         if (!TryBeginSkillCooldownUse(conn, use.SkillId, gem.Effect,
@@ -690,6 +690,8 @@ partial class Program
                     _ = RunLivingCollisions(remote, stream, ciphers, conn);
                     _ = RunPlayerTick(remote, stream, ciphers, conn);
                     _ = RunResourceRecovery(remote, stream, ciphers, conn);
+                    DeadeyeGaleReceive(conn, conn.Ticket);
+                    _ = RunDeadeyeGale(remote, stream, ciphers, conn);
                     _ = RunCharges(remote, stream, ciphers, conn);
                     _ = RunFortification(remote, stream, ciphers, conn);
                     _ = RunRage(remote, stream, ciphers, conn);

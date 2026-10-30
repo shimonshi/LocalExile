@@ -115,8 +115,8 @@ partial class Program
                         string.Join(", ", worn.Where(w => inactive.Contains(w.Id)).Select(w =>
                             $"{w.Id} {ItemsFor(conn).ByHash(w.Item.TypeHash)?.Name} (str {w.Strength}, dex {w.Dexterity}, int {w.Intelligence}, level {w.Level})")));
             }
-        return (WithTemporalChains(conn, WithCompanions(conn, WithStolenMods(conn,
-            WithAntiquarian(conn, WithFortification(conn, WithCharges(conn, sources)))))), attributes);
+        return (WithDeadeyeGale(conn, WithSlayer(conn, WithTemporalChains(conn, WithCompanions(conn,
+            WithStolenMods(conn, WithAntiquarian(conn, WithFortification(conn, WithCharges(conn, sources)))))))), attributes);
     }
 
     // Shared equipment/passive resolver. The requirement snapshot uses this without publishing caches or pools.
@@ -675,6 +675,10 @@ partial class Program
             resistanceSources[key] = resistanceSources.GetValueOrDefault(key) + value;
         bonus = ResistanceOvercap.Applied(bonus, resistanceSources, devStats, ResistancePenalty(conn), Stats);
         var pools = CharacterStats.For(SkillsFor(conn).ClassFor(conn.ClassRow), level, bonus);
+        pools = pools with { Accuracy = DeadeyeAvidityAccuracy.Calculate(pools.AccuracyBase, pools.AccuracyPct,
+            (int)RawAccuracy(DeadeyeAvidityAccuracy.Stat), DeadeyeAvidityAccuracy.StandardFrenzy(ChargesOf(conn)),
+            Stats.Key("main_hand_accuracy_rating") is uint accuracyKey && devStats.TryGetValue(accuracyKey, out int finalAccuracy)
+                ? finalAccuracy : null) };
         // The pure base critical stats (/set_stat too) sit outside the passive increases: the weapon override replaces
         // the armed main hand's base and the unarmed base replaces the empty one, before the global increases.
         pools = pools with

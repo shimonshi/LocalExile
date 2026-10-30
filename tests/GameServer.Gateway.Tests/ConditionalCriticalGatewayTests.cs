@@ -24,7 +24,7 @@ public partial class ConditionalCriticalGatewayTests
 
     static MethodInfo Method(string name) => typeof(Program).GetMethod(name, BindingFlags.Static | BindingFlags.NonPublic)!;
 
-    sealed class Contact : IDisposable
+    sealed partial class Contact : IDisposable
     {
         readonly TcpListener listener = new(IPAddress.Loopback, 0);
         readonly TcpClient writer = new(), reader;
@@ -37,11 +37,12 @@ public partial class ConditionalCriticalGatewayTests
         public SemaphoreSlim SendGate => Program.SendGates.GetValue(ciphers, _ => new(1, 1));
 
         public Contact(Draws random, string? gemName = null, string? weaponName = null, int distance = 2,
-            uint targetLife = 100000, MonsterModSet? targetMods = null, byte targetLevel = 1)
+            uint targetLife = 100000, MonsterModSet? targetMods = null, byte targetLevel = 1,
+            BossFights.Stage? stage = null, int classRow = 1)
         {
             TestSaves.Ensure();
             Conn = new(new(ushort.MaxValue, "CriticalContact", 200, 200, 32, 32, (_, _) => true, []), 1, 1)
-            { Character = character, ClassRow = 1, PlayerSent = true, PlayerLife = 50, PlayerMana = 1000,
+            { Character = character, ClassRow = classRow, PlayerSent = true, PlayerLife = 50, PlayerMana = 1000,
                 CriticalRandom = random, Instance = new InstanceState() };
             var inventory = PlayerInventories.For(character, Program.Items);
             if (weaponName is not null)
@@ -70,7 +71,7 @@ public partial class ConditionalCriticalGatewayTests
             Set("attack_speed_+%", 200);
             Refresh();
             Target = new("critical target", new(32 + distance, 32, 30), 0, 2, targetLife)
-                { Mods = targetMods ?? MonsterModSet.None, Level = targetLevel };
+                { Mods = targetMods ?? MonsterModSet.None, Level = targetLevel, Stage = stage };
             Conn.Monsters.Add(42, Target);
             Conn.Clock.Start();
             listener.Start();

@@ -71,7 +71,12 @@ partial class Program
             lock (Conn.Monsters)
             {
                 if (!Active) { Invalidate(); return; }
-                if (!Conn.Paused) Runtime.AdvanceTo(Math.Max(Runtime.Now, ProjectileRuntime.Time(Conn.Clock.Elapsed.TotalSeconds)));
+                if (!Conn.Paused)
+                {
+                    Runtime.AdvanceTo(Math.Max(Runtime.Now, ProjectileRuntime.Time(Conn.Clock.Elapsed.TotalSeconds)));
+                    RefreshDeadeyeMarks(this);
+                    DeadeyeMirageStep(this);
+                }
             }
         }
 
@@ -110,6 +115,8 @@ partial class Program
             lock (Conn.Monsters)
             {
                 if (invalid) return;
+                RetireDeadeyeMarks(this);
+                RetireDeadeyeMirages(this);
                 invalid = true;
                 Runtime.Clear();
                 foreach (var visual in visuals.Values) Conn.ProjectileObjects.Remove(visual.Id);
@@ -178,6 +185,10 @@ partial class Program
         /// flight never contacts the monster itself.</summary>
         internal ProjectileActorKey ActorKey(uint id, SpawnedMonster monster) => Key(id, monster);
 
+        public int TargetSplitCount(ProjectileEntity projectile, ProjectileActor target) =>
+            Conn.Monsters.TryGetValue(target.Key.Id, out var monster) && Key(target.Key.Id, monster) == target.Key
+                ? DeadeyeMarkSplit(this, target.Key.Id, monster) : 0;
+
         public IReadOnlyList<ProjectileActor> Actors(long from, long until)
         {
             var result = new List<ProjectileActor>();
@@ -218,7 +229,13 @@ partial class Program
             if (!Active) return ProjectileHitResult.Miss;
             // A monster's shot: the player is the target and the monster's damage pipeline commits the hit.
             if (contact.Projectile.Use.Payload is HostileProjectileOffense hostile) return HostileHit(this, contact, hostile);
+            if (contact.Projectile.Use.Payload is DeadeyeMirageOffense proxy) return DeadeyeMirageHit(this, contact, proxy);
             if (contact.Projectile.Use.Payload is not ProjectileOffense shot) return ProjectileHitResult.Miss;
+            return HitOwner(contact, shot, SkillDamageAttribution.Player);
+        }
+
+        internal ProjectileHitResult HitOwner(ProjectileDamage contact, ProjectileOffense shot, SkillDamageAttribution attribution)
+        {
             if (!Conn.Monsters.TryGetValue(contact.Target.Id, out var target) || target.Dead || target.Life == 0
                 || Key(contact.Target.Id, target) != contact.Target) return ProjectileHitResult.Miss;
             var random = contact.Projectile.RandomSource;
@@ -234,29 +251,49 @@ partial class Program
             if (MonsterBlocks(target, random, shot.Spell)) return ProjectileHitResult.Blocked;
             double more = contact.Multiplier * (contact.Phase > 0 ? shot.ReturnMultiplier : 1);
             if (!shot.Spell && shot.FarShot) more *= AntiquarianEffects.FarShot(contact.Projectile.Distance);
-            var baseHit = contact.IsArea ? shot.AreaHit ?? shot.Hit : shot.Hit;
+            if (contact.CountsAsProjectileDamage)
+                more *= shot.DistanceDamage.HitMultiplier(contact.Projectile.Distance, attack: !shot.Spell);
+            var baseHit = DeadeyeMarkedPacket(this, contact.Target.Id, target,
+                contact.IsArea ? shot.AreaHit ?? shot.Hit : shot.Hit, !shot.Spell, contact.CountsAsProjectileDamage,
+                contact.IsArea ? shot.MarkAreaBasis : shot.MarkDirectBasis);
+            var player = CharacterPlayerStats(Conn);
             var packet = new SkillDamageContext(shot.Spell ? SkillHitKind.Spell : SkillHitKind.Attack,
-                CharacterPlayerStats(Conn)).Hit(baseHit).Scale(more);
-            var gambler = GamblerFor(CharacterPlayerStats(Conn));
-            var rolled = WithDamageVsRarity(CharacterPlayerStats(Conn), target, (gambler with { DamageMorePct = 0 }).RollOutgoingHit(packet, random));
+                player).Hit(baseHit).Scale(more * SlayerTargetMore(Conn, target, player));
+            var gambler = GamblerFor(player);
+            var rolled = WithDamageVsRarity(player, target, (gambler with { DamageMorePct = 0 }).RollOutgoingHit(packet, random));
             int chance = contact.Projectile.Form > 0 ? shot.SecondFormCriticalChance ?? shot.CriticalChance : shot.CriticalChance;
+            var markedCritical = DeadeyeMarkedCritical(this, contact.Target.Id, target, chance, shot.CriticalMultiplier);
+            chance = markedCritical.Chance;
             // Base chance/multiplier belong to release; conditional owner state is read at this contact.
             bool critical = RollCriticalStrike(Conn, chance, shot.SkillStats, attack: !shot.Spell, skillRoll: shot.CriticalRoll)
                 && (shot.Spell || EvasionEntropy.ConfirmsCritical(hitChance, Conn.AttackAccuracyRandom));
-            var (damage, _) = MonsterDamage(target, rolled, critical, !shot.Spell, shot.ResistanceMods, shot.Penetration, out var taken, gambler.InvertsResistance(random));
-            if (critical) damage = DamageModel.CriticalDamage(damage, CriticalMultiplierOn(target, shot.CriticalMultiplier));
-            LeechOnHitLocked(Conn, target, taken, damage, shot.Leech);
+            var targetModifiers = DeadeyeMarkTargetModifiers(this, contact.Target.Id, target, contact.CountsAsProjectileDamage);
+            var (damage, _) = MonsterDamage(target, rolled, critical, !shot.Spell, shot.ResistanceMods, shot.Penetration,
+                out var taken, gambler.InvertsResistance(random), targetModifiers.Increased, targetModifiers.Physical);
+            int sourceMultiplier = SlayerCriticalMultiplier(Conn, markedCritical.Multiplier, player);
+            if (critical) damage = DamageModel.CriticalDamage(damage, CriticalMultiplierOn(target, sourceMultiplier));
+            var ownerHit = new OwnerSkillHit(damage, taken,
+                DeadeyeMarkedLeech(this, contact.Target.Id, target, shot.Leech, !shot.Spell), player)
+                { Attack = !shot.Spell, Attribution = attribution };
             var settings = (critical ? shot.CriticalImpaleSettings : null) ?? shot.ImpaleSettings ?? new(shot.ImpaleChance);
-            double physical = rolled[DamageType.Physical].Min * (critical ? Math.Max(0, shot.CriticalMultiplier) / 100d : 1);
+            double physical = rolled[DamageType.Physical].Min * (critical ? Math.Max(0, sourceMultiplier) / 100d : 1);
             var (stored, _) = target.Impale.OnHit(physical, at, settings, random, target.Mods.Effects["avoid_impale_%"]);
             damage = ImpaleStats.AddReflected(damage, MonsterImpaleDamage(target, stored));
-            var hit = ApplyMonsterHitLocked(Conn, target, damage);
+            DeadeyeMarkHit(this, contact.Target.Id, target, !shot.Spell, attribution.GrantOwnerOnHit, random);
+            // Capture target-added ailment basis before a lethal hit can transfer the mark.
+            var markedIgnite = DeadeyeMarkedIgnite(this, contact.Target.Id, target, shot.Ignite,
+                contact.IsArea ? shot.MarkAreaBasis : shot.MarkDirectBasis);
+            var hit = ApplyMonsterHitLocked(Conn, target, damage, ownerHit);
             if (hit is null) return ProjectileHitResult.Miss;
-            if (hit.Value.Life > 0 && rolled[DamageType.Fire].Max > 0) IgniteOnHitLocked(this, contact.Target.Id, target, shot.Ignite, critical, at);
-            RageOnHitLocked(Conn, attack: !shot.Spell, melee: false, critical, shot.SkillStats,
+            if (hit.Value.Life > 0 && rolled[DamageType.Fire].Max > 0) IgniteOnHitLocked(this, contact.Target.Id, target,
+                contact.CountsAsProjectileDamage ? shot.DistanceDamage.IgniteAt(markedIgnite, contact.Projectile.Distance)
+                    : markedIgnite, critical, at);
+            if (attribution.GrantOwnerRage) RageOnHitLocked(Conn, attack: !shot.Spell, melee: false, critical, shot.SkillStats,
                 contact.Projectile.ReactionRandomSource);
-            ChargesOnHit(Conn, target, critical, shot.Spell, shot.Effect, shot.Level, shot.Quality, melee: false);
-            CommitProjectileHit(this, contact, target, hit.Value, damage, shot, critical);
+            if (attribution.GrantOwnerChargeOnHit) ChargesOnHit(Conn, target, critical, shot.Spell, shot.Effect, shot.Level, shot.Quality, melee: false);
+            if (attribution.RecursiveMirage && !shot.Spell && shot.SourceSkill != 0)
+                DeadeyeMirageBowHit(this, shot.SourceSkill, target);
+            CommitProjectileHit(this, contact, target, hit.Value, damage, shot, critical, attribution);
             return ProjectileHitResult.Hit;
         }
 
@@ -278,7 +315,7 @@ partial class Program
                 && p.Use.Payload is ProjectileOffense { ClientPredicted: true }) return;
             if (value.Kind == ProjectileEventKind.Spawn)
             {
-                string? flightVisual = (p.Use.Payload as ProjectileOffense)?.FlightVisual ?? presentation.FlightVisual;
+                string? flightVisual = OwnerProjectileOffense(p.Use.Payload)?.FlightVisual ?? presentation.FlightVisual;
                 uint id = Conn.NextObjectId++;
                 // A shot aimed at higher ground flies at that ground's height, so its object clears the cliff it passes over.
                 var height = ProjectileHeight.Flight(FlightGround(p) ?? TerrainHeights.At(Conn.Layout.Id, Conn.Seed, x, y),
@@ -356,7 +393,7 @@ partial class Program
                     });
                 }
             }
-            else if (value.Kind == ProjectileEventKind.Area && p.Use.Payload is ProjectileOffense { AreaVisual: { } ao })
+            else if (value.Kind == ProjectileEventKind.Area && OwnerProjectileOffense(p.Use.Payload) is { AreaVisual: { } ao })
                 Effect(x, y, ao, presentation.EffectLifetime, value.Radius);
         }
 
@@ -467,6 +504,7 @@ partial class Program
         static string? PayloadLabel(object? payload) => payload switch
         {
             ProjectileOffense offense => offense.Label,
+            DeadeyeMirageOffense proxy => proxy.Shot.Label,
             HostileProjectileOffense hostile => hostile.Label,
             _ => null,
         };

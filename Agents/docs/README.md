@@ -74,6 +74,8 @@ How to regenerate them: [re/tooling.md](re/tooling.md) §7.
 | [game/aristocrat.md](game/aristocrat.md) | Aristocrat node checklist: gem levels/quality, attribute requirements and conditional immunities |
 | [game/ascendancies.md](game/ascendancies.md) | selection, points, saves and the Phrecia play gate |
 | [game/harbinger.md](game/harbinger.md) | Harbinger node consumers and acceptance state |
+| [game/slayer.md](game/slayer.md) | ordinary Slayer connected node model and pending native combat acceptance |
+| [game/deadeye.md](game/deadeye.md) | all 19 ordinary nodes, connected contracts, [marks/Mirage](game/deadeye-marks-mirage.md), [Gale/projectiles](game/deadeye-gale-projectile.md) and pending acceptance |
 | [game/antiquarian.md](game/antiquarian.md) | all nine node consumers, verified-graph admission, legal builds and native acceptance |
 | [game/unique-jewels.md](game/unique-jewels.md) | the 185 unique jewels, their effects and what the passive-socket server supports |
 | [game/radius-jewels.md](game/radius-jewels.md) | all 76 radius unique jewels: radius/ring model, mechanics, reusable timeless pieces and implementation plan; 42 jewels with server-side effects, 33 threshold items with client/server threshold checks, Lioneye's Fall's item source/client conversion, and the generated Impossible Escape keystone bypass |

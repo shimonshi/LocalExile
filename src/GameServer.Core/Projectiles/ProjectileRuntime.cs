@@ -14,6 +14,16 @@ public sealed partial class ProjectileRuntime(IProjectileWorld world)
     public IReadOnlyCollection<ProjectileEntity> Projectiles => projectiles.Values;
     public static long Time(double seconds) => checked((long)Math.Round(seconds * QuantaPerSecond));
 
+    /// <summary>Target-sourced split granted synchronously by the accepted Hit callback, before continuation.
+    /// Uses the same flight, hit ledger and split prohibitions; it does not release a second skill use.</summary>
+    public bool RequestSplit(ProjectileEntity projectile, int count)
+    {
+        if (count <= 0 || projectile.Profile.CannotSplit
+            || !projectiles.TryGetValue(projectile.Id, out var live) || !ReferenceEquals(live, projectile)) return false;
+        projectile.Split = Math.Max(projectile.Split, Math.Min(256, count));
+        return true;
+    }
+
     public void Schedule(long at, Action command)
     {
         if (at < Now) throw new ArgumentOutOfRangeException(nameof(at), "Cannot insert a command in committed history.");
@@ -55,6 +65,7 @@ public sealed partial class ProjectileRuntime(IProjectileWorld world)
         if (p.Count is < 1 or > 256 || !double.IsFinite(p.Speed) || p.Speed <= 0
             || !double.IsFinite(p.Range) || p.Range <= 0 || !double.IsFinite(p.Radius) || p.Radius < 0
             || p.Lifetime <= 0 || p.SequentialDelay < 0 || p.ReturnChancePercent is < 0 or > 100
+            || p.TerrainChainChancePercent is < 0 or > 100 || p.Barrage && p.SequentialDelay <= 0
             || !double.IsFinite(p.ReturnSpeedMultiplier) || p.ReturnSpeedMultiplier <= 0
             || !double.IsFinite(p.ReturnOvershoot) || p.ReturnOvershoot < 0 || p.ReturnHitLimit < 0 || p.OutboundHitLimit < 0)
             throw new ArgumentOutOfRangeException(nameof(p));
@@ -213,10 +224,14 @@ public sealed partial class ProjectileRuntime(IProjectileWorld world)
             p.Contacts.Add(target.Key);
             if (p.Phase > 0) p.ReturnContacts++;
             else p.OutboundContacts++;
+            int previousSplit = p.Split;
+            RequestSplit(p, world.TargetSplitCount(p, target));
             var terminal = p.Profile.EndArea is { } endArea && AllowsEndArea(p, ProjectileEndReason.Enemy)
                 && !CanContinue(p, actors) && ReturnAnchor(p, ProjectileEndReason.Enemy) is null ? endArea : null;
             var result = Damage(p, target, terminal?.Stage ?? "direct", multiplier: terminal?.Multiplier ?? 1,
-                admissionStage: "direct", isArea: terminal is not null);
+                admissionStage: "direct", isArea: terminal is not null,
+                countsAsProjectileDamage: terminal?.CountsAsProjectileDamage ?? p.Profile.CountsAsProjectileDamage);
+            if (result != ProjectileHitResult.Hit) p.Split = previousSplit;
             if (result == ProjectileHitResult.Miss) return;
             if ((p.Phase == 0 || p.Profile.ContactAreaOnReturn) && p.Profile.ContactArea is { } area)
                 Area(p, area, area.ExcludeContactTarget ? target.Key : null);
@@ -227,13 +242,14 @@ public sealed partial class ProjectileRuntime(IProjectileWorld world)
         }
         else if (c.End == ProjectileEndReason.Terrain)
         {
-            if (AllowsTerminalArea(p) && (p.Phase == 0 || p.Profile.ContactAreaOnReturn)
-                && p.Profile.ContactArea is { } area) Area(p, area);
             if (p.Profile.SplitOnTerrain && !p.Profile.CannotSplit && p.Split > 0)
             {
                 p.Position += c.Normal * .001; // Children start on the incident side of the blocking surface.
                 if (Split(p, actors, c.Normal)) return;
             }
+            if (ChainFromTerrain(p, actors, c.Normal)) return;
+            if (AllowsTerminalArea(p) && (p.Phase == 0 || p.Profile.ContactAreaOnReturn)
+                && p.Profile.ContactArea is { } area) Area(p, area);
             if (p.TerrainBounces > 0)
             {
                 p.TerrainBounces--;
@@ -246,6 +262,23 @@ public sealed partial class ProjectileRuntime(IProjectileWorld world)
         else End(p, c.End!.Value);
     }
 
+    bool ChainFromTerrain(ProjectileEntity p, IReadOnlyList<ProjectileActor> actors, ProjectileVector normal)
+    {
+        if (p.Profile.CannotChain || p.Chain <= 0 || p.Profile.TerrainChainChancePercent <= 0 || p.Remaining <= 0)
+            return false;
+        // Offset only the visibility probe until success. A failed roll must keep the original terminal geometry.
+        var incident = p.Position + normal * .001;
+        var target = Nearby(p, actors).FirstOrDefault(a =>
+            (a.Position(Now) - incident).Length <= p.Remaining
+            && world.TraceTerrain(incident, a.Position(Now)) is null);
+        if (target is null || p.TerrainRandom.Next(100) >= p.Profile.TerrainChainChancePercent) return false;
+        p.Chain--;
+        p.Position = incident;
+        p.Direction = (target.Position(Now) - incident).Unit;
+        Publish(ProjectileEventKind.Redirect, p);
+        return true;
+    }
+
     bool CanContinue(ProjectileEntity p, IReadOnlyList<ProjectileActor> actors) => p.Phase == 0 && p.Profile.OutboundHitLimit is not null
         || p.Phase > 0 && p.Profile.PierceAllOnReturn && !p.Profile.CannotPierce
         || (!p.Profile.CannotSplit && p.Split > 0 && (p.Profile.SplitWithoutTargets || Nearby(p, actors).Any()))
@@ -254,14 +287,15 @@ public sealed partial class ProjectileRuntime(IProjectileWorld world)
 
     ProjectileHitResult Damage(ProjectileEntity p, ProjectileActor target, string stage,
         long? group = null, ProjectileHitRule? rule = null, double multiplier = 1, string? admissionStage = null,
-        bool isArea = false)
+        bool isArea = false, bool countsAsProjectileDamage = false)
     {
         rule ??= (admissionStage ?? stage) == "direct" ? DirectHitRule(p) : p.Profile.HitRule;
         long g = group ?? (rule.Scope == ProjectileHitScope.Projectile ? p.Id : p.EmissionId);
         var result = ProjectileHitResult.Blocked;
         ledger.TryHit(g, p.Phase, admissionStage ?? stage, target.Key, Now, p.CreatedAt, rule, () =>
         {
-            result = world.Hit(new(p, target.Key, Now, stage, p.Position, multiplier * p.DamageMultiplier) { IsArea = isArea });
+            result = world.Hit(new(p, target.Key, Now, stage, p.Position, multiplier * p.DamageMultiplier)
+                { IsArea = isArea, CountsAsProjectileDamage = countsAsProjectileDamage });
             return result != ProjectileHitResult.Miss;
         });
         if (result == ProjectileHitResult.Hit)

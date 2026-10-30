@@ -63,3 +63,28 @@ Items keep the Roadmap's priority groups, and are in rough priority order within
   See [Aristocrat](../docs/game/aristocrat.md).
 - **Done when:** quest rewards persist and the native Altar can choose an ordinary ascendancy, with real-client checks.
   Implementing all 19 Phrecia classes' special gameplay is separate from this selection lifecycle.
+
+### Ordinary ascendancy gameplay
+
+- **Slayer (#391):** all pinned Default consumers are connected in source `762fbe43`.
+  Complete the [native combat matrix](../docs/game/slayer.md), including kill-window timing, nearby/proximity,
+  reflection, unaffected bleeding, shared leech/overkill/cull and one lethal reward commit.
+  Verify paid source removal, delayed publication, pause/death, failed/successful transfer, relog and restart.
+  Earlier native maxima/lifecycle evidence does not establish final-source combat acceptance.
+  The latest bounded native run found missing Headsman buff UI despite correct derived stats; fix and revalidate it.
+- **Deadeye (#392):** all 19 Default nodes have connected consumers, including marks/Mirage and Gale/projectiles.
+  Complete the [final native matrix](../docs/game/deadeye.md#related-integration-and-final-acceptance-work):
+  real hit/Ignite distance and in-flight refund, terrain/barrage, all marks and live incoming Focal DoT,
+  autonomous same-actor refresh/attribution, native Mirage visuals, Avidity and world-scoped Tailwind/Wind Ward.
+  Include paid refund, delayed sends, pause/death, transfer, relog and restart on legal connected builds.
+- **Combined acceptance:** finish final-source full suites and record exact source/DLL/data/log provenance.
+  The local ordinary publication candidate uses explicit main `89b7aa90` plus #339 `13aeea19` snapshot `7476a054`.
+  #385 is already merged; keep unmerged #328/#333 class completions out of the ordinary publication diff.
+  Validate #328 `4c90a1f9` -> #333 `1aa9a177` -> #339 `13aeea19` privately before downstream readiness.
+  Newer-main reconciliation and native verification of publication code remain separate acceptance requirements.
+  Keep both classes Partly working until native combat and exact related-head acceptance are recorded.
+  Parent owns any contributor-fork draft against the new prerequisite snapshot and the later upstream PR.
+  The upstream prerequisite merges are external dependencies; never merge into the active Harbinger owner branch.
+- **Ownership:** #391 and #392 are claimed; common hooks integrate in Slayer-then-Deadeye order with one writer.
+  Juggernaut #152, Inquisitor #363 and native selection #151 remain with their existing owners.
+  Read issue claims and related PR diffs before taking another class.

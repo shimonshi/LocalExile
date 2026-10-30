@@ -49,7 +49,9 @@ partial class Program
                 bool wand = projectileId == OrdinaryRangedAttack.Wand;
                 var shot = new ProjectileOffense(captured.Hit, false, captured.Accuracy, captured.CriticalChance,
                     captured.CriticalMultiplier, wand ? "ordinary wand" : "ordinary bow")
-                { SkillStats = SkillsFor(conn).EffectStats(effect, 1).ToDictionary(s => s.Item1, s => s.Item2),
+                { SourceSkill = SkillCatalog.FirstSkillId,
+                    MarkDirectBasis = CaptureDeadeyeOrdinaryMarkHitSource(conn, false),
+                    SkillStats = SkillsFor(conn).EffectStats(effect, 1).ToDictionary(s => s.Item1, s => s.Item2),
                     Penetration = captured.Penetration, ResistanceMods = captured.ResistanceMods, ImpaleChance = captured.ImpaleChance,
                     ImpaleSettings = captured.ImpaleSettings, AccuracyProfile = captured.AccuracyProfile,
                     Ignite = MonsterIgnites.Settings.From(AilmentPanelStats.Compute(new("main_hand", Spell: false, Projectile: true),
@@ -58,6 +60,7 @@ partial class Program
                     CriticalRoll = criticalRoll, Leech = captured.Leech,
                     AccuracyMoreUnique = conn.Pools.AccuracyMoreVsUniquePct, AccuracyMoreClose = conn.Pools.AccuracyMoreInCloseRangePct,
                     AlwaysHits = Get("global_always_hit") != 0, FarShot = Get("player_far_shot") != 0,
+                    DistanceDamage = DeadeyeProjectileDamage.Capture(Get),
                     ReturnMultiplier = ProjectileReturn.DamageMore(Get),
                     // The object flies at the height the clip releases it (the bow's nock, the wand's tip).
                     Presentation = (wand ? OrdinaryWandPresentation : OrdinaryArrowPresentation) with { LaunchHeight = release?.HeightSteps },
@@ -66,7 +69,8 @@ partial class Program
                 var ranged = SkillsFor(conn).Projectile(projectileId);
                 double speed = ProjectileSpeed.CellsPerSecond(ranged?.Speed ?? 3260, Get, _ => 0,
                     Environment.GetEnvironmentVariable("Game_PROJECTILE_SPEED"));
-                var profile = GatewayProjectileDefaults.Resolve(ranged?.Id ?? projectileId, Get, speed, attack: true);
+                var profile = GatewayProjectileDefaults.Resolve(ranged?.Id ?? projectileId, Get, speed, attack: true)
+                    with { CountsAsProjectileDamage = true };
                 var origin = ProjectileSession.Vector(conn.Walk.Position(session.Runtime.Now / (double)ProjectileRuntime.QuantaPerSecond));
                 var target = ProjectileSession.Vector(aim);
                 // The shot leaves from the clip's contact keyframe, in front of the body along the aim (the Ranger's bow

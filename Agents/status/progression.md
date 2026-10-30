@@ -206,6 +206,26 @@ Part of [Status](../Status.md); what to build next in this area is in
 
 ## Partly working
 
+- Ordinary Slayer: all pinned Default node consumers are connected in source `762fbe43`.
+  Charge maxima, cull/direct overkill, leech conditions, kill windows, Bane hit/DoT damage, nearby critical multiplier,
+  melee reach/proximity, kill-based area, reflection and incoming unaffected bleeding have automated coverage.
+  Shared owner/proxy attribution, lethal reward draining and lifecycle/publication paths retain their model boundaries.
+  The earlier native smoke passed nine bounded Slayer lifecycle checks; full final-source combat remains pending.
+  Source `762fbe43` passed a warning-free build and Core 434, Data 34 and default-parallel Gateway 3799.
+  Its bounded native cull/refund/relog run found missing Headsman buff UI; the source fix remains required.
+  The separate local publication candidate reconciles ordinary features onto an explicit main/#339 snapshot.
+  Its acceptance does not inherit native evidence from the source ancestor; see the combined evidence below.
+  Docs: [Slayer model and combat matrix](../docs/game/slayer.md),
+  [combined-source evidence and acceptance boundaries](../docs/game/deadeye.md).
+- Ordinary Deadeye: all 19 pinned Default nodes have connected consumers in source `762fbe43`.
+  Projectile quantity/distance/continuations, terrain chaining, classified Barrage, Avidity, marks/Focal Point,
+  linked Mirage actors and Gale/Tailwind/Wind Ward have production-path automated coverage.
+  Review controls cover same-actor Mirage refresh, Poacher frozen Ignite inputs, incoming Focal Ignite/Bleed,
+  explicit final action-speed overrides and unsupported Barrage rejection before payment.
+  The earlier seven-check native smoke proves selection/source/refund/relog only, not the new engines or combat.
+  The source-suite results above apply; reconciled publication checks, native combat/visual acceptance
+  and the full exact related-head integration remain separately recorded requirements.
+  Docs: [node audit, connected model and acceptance matrix](../docs/game/deadeye.md).
 - Aristocrat: every node in its installed graph has a server consumer (gem levels and quality, attribute requirements,
   conditional ailment immunity, lowest-attribute damage, granted passive points), with Gateway coverage of legal builds,
   paid refunds and reload. Not yet checked with the real client: that needs the reviewed combined graph installed.

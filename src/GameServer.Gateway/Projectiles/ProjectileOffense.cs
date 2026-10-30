@@ -15,6 +15,9 @@ sealed record ProjectileOffense(DamagePacket Hit, bool Spell, int Accuracy, int 
     public AttackAccuracyProfile? AccuracyProfile { get; init; }
     public SkillCriticalRoll? CriticalRoll { get; init; }
     public LeechSources Leech { get; init; } = new(DamagePacket.Empty, DamagePacket.Empty, DamagePacket.Empty);
+    public ushort SourceSkill { get; init; }
+    public DeadeyeMarkHitSource? MarkDirectBasis { get; init; }
+    public DeadeyeMarkHitSource? MarkAreaBasis { get; init; }
     public int Effect { get; init; } = -1;
     public int Level { get; init; } = 1;
     public int Quality { get; init; }
@@ -22,6 +25,7 @@ sealed record ProjectileOffense(DamagePacket Hit, bool Spell, int Accuracy, int 
     public int AccuracyMoreClose { get; init; }
     public bool AlwaysHits { get; init; }
     public bool FarShot { get; init; }
+    public DeadeyeProjectileDamage DistanceDamage { get; init; }
     public double ReturnMultiplier { get; init; } = 1;
     public int? SecondFormCriticalChance { get; init; }
     public string? AreaVisual { get; init; }

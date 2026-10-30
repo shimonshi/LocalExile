@@ -26,7 +26,10 @@ partial class Program
         long localDifference = (long)offLocal.GetValueOrDefault("local_accuracy_rating") - mainLocal.GetValueOrDefault("local_accuracy_rating");
         long ownFlat = AccuracyRating.Flat(profile, n => Own(n), includeLocal: false), ownIncreased = AccuracyRating.Increased(profile, n => Own(n));
         int rating = localDifference == 0 && ownFlat == 0 && ownIncreased == 0 ? pools.Accuracy
-            : AccuracyRating.Calculate(pools.AccuracyBase + localDifference + ownFlat, pools.AccuracyPct + ownIncreased);
+            : DeadeyeAvidityAccuracy.Calculate(pools.AccuracyBase + localDifference + ownFlat, pools.AccuracyPct + ownIncreased,
+                Player(DeadeyeAvidityAccuracy.Stat), DeadeyeAvidityAccuracy.StandardFrenzy(ChargesOf(conn)),
+                Stats.Key("off_hand_accuracy_rating") is uint final && conn.PlayerStats.TryGetValue(final, out int set)
+                    ? set : null);
         var accuracy = AttackAccuracyProfile.From(pools, player, Stats, own, offLocal) with { Rating = rating };
         // Critical chance: the off-hand weapon's base with its local mods, the same override and global increases.
         int weaponBase = AddedBaseCriticalStrike.LocalWeaponChance(ItemsFor(conn).WeaponCritical(offType),

@@ -182,6 +182,7 @@ partial class Program
                     lock (conn.Monsters)
                     {
                         conn.Closed = true;
+                        conn.SlayerKills.Clear(); conn.Bleeding.Clear();
                         conn.InvalidateIncomingHits();
                         FortificationOf(conn).Clear();
                         conn.Rage.Clear();
@@ -316,6 +317,8 @@ partial class Program
         {
             conn.Closed = true;
             conn.Companions?.Release(conn.SummonLease, conn.LeavingArea, DateTimeOffset.UtcNow);
+            conn.SlayerKills.Clear(); conn.Bleeding.Clear();
+            DeadeyeGaleClear(conn, retire: true);
             conn.InvalidateIncomingHits();
             FortificationOf(conn).Clear();
             LeechOf(conn).Clear(conn.Clock.Elapsed.TotalSeconds);

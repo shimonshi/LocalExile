@@ -44,7 +44,7 @@ sealed class PlayerHitRecovery
     public static bool UnsupportedStat(string name) =>
         name.StartsWith("cannot_be_stunned_", StringComparison.Ordinal)
             && name is not ("cannot_be_stunned_by_attacks" or "cannot_be_stunned_by_hits_of_only_physical_damage"
-                or "cannot_be_stunned_by_spells" or "cannot_be_stunned_by_suppressed_spell_damage" or "cannot_be_stunned_by_blocked_hits")
+                or "cannot_be_stunned_while_leeching" or "cannot_be_stunned_by_spells" or "cannot_be_stunned_by_suppressed_spell_damage" or "cannot_be_stunned_by_blocked_hits")
         || name.StartsWith("base_cannot_be_stunned_", StringComparison.Ordinal)
         || name.Contains("avoid_stun", StringComparison.Ordinal) && name is not ("avoid_stun_%" or "base_avoid_stun_%")
         || name.Contains("stun_avoid", StringComparison.Ordinal)

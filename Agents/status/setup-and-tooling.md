@@ -26,6 +26,8 @@ Part of [Status](../Status.md); what to build next in this area is in
   A removed member restarted the Gateway as expected; switching to and from `-NoHotReload` stops a Gateway that is
   still loading. Parsing of the error lines is unit-tested (`HotReloadTests`).
   Code: `scripts/dev/live.ps1`, `HotReload.cs`.
+  The non-watched startup also passes the bounded
+  [ordinary-class native smoke](../docs/game/slayer.md#coordinator-integration-and-bounded-native-evidence).
   Docs: [GettingStarted](../GettingStarted.md) step 10 (hot reload), [live testing](../docs/dev/live-testing.md).
 - Client control distinguishes explicit password login from a remembered native form submission.
   Password replacement clears the outgoing saved-credential flag and retains the Remember Password preference.

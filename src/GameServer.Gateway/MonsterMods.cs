@@ -115,7 +115,7 @@ sealed class MonsterModEffects(IReadOnlyDictionary<string, int> stats)
 
     /// <summary>The factor on damage the monster takes: base_damage_taken_+% (increased/reduced), and for spells the
     /// rare mod's rare_monster_mod_spell_damage_taken_+%_final (less).</summary>
-    public double DamageTaken(bool spell) => Math.Max(0, 1 + this["base_damage_taken_+%"] / 100.0)
+    public double DamageTaken(bool spell, int increasedTaken = 0) => Math.Max(0, 1 + ((long)this["base_damage_taken_+%"] + increasedTaken) / 100.0)
         * (spell ? Math.Max(0, 1 + this["rare_monster_mod_spell_damage_taken_+%_final"] / 100.0) : 1);
 
     /// <summary>The chance to block an attack (monster_base_block_%), capped at Monster.ot's maximum_block_%.</summary>
@@ -173,6 +173,9 @@ sealed class MonsterModCatalog(ModCatalog mods, string folder = "data")
         "cannot_have_energy_shield_leeched_from",
         "reflect_curses", "hexproof", "immune_to_curses",
         "action_speed_cannot_be_reduced_below_base",
+        "global_bleed_on_hit", "bleed_on_hit_with_attacks_%", "bleed_on_melee_attack_chance_%",
+        "bleed_on_bow_attack_chance_%", "physical_damage_to_return_when_hit", "physical_damage_to_return_to_melee_attacker",
+        "map_monsters_reflect_%_physical_damage", "map_monsters_reflect_%_elemental_damage",
     };
 
     /// <summary>Stats that only stop something the server does not do to monsters yet (ailments on monsters, curses,

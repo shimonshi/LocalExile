@@ -85,9 +85,13 @@ partial class Program
     static IEnumerable<(uint, int)> FinalPlayerStatsFrom(ClientState conn, Dictionary<uint, int> stats, bool native = true)
     {
         // Native Actor presentation composes Chill once; server timers use the unprojected character factor.
-        if (native && Stats.Key(ActionSpeed.Virtual) is uint nativeAction)
-            stats[nativeAction] = (int)Math.Round(100 * ((1 + stats.GetValueOrDefault(nativeAction) / 100.0)
-                * conn.ElementalAilments.ActionFactor(conn.Clock.Elapsed.TotalSeconds) - 1));
+        if (native)
+        {
+            int actionPercent = (int)Math.Round(100 * (NativePlayerActionFactor(conn, stats) - 1));
+            foreach (string name in new[] { ActionSpeed.Virtual, "intermediary_combined_action_speed_+%" })
+                if (Stats.Key(name) is uint key)
+                    stats[key] = actionPercent;
+        }
         // Quivers are gated by main_hand_weapon_type on the client, independently of the model's weapon stance. Only the
         // bow's value is known, so other weapons send nothing (a value /set_stat set stays); taking the bow off clears the
         // 9 sent before through PlayerStatsWithCleared.
@@ -116,6 +120,9 @@ partial class Program
             ? 0 : conn.Pools.AttackCriticalStrikeChance, AttackCriticalMultiplier(conn, stats), CriticalExtraRollsFor(conn, stats),
             accuracy.Chance(Monsters.BaseEvasion(conn.Pools.Level) ?? 0, false, false));
         var list = weapon.Stats(stats, mainHit, damageFactor).ToList();
+        if (WeaponProfileFor(conn, activeSet: true).Melee && stats.TryGetValue(StatKeys.MainHandMaxAttackDistance, out int reach))
+            for (int i = 0; i < list.Count; i++)
+                if (list[i].Item1 == StatKeys.MainHandMaxAttackDistance) list[i] = (StatKeys.MainHandMaxAttackDistance, reach);
         AddHand(mainHit, "main_hand");
         if (OffhandWeaponFor(conn) is { } off)
         {
@@ -209,6 +216,9 @@ partial class Program
         foreach (uint key in StatKeys.AttackSpeedInputs)
             devAttackSpeed += rawOverrides.GetValueOrDefault(key);
         stats[StatKeys.MainHandAttackSpeedPct] = conn.Pools.AttackSpeedPct + devAttackSpeed;
+        if (WeaponProfileFor(conn, activeSet: true).Melee)
+            stats[StatKeys.MainHandMaxAttackDistance] = Math.Max(0, WeaponFor(conn).Range
+                + (Stats.Key("melee_range_+") is uint rangeKey ? stats.GetValueOrDefault(rangeKey) : 0));
         // The utility flasks' plain stats (UtilityFlasks.RawStats: maximum resistances, crit, damage, cast speed), with
         // Mageblood's permanent flasks deduplicated against the running ones, plus the flask grounds.
         int FlaskGet(string name) => Stats.Key(name) is uint k ? stats.GetValueOrDefault(k) : 0;
@@ -219,7 +229,9 @@ partial class Program
         int Get(string name) => Stats.Key(name) is uint k ? stats.GetValueOrDefault(k) : 0;
         ConfigureFortificationRecovery(conn, conn.Pools.Life, Get);
         ConfigureLeech(conn, Get, rawOverrides, CriticalOnLowLife(conn, stats));
-        WithLeechConditions(conn, stats);
+        WithLeechConditions(conn, stats, devSet);
+        if (Stats.Key("is_bleeding") is uint bleedKey)
+            stats[bleedKey] = conn.Bleeding.Active(conn.Clock.Elapsed.TotalSeconds) ? 1 : 0;
         // Capture the unmodified recovery baseline from this same snapshot, before the temporary contribution.
         // The resource writer integrates Fortification separately across exact expiry boundaries.
         baselineLifePerSecond = PanelStats.LifePerMinute(Get, conn.Pools.Life) / 60;
@@ -254,9 +266,13 @@ partial class Program
             .Concat(new[] { ("energy_shield_recovery_per_minute", (int)Math.Round(EnergyShield.PredictionPerMinute(conn.Pools.EnergyShield, Get, conn.EnergyShield.Recharging))),
                 ("total_energy_shield_recovery_per_minute_from_regeneration", (int)Math.Round(EnergyShield.RegenPerMinute(conn.Pools.EnergyShield, Get))),
                 ("energy_shield_recharge_rate_per_minute", (int)Math.Round(EnergyShield.RechargePerMinute(conn.Pools.EnergyShield, Get))),
-                ("energy_shield_recharge_active", 0) })
-            .Concat(ChargePanelStats.Compute(Get)))
+                ("energy_shield_recharge_active", 0) }))
             if (Stats.Key(stat) is uint key && !devSet.Contains(key)) stats[key] = value;
+        // Charge state and panel share the resolver, including presence-aware zero/final overrides and clamping.
+        foreach (var (stat, value) in ChargePanelStats.Compute(Get,
+            name => Stats.Key(name) is uint key && (name.StartsWith("virtual_", StringComparison.Ordinal) ? rawOverrides : stats)
+                .TryGetValue(key, out int value) ? value : null))
+            if (Stats.Key(stat) is uint key) stats[key] = value;
         // Special maxima mirror completed standard maxima, including explicit final replacements.
         foreach (var (stat, value) in ChargePanelStats.MirroredMaximums(Get))
             if (Stats.Key(stat) is uint key && !devSet.Contains(key)) stats[key] = value;
@@ -305,8 +321,7 @@ partial class Program
         var ailments = conn.ElementalAilments.Snapshot(conn.Clock.Elapsed.TotalSeconds);
         foreach (var (name, value) in new[] { ("is_ignited", ailments.Ignite ? 1 : 0),
             ("is_chilled", ailments.Chill > 0 ? 1 : 0), ("is_frozen", ailments.Freeze ? 1 : 0),
-            ("is_shocked", ailments.Shock > 0 ? 1 : 0),
-            ("intermediary_combined_action_speed_+%", (int)Math.Round(-100 * (1 - conn.ElementalAilments.ActionFactor(conn.Clock.Elapsed.TotalSeconds)))) })
+            ("is_shocked", ailments.Shock > 0 ? 1 : 0) })
             if (Stats.Key(name) is uint key && value != 0) stats[key] = stats.GetValueOrDefault(key) + value;
         // The conditions as they are now; the player tick sends the chance again when they change.
         int suppression = Suppression(conn).Chance;
@@ -333,7 +348,8 @@ partial class Program
         // bifurcation policies; a selected spell gets its own (GemSkills).
         foreach (var (stat, value) in SpellEffectiveCritical(conn, stats, conn.Pools.SpellCriticalStrikeChance, own: null))
             if (Stats.Key(stat) is uint key && !devSet.Contains(key)) stats[key] = value;
-        if (Stats.Key(ActionSpeed.Virtual) is uint actionSpeed) stats[actionSpeed] = ActionSpeed.From(Get).Percent;
+        if (Stats.Key(ActionSpeed.Virtual) is uint actionSpeed && !devSet.Contains(actionSpeed))
+            stats[actionSpeed] = ActionSpeed.From(Get).Percent;
         stats[OwnAuraRestriction.Disabled] = OwnAuraRestrictionValue(conn);
         if (Get("global_always_hit") != 0)
             foreach (string name in new[] { "main_hand_chance_to_hit_%", "off_hand_chance_to_hit_%",
@@ -535,7 +551,9 @@ partial class Program
             // The native spell action divides virtual BASE time by cast speed itself. Keep the catalog base
             // intact; only the panel's final casts-per-second stat is adjusted here.
             int supportCastSpeed = Stats.Key("base_cast_speed_+%") is uint cs ? own.GetValueOrDefault(cs) : 0;
-            if (SpellCastTiming.ForSkill(SkillsFor(conn), effect, CastSpeedPct(stats) + supportCastSpeed, ActionSpeed.Multiplier(stats, Stats.Key)) is { } spellTiming)
+            int markCastSpeed = DeadeyeMarks.Find(effect) is null ? 0 : DeadeyeValue(stats, "mark_skill_cast_speed_+%");
+            if (SpellCastTiming.ForSkill(SkillsFor(conn), effect, CastSpeedPct(stats) + supportCastSpeed + markCastSpeed,
+                ActionSpeed.Multiplier(stats, Stats.Key)) is { } spellTiming)
             {
                 spellTiming.ApplyTo(stats, Stats);
             }
@@ -620,8 +638,8 @@ partial class Program
                     if (Stats.Key(key) is uint statKey) stats[statKey] = value;
                 if (SkillsFor(conn).IsAttack(effect))
                 {
-                    stats[StatKeys.MainHandAttackSpeedPct] = (int)Math.Round((WeaponFor(conn).AttackMs / (seconds * 1000
-                        * Math.Max(.01, ActionSpeed.Multiplier(stats, Stats.Key))) - 1) * 100);
+                    stats[StatKeys.MainHandAttackSpeedPct] = (int)Math.Round((WeaponFor(conn).AttackMs
+                        / (seconds * PlayerActionFactor(conn) * 1000) - 1) * 100);
                     stats[StatKeys.HundredTimesAttacksPerSecond] = (int)Math.Round(100 / seconds);
                     foreach (var (field, value) in new[]
                     {

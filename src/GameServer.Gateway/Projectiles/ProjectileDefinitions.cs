@@ -85,7 +85,8 @@ partial class Program
     static ProjectileSkillParameters CatalogProjectileParameters(int effect, string profileId)
     {
         var parameters = new ProjectileSkillParameters((get, speed) =>
-            GatewayProjectileDefaults.Resolve(profileId, get, speed, Skills.IsAttack(effect)));
+            GatewayProjectileDefaults.Resolve(profileId, get, speed, Skills.IsAttack(effect))
+                with { CountsAsProjectileDamage = true });
         ConfigureCatalogProjectileParameters(effect, profileId, ref parameters);
         return parameters;
     }
@@ -96,10 +97,17 @@ partial class Program
         ?? (Skills.IsProjectile(effect) && Skills.EffectId(effect) is { } id
             ? CatalogProjectileParameters(effect, id) : null);
 
+    static ProjectileOffense? OwnerProjectileOffense(object? payload) => payload switch
+    {
+        ProjectileOffense shot => shot,
+        DeadeyeMirageOffense proxy => proxy.Shot,
+        _ => null
+    };
+
     static ProjectilePresentation PresentationFor(ProjectileEntity p) =>
-        (p.Use.Payload as ProjectileOffense)?.Presentation
+        OwnerProjectileOffense(p.Use.Payload)?.Presentation
         ?? (p.Use.Payload as HostileProjectileOffense)?.Presentation
-        ?? (p.Use.Payload is ProjectileOffense shot && Skills.EffectId(shot.Effect) is { } effect
+        ?? (OwnerProjectileOffense(p.Use.Payload) is { } shot && Skills.EffectId(shot.Effect) is { } effect
             ? ProjectileDefinition(effect)?.Presentation?.Invoke(p) : null)
         ?? new();
 }

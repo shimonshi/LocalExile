@@ -85,17 +85,23 @@ partial class Program
     internal static int MonsterTakesRolled(SpawnedMonster m, DamagePacket rolled, bool spell, Penetration.PerType pen = default)
         => MonsterTakesMitigated(m, DamageModel.Mitigate(rolled, type => MonsterHitResistance(m, type, pen)), spell);
 
-    internal static int MonsterTakesMitigated(SpawnedMonster m, DamagePacket mitigated, bool spell)
+    internal static int MonsterTakesMitigated(SpawnedMonster m, DamagePacket mitigated, bool spell,
+        int increasedTaken = 0, double additionalPhysicalReduction = 0)
     {
         var e = m.Mods.Effects;
         double physical = mitigated[DamageType.Physical].Min;
-        double total = mitigated.MinTotal - physical * e.PhysicalReduction / 100.0;
-        return (int)Math.Round(total * e.DamageTaken(spell));
+        double reduction = Math.Clamp(e["base_additional_physical_damage_reduction_%"]
+            + additionalPhysicalReduction, 0, MonsterModEffects.MaxPhysicalReduction);
+        double total = mitigated.MinTotal - physical * reduction / 100.0;
+        return (int)Math.Round(total * e.DamageTaken(spell, increasedTaken));
     }
 
-    internal static DamagePacket MonsterTakenComponents(SpawnedMonster m, DamagePacket mitigated, bool spell) =>
+    internal static DamagePacket MonsterTakenComponents(SpawnedMonster m, DamagePacket mitigated, bool spell,
+        int increasedTaken = 0, double additionalPhysicalReduction = 0) =>
         mitigated.Select((type, range) => range.Scale(type == DamageType.Physical
-            ? Math.Max(0, 1 - m.Mods.Effects.PhysicalReduction / 100.0) : 1)).Scale(m.Mods.Effects.DamageTaken(spell));
+            ? 1 - Math.Clamp(m.Mods.Effects["base_additional_physical_damage_reduction_%"]
+                + additionalPhysicalReduction, 0, MonsterModEffects.MaxPhysicalReduction) / 100.0 : 1))
+            .Scale(m.Mods.Effects.DamageTaken(spell, increasedTaken));
 
     /// <summary>The player's base_self_critical_strike_multiplier_-% (critical strikes against them deal less extra damage).</summary>
     static int SelfCriticalReduction(ClientState conn) =>
@@ -113,7 +119,8 @@ partial class Program
     /// <summary>A contact's hit unless blocked or evaded; rejected contacts have no life or on-hit mutation.
     /// The caller holds the Monsters lock.</summary>
     internal static MonsterHit? HitUnlessBlockedLocked(ClientState conn, SpawnedMonster m, int damage) =>
-        damage is Blocked or Evaded ? null : ApplyMonsterHitLocked(conn, m, damage);
+        damage is Blocked or Evaded ? null : ApplyMonsterHitLocked(conn, m, damage,
+            new OwnerSkillHit(damage, DamagePacket.Empty, HitLeechSources(new Dictionary<uint, int>(), false), CharacterPlayerStats(conn)));
 
     /// <summary>The critical strike multiplier a critical hit of the player has on this monster: 100% when it takes no
     /// extra damage from critical strikes (of Toughness).</summary>

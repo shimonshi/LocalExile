@@ -280,10 +280,13 @@ partial class Program
     {
         var own = skillId == 0 ? new Dictionary<uint, int>() : SupportedSkill(conn, skillId).Stats;
         int speed = CastSpeedPct(CharacterPlayerStats(conn));
+        if (DeadeyeMarks.Find(effect) is not null)
+            speed += DeadeyeValue(CharacterPlayerStats(conn), "mark_skill_cast_speed_+%")
+                + DeadeyeValue(own, "mark_skill_cast_speed_+%");
         if (Stats.Key("base_cast_speed_+%") is uint k) speed += own.GetValueOrDefault(k);
         return SpellCastTiming.ForSkill(SkillsFor(conn), effect, speed,
             ActionSpeed.Multiplier(CharacterPlayerStats(conn), Stats.Key))?.DurationMilliseconds is int duration
-            ? (int)Math.Min(int.MaxValue, Math.Ceiling(duration / PlayerActionFactor(conn))) : null;
+            ? (int)Math.Min(int.MaxValue, Math.Ceiling(duration / PlayerAilmentActionFactor(conn))) : null;
     }
 
     // cast_speed_+% is the total (PanelStats: base_cast_speed_+% and attack_and_cast_speed_+% are already in it).
@@ -421,7 +424,18 @@ partial class Program
         int suppression = Suppression(conn).Chance;
         var criticalContext = CriticalContext(conn);
         var leechContext = LeechContext(conn);
+        SlayerKillState.Snapshot slayerContext = default;
         var ailments = conn.ElementalAilments.Snapshot(last);
+        bool? bleeding = null;
+        bool BleedingNow()
+        {
+            lock (conn.Monsters)
+            {
+                var stats = CharacterPlayerStats(conn);
+                return conn.Bleeding.Read(conn.Clock.Elapsed.TotalSeconds,
+                    name => Stats.Key(name) is uint key ? stats.GetValueOrDefault(key) : 0);
+            }
+        }
         while (!conn.Closed && !conn.RageRetired)
         {
             await Task.Delay(PlayerTickMs);
@@ -431,6 +445,26 @@ partial class Program
             last = tickNow;
             if (conn.LeavingArea || conn.Paused || seconds <= 0) continue;
             await ServerMods.Tick(PlayerOf(conn), seconds);
+            if (conn.ReflectionDirty)
+            {
+                conn.ReflectionDirty = false;
+                await SendPlayerEnergyShield(remote, stream, ciphers, conn);
+                await SendPlayerMana(remote, stream, ciphers, conn, "reflected damage");
+                await Send(remote, stream, ciphers, [], "reflected damage Life", atGate: () =>
+                {
+                    lock (conn.Monsters) return conn.Closed || conn.LeavingArea || conn.RageRetired ? null
+                        : InstanceProtocol.LifeUpdate(PlayerId, conn.PlayerLife);
+                });
+                if (conn.PlayerLife == 0) await PlayerDied(remote, stream, ciphers, conn, "reflected damage death");
+            }
+            var slayerStats = CharacterPlayerStats(conn);
+            var nextSlayer = SlayerSnapshot(conn, name => Stats.Key(name) is uint key ? slayerStats.GetValueOrDefault(key) : 0);
+            if (nextSlayer != slayerContext)
+            {
+                slayerContext = nextSlayer;
+                RefreshSlayerPools(conn);
+                await SendCharacterStats(remote, stream, ciphers, conn, "Slayer kill conditions changed");
+            }
             if (LeechContext(conn) is var currentLeech && currentLeech != leechContext)
             {
                 leechContext = currentLeech;
@@ -448,6 +482,16 @@ partial class Program
                 ailments = nextAilments;
                 await SendCharacterStats(remote, stream, ciphers, conn, "elemental ailments changed");
             }
+            if (BleedingNow() != bleeding && Stats.Key("is_bleeding") is uint bleedingKey)
+                await Send(remote, stream, ciphers, [], "bleeding state changed", atGate: () =>
+                {
+                    lock (conn.Monsters)
+                    {
+                        if (conn.Closed || conn.LeavingArea || conn.RageRetired) return null;
+                        bleeding = BleedingNow();
+                        return InstanceEntities.StatsUpdate(PlayerId, [(bleedingKey, bleeding.Value ? 1 : 0)]);
+                    }
+                });
             await SendAntiquarian(remote, stream, ciphers, conn);
             await SendRecentEnemyHits(remote, stream, ciphers, conn);
             await PushOutOfCollision(remote, stream, ciphers, conn);
@@ -592,7 +636,7 @@ partial class Program
                     // companion/curse write must never postpone lethal damage or synchronous Hardcore persistence.
                     var ailmentStats = CharacterPlayerStats(conn);
                     int IncomingStat(string name) => Stats.Key(name) is uint key ? ailmentStats.GetValueOrDefault(key) : 0;
-                    burnCarry += (InGracePeriod(conn) ? 0 : burnPerSecond * conn.ElementalAilments.DamageTakenFactor(now)) * seconds
+                    burnCarry += (InGracePeriod(conn) ? 0 : burnPerSecond * PlayerDamageTakenFactor(conn, now, ailmentStats)) * seconds
                         * Math.Max(0, 1 + IncomingStat("harbinger_channel_buff_damage_taken_+%_final") / 100.0);
                     int burnWhole = (int)Math.Truncate(burnCarry); burnCarry -= burnWhole;
                     int lifeBurn = HarbingerDefences.DamageOverTime(conn.EnergyShield, burnWhole,
@@ -687,10 +731,11 @@ partial class Program
                     continue;
                 }
                 if (!rf.Auras.ContainsKey(id)) { rf.Auras[id] = conn.NextBuff; entered.Add((id, conn.NextBuff++)); }
-                var (damage, carry) = MonsterBurn(m, damageOverTime, seconds);   // its mods' fire resistance
+                var (damage, carry) = MonsterBurn(m, damageOverTime with
+                    { DamagePerSecond = damageOverTime.DamagePerSecond * SlayerTargetMore(conn, m, playerStats) }, seconds);
                 m.Burn = carry;
                 if (damage == 0) continue;
-                (m.Life, bool stageStarts) = TakeDamageLocked(m, damage);
+                (m.Life, bool stageStarts) = TakeOwnerDamageLocked(conn, m, damage);
                 m.Aggro = m.Life > 0;
                 if (m.Life == 0)
                 {
@@ -865,6 +910,8 @@ partial class Program
         var cls = SkillsFor(conn).ClassFor(classRow);
         // Keep the ticket's remaining Rage timers frozen while the destination loads (before 0x7d).
         RestoreRage(conn);
+        RestoreSlayer(conn);
+        RefreshSlayerPools(conn);
         RestoreVaalSouls(conn);
         RestoreAntiquarian(conn);
         conn.Ward.SetMaximum(conn.Pools.Ward);
