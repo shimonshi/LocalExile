@@ -1,7 +1,9 @@
 ﻿# Ordinary Slayer: connected completion candidate
 
 Issue [#391](https://github.com/LocalExile/LocalExile/issues/391) owns ordinary Slayer.
-This candidate implements all pinned Default nodes in the supported owner hit, Ignite and RF routes.
+The source candidate connects pinned Default effects to supported owner hit, Ignite and RF routes.
+Parent native testing exposed a missing Headsman native-buff presentation despite working kill/stat execution.
+The native presentation follow-up below supplies the adapter; its single common tick hook is still unapplied here.
 It is an isolated source candidate for parent integration, not native acceptance or publication readiness.
 The parent owns combined integration, general documentation, the shared runtime and PR publication.
 No client or Gateway process was started, stopped, attached to or commanded by this worker.
@@ -69,6 +71,30 @@ Queued stat output rebuilds at its send gate, so expired/refunded contributions 
 BuffDefinitions rows 1341/1342 are `bane_of_legends_movement_speed` and `bane_of_legends_attack_speed`.
 Both have category 18, despite their historical names, and use the shared recipient EffectClock accordingly.
 Category-only elapsed modifiers for categories 1/7/13/16 therefore do not speed up Headsman.
+
+`SlayerKillState.ReadBuffs` exposes immutable identity/value/remaining/deadline/rate snapshots under the owner lock.
+A refresh or transfer restore gets a new grant identity even when its stat remains +10.
+`SlayerBuffPresentation` projects rows 1341/1342 with one ordered value, 10, and +0x68 remaining wall seconds.
+That countdown is remaining effect seconds divided by the unchanged shared EffectClock's current recipient rate.
+It follows the existing Gale timed-buff packet pattern and does not add another player-stat contribution.
+An unchanged timer sends nothing; refresh and rate/deadline changes remove the old instance and add a new one.
+Movement and attack grants are independent: a normal kill never replaces the attack buff.
+Expiry, source removal and in-area death remove only the instances previously shown to that owner.
+The adapter allocates IDs from `conn.NextBuff` and builds every byte at the send gate under `conn.Monsters`.
+It rereads sources and Life there and rejects closed, leaving, retired, unsent-player or stale-area-epoch leases.
+Pause leaves the game clock frozen; projecting a pending valid buff during pause cannot spend its remaining time.
+Loading emits no old-world packets, failed-transfer resume replaces rebased grants, and a new connection starts fresh.
+No independent timer, replacement EffectClock, archive mutation or existing common hook is introduced by this fix.
+
+The parent must add this one call in `RunPlayerTick`, after the existing bleed/native-condition publication:
+
+```csharp
+await SendSlayerBuffs(remote, stream, ciphers, conn);
+```
+
+Place it immediately before `SendAntiquarian`, preserving earlier condition-send ordering and held-gate tests.
+Until that hook is integrated, the new adapter is directly tested but not automatically invoked by production ticks.
+Native timer/UI acceptance requires the parent's rebuilt combined head and an actual client rerun.
 
 ### Overwhelm 17315
 
@@ -254,6 +280,28 @@ The successful focused run is `review-focused-third.log`.
 An additional out-of-reservation finding was sent to the parent without another common-code edit:
 the general unaffected source is `base_unaffected_by_bleeding`, not the existing misspelled lookup.
 Slayer's pinned leech-conditioned source is correctly named and has actual unaffected-retention coverage.
+
+The native presentation follow-up starts at exact `762fbe43182d4cf331fd40e522a78aec41e05e06`.
+Its isolated branch is `candidate/ordinary-slayer-native-buffs-391-20261031`.
+Code/test commit `7ac2573711831dd93618f1269b9401e1f8fa35cd` edits only SlayerKillState and adds owned files.
+Parent reports native Default selection, eight-point allocation/relog, cull boundary and paid-refund controls passed.
+A real normal hostile kill also passed, but no movement buff was received before the 25-second oracle timed out.
+That is a failed native presentation check, not evidence against or a replacement for the buff oracle.
+Parent evidence is coordinator `logs/ordinary-native-full-prep/run-20261031-022519-38932/result.json`.
+The adjacent `native-events.jsonl` contains the parent's received-event record.
+This worker did not operate the client or shared Gateway and does not claim a native rerun passed.
+The new twelve focused checks pass without missing-data early returns.
+They decode actual encrypted loopback output for real allocation, credited kills, refresh, refund, death and transfers.
+Pure clock/presentation coverage separately checks independent expiry and category-18 recipient rate projection.
+Held-send tests reject refunded/reallocated, dead, closed, retired, wrong-epoch and leaving leases.
+Rejected queued adds allocate no native IDs.
+Model and packet tests preserve the original stat projection rather than weakening the native-buff oracle.
+The first test compile found an invalid assignment to read-only Paused; the corrected tests stop the real game clock.
+Logs remain in `logs/slayer-full/native-buffs-*`; the single common hook and native acceptance are parent-owned.
+Exact code/test `7ac25737` builds with zero warnings/errors and passes Core 434, Data 34 and Gateway 3,811.
+The Gateway run uses default parallel execution; all three suites report zero failures/skips.
+Logs are `native-buffs-build-final.log` and `native-buffs-{core,data,gateway}-final.log`.
+The following documentation-only commit does not alter the tested code or install the common hook.
 
 ## Offline native matrix for the parent
 
