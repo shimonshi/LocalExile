@@ -25,7 +25,7 @@ public sealed class DeadeyeGaleEngineTests
         var source = new DeadeyeGaleAura.Source(new(1), 1, new(0, 0), state) { World = world };
         var presentation = new DeadeyeGaleAura.Presentation(); ushort buff = 10;
         DeadeyeGaleAura.Received? Query() => DeadeyeGaleAura.ForRecipient([source], new(2), 1, new(10, 0), world: world);
-        Assert.Equal(InstanceEntities.AddBuff(2, 10, 1094, 1, values: [unchecked((uint)-8)]),
+        Assert.Equal(InstanceEntities.AddBuff(2, 10, 1094, 1),
             presentation.Build(Query(), new(2), world, () => buff++));
         // A queued operation retains only this query, never a captured Received grant.
         state.Observe(1, false, Sources.GetValueOrDefault);
@@ -46,7 +46,7 @@ public sealed class DeadeyeGaleEngineTests
         Assert.Equal(1.16, self!.Value.ActionFactor(_ => 0), 9);
         var ally = DeadeyeGaleAura.ForRecipient([source, source with { Owner = new(3) }], new(2), 1, new(60, 0), world: world);
         Assert.Equal(1.08, ally!.Value.ActionFactor(_ => 0), 9);
-        Assert.Equal(InstanceEntities.AddBuff(2, 5, 1094, 1, values: [unchecked((uint)-8)]), ally.Value.Native(2, 5));
+        Assert.Equal(InstanceEntities.AddBuff(2, 5, 1094, 1), ally.Value.Native(2, 5));
         Assert.Null(DeadeyeGaleAura.ForRecipient([source], new(2), 1, new(60.01, 0), world: world));
         Assert.Null(DeadeyeGaleAura.ForRecipient([source], new(2), 2, new(0, 0), world: world));
         Assert.Null(DeadeyeGaleAura.ForRecipient([source], new(2), 1, new(0, 0), alive: false, world: world));
@@ -134,7 +134,7 @@ public sealed class DeadeyeGaleEngineTests
     public void Native_packets_use_exact_buff_rows_base_value_independent_expiry_and_at_gate_source_removal()
     {
         var s = Start(); var p = new DeadeyeGalePresentation(); ushort next = 10;
-        Assert.Equal(new[] { InstanceEntities.AddBuff(1, 10, 1094, 1, values: [unchecked((uint)-8)]) },
+        Assert.Equal(new[] { InstanceEntities.AddBuff(1, 10, 1094, 1) },
             p.Build(s, 0, 1, () => next++));
         s.AdmitUse(0, true); s.AdmitUse(1, true);
         var packets = p.Build(s, 1, 1, () => next++);

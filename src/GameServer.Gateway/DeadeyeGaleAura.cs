@@ -25,7 +25,7 @@ static class DeadeyeGaleAura
         }
 
         public byte[] Native(uint recipient, ushort buff) =>
-            InstanceEntities.AddBuff(recipient, buff, 1094, Source.Id, values: [unchecked((uint)-8)]);
+            InstanceEntities.AddBuff(recipient, buff, 1094, Source.Id);
     }
 
     public static Received? ForRecipient(IEnumerable<Source> sources, ProjectileActorKey recipient, int team,

@@ -74,7 +74,7 @@ The Mirage adapter consumes that worker's world-scoped ally Tailwind query.
 
 ## Native marks
 
-`DeadeyeMarkCatalog` joins real GrantedEffects and BuffDefinitions, preserving native buff value ordering.
+`DeadeyeMarkCatalog` joins real GrantedEffects and BuffDefinitions, preserving the pinned source stat identities and ordering.
 Supported ordinary effects are SnipersMark 1214/buff 78, AssassinsMark 1205/buff 77,
 PoachersMark 4044/buff 80 and WarlordsMark 1176/buff 74.
 Item paths retain the historical ProjectileWeakness and CriticalWeakness names for the first two gems.
@@ -97,7 +97,9 @@ Caster death, transfer, close or source removal retires the mark; relog does not
 The current server has connection-local combat worlds; this is not a new cross-connection shared-monster registry.
 
 Focal Point reads the markcaster's current effect sources, including native quality, at the consumer.
-Its refund changes current mechanics immediately and republishes changed native values atomically at the send gate.
+Its refund changes current mechanics immediately and refreshes the native mark instance atomically at the send gate.
+Rows 74/77/78/80 have `IsRecovery=false`; their native AddBuff messages contain no stat-value words.
+Resolved mark amounts remain authoritative server inputs, not extra words that would corrupt the following packet.
 The hitter's raw damage source is a separate release-frozen snapshot.
 It is never recomputed from the markcaster or from the mark's selected gem.
 
@@ -189,7 +191,7 @@ It must replace temporary DeadeyeMarkedDamage/DeadeyeMirageHit contact copies wi
 All projectile visual reads must unwrap the Mirage payload's original ProjectileOffense for correct art.
 
 The 41 feature cases execute parsed real metadata, production adapters and real Core trajectories.
-They cover native cast cost/timing/buff values, all four mark consumers, quality charge queue execution,
+They cover cast cost/timing/native buff framing, all four mark consumers, quality charge queue execution,
 Focal scaling/refund/native refresh, other-enemy defence, transfer and independent mark ownership.
 Poacher's raw source is compared with an independently rebuilt actual supported skill after conversion/increases.
 Sniper tests include mixed physical/fire mitigation, the existing taken bucket and unqualified-hit controls.
@@ -214,7 +216,7 @@ No client or shared Gateway was started, stopped, attached, restarted or command
 ## Parent native acceptance matrix
 
 1. Allocate 53086; equip each real mark gem; compare paid cast time and mana with/refund without the small.
-2. Allocate/refund 5443; verify native buff values and actual projectile/critical/recovery effects change together.
+2. Allocate/refund 5443; verify native mark refresh and actual projectile/critical/recovery effects change together.
 3. Mark one enemy, take hits from it and from enemies at 60/61; confirm the marked enemy is excluded.
 4. Kill the marked enemy through direct hit, cull, Ignite and RF; verify one nearest eligible transfer or removal.
 5. Reject friendly/dead/missing mark targets and cancelled/source-removed casts without a late buff.

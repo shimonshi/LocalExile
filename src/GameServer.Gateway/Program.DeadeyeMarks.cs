@@ -118,7 +118,7 @@ partial class Program
             if (mark.PublishedValues?.SequenceEqual(values) == true) return [];
             byte[] remove = mark.PublishedValues is null ? [] : InstanceEntities.RemoveBuff(mark.Target, mark.Buff);
             mark.PublishedValues = values;
-            return [.. remove, .. InstanceEntities.AddBuff(mark.Target, mark.Buff, metadata.Buff, mark.Caster, mark.Source.Skill, values)];
+            return [.. remove, .. InstanceEntities.AddBuff(mark.Target, mark.Buff, metadata.Buff, mark.Caster, mark.Source.Skill)];
         }, () => ReferenceEquals(state.Active, mark) && DeadeyeMarkCurrent(session, mark));
     }
 

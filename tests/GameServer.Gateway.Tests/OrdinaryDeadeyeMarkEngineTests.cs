@@ -52,8 +52,11 @@ public partial class ConditionalCriticalGatewayTests
         Assert.Equal(effect, native.Id); Assert.Equal(buff, native.Buff);
         Assert.Equal(Program.PlayerId, mark.Caster); Assert.Equal(f.Skill, mark.Source.Skill);
         byte[] wire = await runtime.Read();
-        Assert.True(Contains(wire, InstanceEntities.AddBuff(42, mark.Buff, native.Buff, Program.PlayerId, f.Skill,
-            [.. native.BuffKeys.Select(k => unchecked((uint)Program.DeadeyeMarkAmount(f.Conn, mark, Program.Stats.Name(k)!)))])));
+        int offset = wire.AsSpan().IndexOf(Convert.FromHexString("01C10000002A000000000000"));
+        Assert.True(offset >= 0);
+        int end = OrdinaryBuffWire.End(wire, offset);
+        Assert.Equal(offset + 27, end); // The non-recovery mark has no value words or duration fields.
+        OrdinaryBuffWire.AssertFollowingSentinel(wire[offset..end]);
         Assert.True(double.IsPositiveInfinity(mark.Clock.Remaining));
     }
 

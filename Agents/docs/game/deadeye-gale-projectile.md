@@ -99,7 +99,9 @@ Category 18 uses general/other effect-time modifiers but excludes category-only 
 `Revision` covers grants, loss, source/effect changes, expiry, suspension and recipient-rate changes.
 
 `DeadeyeGalePresentation.Build` samples current state at the send gate.
-It sends Tailwind 1094 with signed -8 and one timed count-one buff 1095 per independent Gale instance.
+It sends Tailwind row 1094 and one timed count-one buff 1095 per independent Gale instance.
+Both are non-recovery rows: no stat-value words are sent in the native buff message.
+The base -8 action reduction belongs to the common source/stat projection, exactly once.
 Expiry/removal removes its own native instance; a changed recipient rate replaces the affected duration.
 It never replays a captured grant after paid refund or retires a newer buff using an old instance number.
 Natural duration expiry leaves the base Tailwind source active while the node remains allocated.

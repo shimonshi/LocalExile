@@ -1,4 +1,4 @@
-﻿# Ordinary Slayer: connected completion candidate
+ï»¿# Ordinary Slayer: connected completion candidate
 
 Issue [#391](https://github.com/LocalExile/LocalExile/issues/391) owns ordinary Slayer.
 The source candidate connects pinned Default effects to supported owner hit, Ignite and RF routes.
@@ -74,7 +74,9 @@ Category-only elapsed modifiers for categories 1/7/13/16 therefore do not speed 
 
 `SlayerKillState.ReadBuffs` exposes immutable identity/value/remaining/deadline/rate snapshots under the owner lock.
 A refresh or transfer restore gets a new grant identity even when its stat remains +10.
-`SlayerBuffPresentation` projects rows 1341/1342 with one ordered value, 10, and +0x68 remaining wall seconds.
+`SlayerBuffPresentation` projects rows 1341/1342 with +0x68 remaining wall seconds.
+Both rows have `IsRecovery=false`; the native reader consumes no stat-value words for them.
+The timed add is 31 bytes, including the empty trailing list; +10 remains in the common stat projection.
 That countdown is remaining effect seconds divided by the unchanged shared EffectClock's current recipient rate.
 It follows the existing Gale timed-buff packet pattern and does not add another player-stat contribution.
 An unchanged timer sends nothing; refresh and rate/deadline changes remove the old instance and add a new one.
@@ -93,6 +95,7 @@ await SendSlayerBuffs(remote, stream, ciphers, conn);
 ```
 
 It is immediately before `SendAntiquarian`, preserving earlier condition-send ordering and held-gate tests.
+The production tick invokes the adapter at this point; independent table-driven framing checks include a next packet.
 Native timer/UI acceptance requires the parent's rebuilt combined head and an actual client rerun.
 
 ### Overwhelm 17315

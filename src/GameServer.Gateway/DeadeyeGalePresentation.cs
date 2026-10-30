@@ -15,7 +15,7 @@ sealed class DeadeyeGalePresentation
         if (state.Tailwind && tailwind == 0)
         {
             tailwind = next();
-            packets.Add(InstanceEntities.AddBuff(player, tailwind, 1094, player, values: [unchecked((uint)-8)]));
+            packets.Add(InstanceEntities.AddBuff(player, tailwind, 1094, player));
         }
         var active = state.Tailwind ? state.Stacks.ToHashSet() : [];
         foreach (var clock in shown.Keys.Where(c => !active.Contains(c) || shown[c].Deadline != c.Deadline).ToArray())

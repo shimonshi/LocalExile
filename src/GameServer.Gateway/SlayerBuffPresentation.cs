@@ -26,7 +26,7 @@ sealed class SlayerBuffPresentation
             if (grant is not { } value) return;
             ushort buff = next();
             double duration = value.Remaining / value.Rate;
-            packets.AddRange(InstanceEntities.AddBuff(player, buff, row, player, values: [unchecked((uint)value.Value)],
+            packets.AddRange(InstanceEntities.AddBuff(player, buff, row, player,
                 u68: BitConverter.SingleToUInt32Bits((float)duration)));
             shown = new(buff, value.Identity, value.Value, value.Deadline, value.Rate);
         }

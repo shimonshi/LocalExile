@@ -137,7 +137,7 @@ Paid Far Shot refund leaves in-flight inputs frozen and removes the source from 
 
 ## Marks and Focal Point
 
-`DeadeyeMarkCatalog` uses real GrantedEffects and BuffDefinitions with native value order:
+`DeadeyeMarkCatalog` uses real GrantedEffects and BuffDefinitions for these logical stat consumers:
 SnipersMark 1214/buff 78, AssassinsMark 1205/buff 77, PoachersMark 4044/buff 80,
 and WarlordsMark 1176/buff 74.
 `TryDeadeyeMarkCast` is installed before generic action/payment handling.
@@ -152,7 +152,8 @@ Another successful application replaces it; ordinary rows have no duration.
 Any positive sourced duration uses the category-14 recipient clock.
 Caster death, transfer, retirement or source removal clears ephemeral marks; relog does not restore them.
 Current combat worlds are connection-local, not a new shared cross-connection monster registry.
-Focal effect/quality are live at the consumer; paid refund also refreshes native values at the send gate.
+Focal effect/quality are live at the consumer; paid refund also refreshes the native mark instance at the send gate.
+All four mark rows have `IsRecovery=false`; native AddBuff packets carry no stat-value vector.
 The actual hitter's damage inputs remain release-frozen and separate from the markcaster's skill inputs.
 
 Sniper's increased projectile HIT damage taken joins the common increased/reduced taken bucket after mitigation.

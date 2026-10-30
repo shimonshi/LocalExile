@@ -7,7 +7,7 @@ namespace GameServer.Gateway.Tests;
 
 public sealed partial class AscendancyGatewayIntegrationTests
 {
-    sealed record HeadsmanPacket(bool Add, ushort Id, ushort Row = 0, float Seconds = 0, int Value = 0);
+    sealed record HeadsmanPacket(bool Add, ushort Id, ushort Row = 0, float Seconds = 0);
     static List<HeadsmanPacket> HeadsmanPackets(byte[] bytes)
     {
         var result = new List<HeadsmanPacket>();
@@ -20,11 +20,11 @@ public sealed partial class AscendancyGatewayIntegrationTests
             Assert.Equal(InstanceEntities.AddBuffId, opcode);
             ushort row = BinaryPrimitives.ReadUInt16BigEndian(bytes.AsSpan(offset + 14));
             Assert.Equal(Program.PlayerId, BinaryPrimitives.ReadUInt32BigEndian(bytes.AsSpan(offset + 16)));
-            Assert.Equal(2, bytes[offset + 22]); // Native +0x68 countdown; exactly one ordered row stat follows it.
+            Assert.Equal(2, bytes[offset + 22]); // Native +0x68 countdown; these non-recovery rows carry no stat words.
             float seconds = BitConverter.UInt32BitsToSingle(BinaryPrimitives.ReadUInt32BigEndian(bytes.AsSpan(offset + 23)));
-            int value = BinaryPrimitives.ReadInt32BigEndian(bytes.AsSpan(offset + 27));
-            Assert.Equal(0u, BinaryPrimitives.ReadUInt32BigEndian(bytes.AsSpan(offset + 31)));
-            result.Add(new(true, id, row, seconds, value)); offset += 35;
+            int end = OrdinaryBuffWire.End(bytes, offset);
+            Assert.Equal(offset + 31, end);
+            result.Add(new(true, id, row, seconds)); offset = end;
         }
         return result;
     }
@@ -65,7 +65,7 @@ public sealed partial class AscendancyGatewayIntegrationTests
     }
 
     [Fact]
-    public async Task Slayer_Headsman_native_packets_pin_rows_ordered_values_normal_rare_refresh_and_no_extra_stats()
+    public async Task Slayer_Headsman_native_packets_pin_rows_normal_rare_refresh_and_no_extra_stats()
     {
         using var table = JsonDocument.Parse(File.ReadAllBytes("data/tables/BuffDefinitions.json"));
         foreach (var (row, id, key) in new[] { (1341, "bane_of_legends_movement_speed", 179),
@@ -74,6 +74,7 @@ public sealed partial class AscendancyGatewayIntegrationTests
             var definition = table.RootElement[row];
             Assert.Equal(id, definition.GetProperty("Id").GetString());
             Assert.Equal(18, definition.GetProperty("BuffCategory").GetInt32());
+            Assert.False(definition.GetProperty("IsRecovery").GetBoolean());
             Assert.Equal(key, Assert.Single(definition.GetProperty("StatsKeys").EnumerateArray()).GetInt32());
         }
         using var game = await HeadsmanCharacter();
@@ -81,16 +82,16 @@ public sealed partial class AscendancyGatewayIntegrationTests
         HeadsmanKill(game.State);
         var before = Program.CharacterPlayerStats(game.State);
         var normal = Assert.Single(await PublishHeadsman(game));
-        Assert.Equal(new HeadsmanPacket(true, 100, 1341, 20, 10), normal);
+        Assert.Equal(new HeadsmanPacket(true, 100, 1341, 20), normal);
         Assert.Empty(await PublishHeadsman(game)); // Remaining time alone is not a new grant.
         Assert.Equal(before.OrderBy(x => x.Key), Program.CharacterPlayerStats(game.State).OrderBy(x => x.Key));
         HeadsmanKill(game.State, rare: true);
         var rare = await PublishHeadsman(game);
-        Assert.Equal(new[] { new HeadsmanPacket(false, 100), new(true, 101, 1341, 20, 10),
-            new(true, 102, 1342, 20, 10) }, rare);
+        Assert.Equal(new[] { new HeadsmanPacket(false, 100), new(true, 101, 1341, 20),
+            new(true, 102, 1342, 20) }, rare);
         HeadsmanKill(game.State);
         var refresh = await PublishHeadsman(game);
-        Assert.Equal(new[] { new HeadsmanPacket(false, 101), new(true, 103, 1341, 20, 10) }, refresh);
+        Assert.Equal(new[] { new HeadsmanPacket(false, 101), new(true, 103, 1341, 20) }, refresh);
         Assert.Empty(await PublishHeadsman(game)); // A normal kill never replaces the independent attack instance.
     }
 
@@ -107,13 +108,13 @@ public sealed partial class AscendancyGatewayIntegrationTests
         state.RecordKill(10, false, Get);
         var oldAttack = state.ReadBuffs(10, Get).Attack;
         var refreshed = HeadsmanPackets(presentation.Build(state.ReadBuffs(10, Get), Program.PlayerId, () => next++));
-        Assert.Equal(new[] { new HeadsmanPacket(false, 1), new(true, 3, 1341, 20, 10) }, refreshed);
+        Assert.Equal(new[] { new HeadsmanPacket(false, 1), new(true, 3, 1341, 20) }, refreshed);
         sources["buff_time_passed_+%_only_buff_category"] = 100;
         Assert.False(presentation.NeedsPublication(state.ReadBuffs(10, Get))); // Category 18 excludes this input.
         sources["buff_time_passed_+%"] = 100;
         var rateChange = HeadsmanPackets(presentation.Build(state.ReadBuffs(10, Get), Program.PlayerId, () => next++));
-        Assert.Equal(new[] { new HeadsmanPacket(false, 3), new(true, 4, 1341, 10, 10),
-            new(false, 2), new(true, 5, 1342, 5, 10) }, rateChange);
+        Assert.Equal(new[] { new HeadsmanPacket(false, 3), new(true, 4, 1341, 10),
+            new(false, 2), new(true, 5, 1342, 5) }, rateChange);
         Assert.Equal(oldAttack!.Value.Identity, state.ReadBuffs(10, Get).Attack!.Value.Identity);
         var attackExpired = HeadsmanPackets(presentation.Build(state.ReadBuffs(15, Get), Program.PlayerId, () => next++));
         Assert.Equal(new[] { new HeadsmanPacket(false, 5) }, attackExpired);
