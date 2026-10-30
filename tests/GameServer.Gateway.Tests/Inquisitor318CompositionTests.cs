@@ -10,7 +10,7 @@ public sealed partial class AscendancyGatewayIntegrationTests
     {
         if (!DataAvailable()) return;
         using var game = InquisitorGame();
-        EquipFamilyGem(game, FamilyGem("KineticBlast"));
+        EquipFamilyGem(game, FamilyGem("Kinetic Blast"));
         game.Items.Add(PlayerInventories.Weapon1, 0, 0, ItemCatalog.Create(Program.Items.Find("Driftwood Wand")!));
         InquisitorSet(game.State, "base_intelligence", 1000);
         InquisitorSet(game.State, "base_dexterity", 1000);
@@ -19,7 +19,6 @@ public sealed partial class AscendancyGatewayIntegrationTests
         InquisitorSet(game.State, "spell_damage_+%", 0);
         InquisitorSet(game.State, "elemental_damage_+%", 0);
         game.State.Pools = Program.PoolsFor(game.State, 60);
-        game.State.Clock.Stop();
         ushort skill = Program.GemSkillIdPool.Value[0];
         double Fire() => ProgramValue<DamagePacket>("SupportedHit", game.State, skill)[DamageType.Fire].Min;
         double baseline = Fire();
@@ -29,6 +28,7 @@ public sealed partial class AscendancyGatewayIntegrationTests
         Assert.Equal(baseline * 3, Fire(), 8);
         Assert.Null((await game.Change(InquisitorPath(19417), true)).Error);
         Program.InquisitorSkillUsed(game.State, attack: false, spell: true);
+        game.State.Clock.Stop(); // Freeze only after the accepted spell; paused inputs must be refused.
         Assert.Equal(baseline * 3 * 1.1, Fire(), 8);
         game.State.PlayerStats.Remove(InquisitorKey(ArcaneMight.Wand));
         Assert.Equal(baseline * 2.5 * 1.1, Fire(), 8); // Kinetic Blast's own 150% grant remains.
