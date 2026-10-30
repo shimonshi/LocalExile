@@ -517,6 +517,8 @@ partial class Program
                 if (conn.LeavingArea)
                 {
                     // A failed transfer can resume this connection. Do not catch up old cached rates through loading.
+                    // These sessions accrue independently of 'last'; settle and discard their loading-time recovery.
+                    DiscardLoadingRecovery(conn, now);
                     last = now;
                     ratesAt = double.NegativeInfinity;
                     continue;
@@ -602,6 +604,15 @@ partial class Program
             if (ended.Count > 0)
                 await EndFlaskEffects(remote, stream, ciphers, conn, ended, $"life {lifeAfter}/{conn.PlayerMaxLife}, mana {manaAfter}/{manaCap}");
         }
+    }
+
+    // Called under the combat lock. Advance deadlines and consume accrued recovery without paying it into pools.
+    internal static void DiscardLoadingRecovery(ClientState conn, double now)
+    {
+        LeechOf(conn).TakeRecovery(now);
+        FortificationOf(conn).TakeRecovery(now);
+        conn.Antiquarian.TakeRecovery(now);
+        conn.EnduringCryRecovery.Take(now);
     }
 
     // The ended flask effects' buffs come off the player (S→C 0x1c2).
@@ -894,6 +905,13 @@ partial class Program
             bool secondSet = PlayerInventories.For(string.IsNullOrEmpty(name) ? "Exile" : name, ItemsFor(conn)).WeaponSet == 1;
             messages.Add(($"0x0021 enter area, {tabs.Count} stash tab(s), last {PersonalStashOf(conn).LastTab}, weapon set {(secondSet ? 2 : 1)}",
                 InstanceProtocol.EnterArea(tabs, secondSet)));
+            // The Delve data (0x228) in the Azurite Mine Encampment and the mine: the gauge and the Subterranean Chart
+            // read the character's sulphite from it.
+            if (layout.Id.StartsWith("Delve", StringComparison.Ordinal))
+            {
+                ushort sulphite = CharacterSaves.Load(CharacterName(conn))?.Sulphite ?? 0;
+                messages.Add(($"0x0228 Delve data: {sulphite} sulphite", InstanceDelve.DelveData(sulphite)));
+            }
             // The contents of every stash tab with currency in it (stackable items), as 0xc7 would send them (0xc0, no 0xc8:
             // the panel is not open). The client checks a shop price against the currency it knows of, the inventory's and
             // the loaded stash tabs' (3.29 vendors take it from the stash): without this a price was red, and no 0x88 came,

@@ -105,7 +105,8 @@ partial class Program
             bool replace = stat is "mana_cost" or "base_mana_cost" or "casting_spell" or "virtual_base_spell_cast_time_ms"
                 or "base_spell_cast_time_ms" or "hundred_times_casts_per_second" || stat.Contains("_base_", StringComparison.Ordinal)
                 && (stat.StartsWith("spell_minimum", StringComparison.Ordinal) || stat.StartsWith("spell_maximum", StringComparison.Ordinal));
-            result[key] = replace ? value : result.GetValueOrDefault(key) + value;
+            result[key] = replace ? value : ArcaneMight.IsGrant(key)
+                ? ArcaneMight.Combine(key, result.GetValueOrDefault(key), value) : result.GetValueOrDefault(key) + value;
         }
         return result;
     }
@@ -151,7 +152,7 @@ partial class Program
     sealed record SupportedHitInputs(GameServer.Core.World.DamagePacket Raw, Func<string, int> Get,
         GameServer.Core.World.DamageConversion Conversion, bool Attack, bool Melee, bool Area, bool Projectile,
         List<(string Name, int Value)> Modifiers, HashSet<int> Types, SkillHitPlan Plan, Dictionary<uint, int> Caster,
-        double InquisitorAttackMore);
+        double InquisitorAttackMore, bool WieldingWand = false);
 
     static SupportedHitInputs? SupportedHitInputsFor(ClientState conn, ushort skillId, bool? area = null,
         SkillCatalog.Unarmed? weapon = null)
@@ -184,7 +185,8 @@ partial class Program
         return new(raw, Get, DamageStats.Conversion(stats, Stats, attack), attack,
             Melee: attack && types.Contains(19), Area: attack ? types.Contains(7) : Get("is_area_damage") != 0,
             Projectile: attack ? types.Contains(2) : Get("base_is_projectile") != 0, modifiers, types, plan, caster,
-            attack ? InquisitorAttackFactor(conn) : 1);
+            attack ? InquisitorAttackFactor(conn) : 1,
+            WieldingWand: attack && (weapon ?? WeaponFor(conn)).WieldingWand);
     }
 
     static GameServer.Core.World.DamagePacket SupportedHitFor(ClientState conn, ushort skillId, bool suppress, bool? area = null,
@@ -196,7 +198,8 @@ partial class Program
     {
         var hit = PlayerHitDamage.Resolve(inputs.Raw, inputs.Get, inputs.Conversion, spell: !inputs.Attack,
             melee: inputs.Melee, area: inputs.Area, projectile: inputs.Projectile,
-            supportModifiers: inputs.Modifiers, skillTypes: inputs.Types);
+            supportModifiers: inputs.Modifiers, skillTypes: inputs.Types,
+            wieldingWand: inputs.WieldingWand, retaliation: inputs.Attack && inputs.Types.Contains(120));
         if (inputs.Attack) hit = RageStats.ApplyAttack(hit, inputs.Get).Scale(inputs.InquisitorAttackMore);
         return suppress ? new SkillDamageContext(inputs.Plan.Kind, inputs.Caster).Hit(hit) : hit;
     }

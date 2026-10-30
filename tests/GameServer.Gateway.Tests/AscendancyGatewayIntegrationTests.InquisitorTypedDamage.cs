@@ -119,8 +119,8 @@ public sealed partial class AscendancyGatewayIntegrationTests
         };
         foreach (var (type, range) in local)
         {
-            Assert.Equal(range.Min * 2, actual[type].Min - baseline[type].Min, 8);
-            Assert.Equal(range.Max * 2, actual[type].Max - baseline[type].Max, 8);
+            Assert.Equal(range.Min * 3, actual[type].Min - baseline[type].Min, 8);
+            Assert.Equal(range.Max * 3, actual[type].Max - baseline[type].Max, 8);
         }
         Assert.Null((await game.Change([(ushort)19417], false, refundPoints: true)).Error);
         Assert.Equal(baseline.Components, ProgramValue<DamagePacket>("SupportedHit", game.State, skill).Components);
