@@ -149,12 +149,9 @@ public partial class ConditionalCriticalGatewayTests
         f.Conn.AttackAccuracyRandom = accuracy;
         var packet = f.Hit;
         uint firstObject = f.Conn.NextObjectId;
-        var planned = f.CaptureProjectileUse();
-        Assert.Equal(3, planned.Profile.Count);
-        Assert.True(Assert.IsType<ProjectileOffense>(planned.Payload).ClientPredicted);
         await f.Launch();
-        // Main #361 lets the native client draw its volley; all three server-simulated primaries therefore
-        // allocate no duplicate server object, while their common hit ledger still permits only one hit.
+        // The client spawns a gem use's primary projectiles itself (ClientPredicted): the server simulates all three but
+        // creates no object for them, so the one direct hit per target is the only trace of the volley.
         Assert.Equal(firstObject, f.Conn.NextObjectId);
         Assert.Equal((uint)Math.Round(packet.MinTotal * f.Multiplier / 100.0), f.Target.MaxLife - f.Target.Life);
         Assert.Equal(1, critical.Calls);

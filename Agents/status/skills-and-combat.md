@@ -592,12 +592,14 @@ Part of [Status](../Status.md); what to build next in this area is in
 
 - Ordinary percentage attributes: typed and all-attribute increases act once on the complete class/passive/active-item
   flat bucket. Pools, equipment qualification and gem requirements share the resulting final attributes.
-  Calculated zero attributes publish zero; inactive items contribute nothing, and a gem's own failure retains its
-  qualified host. Forty-seven new automated cases and 63 selected checks cover both modes, real Utmost sources,
+  Calculated zero attributes publish zero; inactive items contribute nothing, and a socketed gem's unmet requirement
+  makes its host inactive again (main's rule restored 2026-10-29, [19](../docs/protocol/19-gems.md); the port had kept
+  the host active). Forty-seven new automated cases and 63 selected checks cover both modes, real Utmost sources,
   signed/zero modifiers, dependent pools, source removal/recovery, final developer overrides and weapon swaps.
   Thirty-four native controls (17 per mode) verify final values, explicit zeroes, derived pools, item activation,
   source removal/recovery and active weapon-set persistence after relog. Ordinary Fireball input succeeds at INT 68,
-  is refused at 62 against its 67 requirement, and succeeds after recovery; the qualified host retains its Armour.
+  is refused at 62 against its 67 requirement, and succeeds after recovery (those controls predate the restored host
+  deactivation: the host now goes inactive with its gem).
   Source/runtime hashes and original saves hold; isolated item contents/cells return to their canonical state.
   Supplied-source controls do not certify unique acquisition. Half-up fractional rounding follows pinned PoB; official-server rounding,
   signed equipment cycles, attribute conversions, conditional/more operators and mercenary gates remain open.

@@ -160,7 +160,7 @@ partial class Program
                 : new ItemModStats.Worn(x.i.Id, x.i.Item, 0, 0, 0, 0))
             .Select(WithGems).ToList();
         // Requirements compare virtual_*_for_requirements, as the client and GemRequirementsUnmet do: the attribute unless
-        // /set_stat replaced it.
+        // /set_stat replaced it. The mod catalog lets the resolver see the hidden modifier that waives requirements.
         int ForRequirements(string attribute, int value) =>
             Stats.Key($"virtual_{attribute}_for_requirements") is uint key && dev.TryGetValue(key, out int set) ? set : value;
         var (inactive, active) = ItemModStats.ResolveEquipment(wornItems, level ?? conn.Pools.Level, active =>

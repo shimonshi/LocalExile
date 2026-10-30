@@ -31,8 +31,7 @@ public sealed partial class AscendancyGatewayIntegrationTests
         game.Socket();
         Check(200, true);
         game.SetQualifier(false);
-        Assert.NotNull(ProgramValue<string?>("GemRequirementsUnmet", game.State, game.SupportGem));
-        game.AssertHostUnavailable(1000);
+        game.AssertHostInactive();
         game.SetQualifier(true);
         Check(200, true);
         game.Socket(support: false);

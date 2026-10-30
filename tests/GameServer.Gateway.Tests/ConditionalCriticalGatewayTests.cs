@@ -55,25 +55,19 @@ public partial class ConditionalCriticalGatewayTests
                 inventory.Add(PlayerInventories.BodyArmour, 0, 0, host);
                 Skill = Program.GemSkillIdPool.Value[0];
             }
+            // Item activation reads the requirement attributes, not the pools Refresh sets (socketed gems count, 19-gems.md):
+            // the level 1 character meets its supports' requirements through these.
+            foreach (string attribute in new[] { "strength", "dexterity", "intelligence" })
+                Set($"virtual_{attribute}_for_requirements", 1000);
             Set(AttackBaseCriticalStrike.UnarmedBaseStat, 1000);
             Set(AttackBaseCriticalStrike.WeaponOverrideStat, 1000);
             Set("extra_critical_rolls_while_on_low_life", 1);
             Set("physical_damage_+%", -100);
-            // These critical/contact tests isolate their added chaos hit. Qualifying real Strength must not
-            // reintroduce weapon physical damage through its separate derived melee-physical increase.
-            Set("melee_physical_damage_+%", 0);
             Set("attack_minimum_added_chaos_damage", 1000);
             Set("attack_maximum_added_chaos_damage", 1000);
             Set("spell_minimum_added_chaos_damage", 1000);
             Set("spell_maximum_added_chaos_damage", 1000);
             Set("attack_speed_+%", 200);
-            // Admission resolves raw attribute inputs before Pools exists; a final Pools overlay cannot qualify
-            // the weapon or a host containing a gem. Give this combat fixture the same actual 1000 attributes
-            // that its damage/critical assertions use, leaving the production requirement checks enabled.
-            var @class = Program.Skills.ClassFor(Conn.ClassRow);
-            Set("base_strength", 1000 - @class.Strength);
-            Set("base_dexterity", 1000 - @class.Dexterity);
-            Set("base_intelligence", 1000 - @class.Intelligence);
             Refresh();
             Target = new("critical target", new(32 + distance, 32, 30), 0, 2, targetLife)
                 { Mods = targetMods ?? MonsterModSet.None, Level = targetLevel };
@@ -102,7 +96,7 @@ public partial class ConditionalCriticalGatewayTests
                 { Mods = [new(ModSection.Explicit, unused.Hash, [30])] });
         }
         public void Refresh() => Conn.Pools = Program.PoolsFor(Conn, 40) with
-        { Life = 100, Mana = 1000, Accuracy = int.MaxValue };
+        { Life = 100, Mana = 1000, Accuracy = int.MaxValue, Strength = 1000, Dexterity = 1000, Intelligence = 1000 };
         public int Multiplier => Skill == SkillCatalog.FirstSkillId
             ? Program.AttackCriticalMultiplier(Conn, Program.CharacterPlayerStats(Conn))
             : (int)Method("SupportedCriticalMultiplier").Invoke(null, [Conn, Skill])!;
@@ -145,18 +139,6 @@ public partial class ConditionalCriticalGatewayTests
             return ((Task)Method("AreaSkillHit").Invoke(null,
                 ["accuracy-area-contact-test", writer.GetStream(), ciphers, Conn, Skill, gem, (32, 32), (34, 32),
                     false, (ushort)0, Conn.ActionCount, null, null, 1.0, 0u, null, null])!).WaitAsync(TimeSpan.FromSeconds(5));
-        }
-
-        public ProjectileUse CaptureProjectileUse((int X, int Y)? aim = null)
-        {
-            var session = Conn.ProjectileRuntime ??= new("contact-fixture", writer.GetStream(), ciphers, Conn);
-            var gems = (IEnumerable<(ushort Id, int Effect, string Name, int Level, int Quality, uint Gem)>)
-                typeof(Program).GetMethod("GemSkillEffects", BindingFlags.Static | BindingFlags.NonPublic,
-                    binder: null, types: [typeof(ClientState)], modifiers: null)!.Invoke(null, [Conn])!;
-            return (ProjectileUse)Method("CaptureGemProjectile").Invoke(null,
-                [Conn, session, Skill, gems.Single(g => g.Id == Skill),
-                    aim ?? Target.Walk.Position(Conn.Clock.Elapsed.TotalSeconds),
-                    Method("CaptureSkillCriticalRoll").Invoke(null, [Conn, Skill])])!;
         }
 
         public async Task Launch((int X, int Y)? aim = null)

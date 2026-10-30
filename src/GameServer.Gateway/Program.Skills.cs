@@ -9,9 +9,10 @@ using DamagePacket = GameServer.Core.World.DamagePacket;
 partial class Program
 {
     // The player's granted skills: the default attack with the unarmed weapon's stats and every stat the server set on the
-    // player since (a skill's stats include the character's; the client reads the skill's). Qualified equipment supplies
-    // its stats before individual gem validation. A gem's own unmet requirement does not disable its host; GemDisabled
-    // refuses that gem's use even when its skill ID remains in the Actor list or the client sends stale input.
+    // player since (a skill's stats include the character's; the client reads the skill's). A gem whose requirements the
+    // character does not meet makes its item inactive (EquipmentStatSources) like a worn item the character is too low for,
+    // so GemSkillEffects leaves its skill out: the client has nothing to cast. A use that arrives anyway (a stale client) is
+    // refused (GemDisabled).
     static IReadOnlyList<GrantedSkill> PlayerSkills(ClientState conn)
     {
         // One build reads one snapshot of the character's stats, final stats and supported gems: every gem's cast time,
@@ -837,7 +838,7 @@ partial class Program
 
     // Why a gem skill may not be used: an actor restriction, unmet gem requirements or provider equipment restrictions.
     // The client reds the gem but still sends the use, so this is the backstop for a client whose item is not inactive yet.
-    // Null when the actor restriction and requirements allow the effect; a qualified host remains active.
+    // Null when the actor restriction and requirements allow the effect.
     static string? GemDisabled(ClientState conn, int effect)
     {
         if (ActorSkillDisabled(conn, effect) is { } restriction) return restriction;

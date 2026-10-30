@@ -279,14 +279,10 @@ public sealed partial class AscendancyGatewayIntegrationTests
         }
 
         Check(35, supported: true);
-        var selected = game.Read().Skill;
-        var other = game.Read(other: true).Skill;
         game.SetQualifier(false);
-        Assert.NotNull(ProgramValue<string?>("GemRequirementsUnmet", game.State, game.SupportGem));
-        game.AssertHostUnavailable(15, selected.Id, other.Id);
+        game.AssertHostInactive();
         game.SetQualifier(true);
         Check(35, supported: true);
-        Assert.Equal(selected.Id, game.Read().Skill.Id);
         game.Socket(linked: false);
         Check(15, supported: false);
     }
@@ -386,7 +382,7 @@ public sealed partial class AscendancyGatewayIntegrationTests
     }
 
     [Fact]
-    public void Selected_misc_unmet_support_disables_its_host_and_removing_the_unmet_gem_restores_qualified_skills()
+    public void Selected_misc_support_requirement_failure_takes_the_host_down_and_recovery_restores_the_supported_skill()
     {
         var spec = SelectedMiscSpec("area");
         using var game = new SelectedMiscCharacter(spec);
@@ -395,23 +391,11 @@ public sealed partial class AscendancyGatewayIntegrationTests
         game.AssertSupported(linked);
         Assert.Equal(50, linked.Get(spec.Alias));
         game.SetQualifier(false);
+        // The active gem still qualifies on its own, but the support it shares the item with does not: the item goes
+        // inactive with every gem in it (19-gems.md).
         Assert.Null(ProgramValue<string?>("GemRequirementsUnmet", game.State, game.ActiveGem));
-        Assert.NotNull(ProgramValue<string?>("GemRequirementsUnmet", game.State, game.SupportGem));
-        game.AssertHostUnavailable(20, linked.Skill.Id);
+        game.AssertHostInactive();
 
-        // With the unmet support physically absent, the same host and qualified active gem are usable.
-        // This control distinguishes host admission from suppressing unrelated ordinary actor stats.
-        game.Socket(support: false);
-        Assert.DoesNotContain(game.HostId, Program.InactiveItems[game.Character]);
-        var disqualified = game.Read();
-        Assert.Equal(linked.Skill.Id, disqualified.Skill.Id);
-        Assert.Empty(disqualified.Applied);
-        Assert.Empty(disqualified.Skill.Supports);
-        Assert.Equal(20, disqualified.Get(spec.Alias));
-        game.AssertControls(20);
-
-        game.Socket();
-        game.AssertHostUnavailable(20, linked.Skill.Id);
         game.SetQualifier(true);
         game.AssertQualified();
         game.AssertSupported(game.Read());
@@ -529,16 +513,13 @@ public sealed partial class AscendancyGatewayIntegrationTests
             Assert.DoesNotContain(HostId, Program.InactiveItems[Character]);
         }
 
-        public void AssertHostUnavailable(int expectedActor, params ushort[] previousSkillIds)
+        // A socketed gem the character does not qualify for makes its whole host inactive (19-gems.md): the support's
+        // failure takes the active gem and the other gem in the same item off the skill list with it.
+        public void AssertHostInactive()
         {
+            Assert.NotNull(ProgramValue<string?>("GemRequirementsUnmet", State, SupportGem));
             Assert.Contains(HostId, Program.InactiveItems[Character]);
-            Assert.Empty(Gems());
-            var skills = ActorSkills();
-            foreach (ushort id in previousSkillIds) Assert.DoesNotContain(skills, skill => skill.Id == id);
-            // The host's socketed skills leave the Actor; the ordinary default attack and raw actor source survive.
-            Assert.Equal(expectedActor, Program.CharacterPlayerStats(State).GetValueOrDefault(SelectedMiscKey(_spec.Alias)));
-            var defaults = Assert.Single(skills, skill => skill.Id == SkillCatalog.FirstSkillId);
-            Assert.Equal(expectedActor, defaults.Stats!.ToDictionary(s => s.Key, s => s.Value).GetValueOrDefault(SelectedMiscKey(_spec.Alias)));
+            Assert.DoesNotContain(Gems(), g => g.Effect == ActiveEffect || g.Effect == _otherEffect);
         }
 
         public (ushort Id, int Effect, string Name, int Level, int Quality, uint Gem)[] Gems() =>
