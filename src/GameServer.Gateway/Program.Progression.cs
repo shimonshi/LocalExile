@@ -623,6 +623,9 @@ partial class Program
             resistanceSources[key] = resistanceSources.GetValueOrDefault(key) + value;
         bonus = ResistanceOvercap.Applied(bonus, resistanceSources, devStats, ResistancePenalty(conn), Stats);
         var pools = CharacterStats.For(SkillsFor(conn).ClassFor(conn.ClassRow), level, bonus);
+        int providence = InquisitorOffense.RighteousProvidenceIncrease(EquipmentInput, pools.Strength, pools.Intelligence);
+        pools = pools with { CriticalStrikeChancePct = pools.CriticalStrikeChancePct + providence,
+            SpellCriticalStrikeChancePct = pools.SpellCriticalStrikeChancePct + providence };
         // The pure base critical stats (/set_stat too) sit outside the passive increases: the weapon override replaces
         // the armed main hand's base and the unarmed base replaces the empty one, before the global increases.
         pools = pools with
@@ -637,7 +640,8 @@ partial class Program
             // melee uses its own Behemoth base. Neither base is a spell value; the spell route stays on SpellCriticalStrike.
             AttackCriticalStrikeChance = AttackBaseCriticalStrike.Chance(!activeWeapon.Unarmed,
                 activeWeapon.Critical, pools.CriticalStrikeChancePct, RawCritical),
-            SpellCriticalStrikeChance = SpellCriticalStrike.Chance(DamageModel.BaseSpellCriticalStrikeChancePerMyriad,
+            SpellCriticalStrikeChance = SpellCriticalStrike.Chance(InquisitorOffense.SpellBase(DamageModel.BaseSpellCriticalStrikeChancePerMyriad,
+                activeWeapon.Unarmed ? null : activeWeapon.Critical, EquipmentInput),
                 RawCritical, playerIncrease: pools.SpellCriticalStrikeChancePct)
         };
         // Only the active usable shield contributes. The alternate set and unmet requirements cannot grant block.

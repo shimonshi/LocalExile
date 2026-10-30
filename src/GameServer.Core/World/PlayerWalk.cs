@@ -46,6 +46,10 @@ public sealed class PlayerWalk
 
     public double Speed => _speed;
 
+    /// <summary>Called immediately before and after a motion mutation, with its accepted world time.
+    /// Observers may sample this walker; they must not change it from either callback.</summary>
+    public event Action<PlayerWalk, double>? Changing, Changed;
+
     /// <summary>A bounded escape through estimated living bodies, only until this walk ends or is replaced.</summary>
     public bool EscapingCrowd(double now) => _escapingCrowd && now < ArrivesAt;
 
@@ -54,14 +58,15 @@ public sealed class PlayerWalk
     public void SetSpeed(double speed, double now)
     {
         if (speed <= 0) throw new ArgumentOutOfRangeException(nameof(speed));
+        Changing?.Invoke(this, now);
         _speed = speed;
         int i = _segments.FindIndex(s => now < s.End);
-        if (i < 0) return;
-        for (int k = i + 1; k < _segments.Count; k++)
+        for (int k = i < 0 ? _segments.Count : i + 1; k < _segments.Count; k++)
         {
             var s = _segments[k];
             _segments[k] = s with { T0 = _segments[k - 1].End, Step = StepTime(s.From, s.Cells[^1]) };
         }
+        Changed?.Invoke(this, now);
     }
 
     /// <summary>The walker's cell at <paramref name="now"/> (seconds, any monotonic clock).</summary>
@@ -88,10 +93,12 @@ public sealed class PlayerWalk
     /// <summary>Puts the walker at a cell (a teleport, e.g. S→C 0x1b7): no walk in progress.</summary>
     public void Teleport(int x, int y, double now)
     {
+        Changing?.Invoke(this, now);
         _segments = [];
         _rest = (x, y);
         _restSince = now;
         _escapingCrowd = false;
+        Changed?.Invoke(this, now);
     }
 
     /// <summary>When the current walk ends (when it ended, once the walker stands).</summary>
@@ -137,6 +144,7 @@ public sealed class PlayerWalk
 
     private (int X, int Y) Walk((int X, int Y) target, int maxRange, int tolerance, double now)
     {
+        Changing?.Invoke(this, now);
         var here = At(now, out double fraction);
         _escapingCrowd = false;
         var bodies = _blockers();
@@ -159,7 +167,11 @@ public sealed class PlayerWalk
         _segments = [];
         _rest = here;
         _restSince = now;
-        if (path.Count < 2) return here;
+        if (path.Count < 2)
+        {
+            Changed?.Invoke(this, now);
+            return here;
+        }
         double t = now;
         for (int i = 1; i < path.Count; i++)
         {
@@ -170,6 +182,7 @@ public sealed class PlayerWalk
             _segments.Add(new Segment(path[i - 1], cells, t, step));
             t += cells.Length * (double)step;
         }
+        Changed?.Invoke(this, now);
         return here;
     }
 

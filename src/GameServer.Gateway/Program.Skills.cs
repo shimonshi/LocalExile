@@ -104,7 +104,7 @@ partial class Program
     static List<(uint, int)> WeaponStats(ClientState conn, SkillCatalog.Unarmed weapon, IReadOnlyDictionary<uint, int> stats)
     {
         var conversion = DamageStats.Conversion(stats, Stats, attack: true);
-        var mainHit = AttackHitConverted(weapon, stats, MeleeAttack(conn), conversion);
+        var mainHit = AttackHitConverted(weapon, stats, MeleeAttack(conn), conversion).Scale(InquisitorAttackFactor(conn));
         var accuracy = OrdinaryAccuracy(conn, stats, weapon.LocalSources);
         double damageFactor = CriticalStrikePolicy.DamageFactor(CriticalProhibitedBy(stats, attack: true, own: null)
             ? 0 : conn.Pools.AttackCriticalStrikeChance, AttackCriticalMultiplier(conn, stats), CriticalExtraRollsFor(conn, stats),
@@ -113,7 +113,7 @@ partial class Program
         AddHand(mainHit, "main_hand");
         if (OffhandWeaponFor(conn) is { } off)
         {
-            var offHit = AttackHitConverted(off, stats, MeleeAttack(conn), conversion);
+            var offHit = AttackHitConverted(off, stats, MeleeAttack(conn), conversion).Scale(InquisitorAttackFactor(conn));
             list.AddRange(off.OffStats(stats, offHit));
             AddHand(offHit, "off_hand");
             // The hands alternate: the panel's per-use, per-second and attacks-per-second rows average both, each hand
@@ -205,6 +205,7 @@ partial class Program
         int FlaskGet(string name) => Stats.Key(name) is uint k ? stats.GetValueOrDefault(k) : 0;
         UtilityFlasks.AddRawStats(stats, UtilityStats(conn, FlaskGet).Concat(conn.FlaskGrounds.PlayerStats()), Stats);
         WithRage(conn, stats);
+        WithInquisitorStats(conn, stats);
         // The character panel's sums of base forms (PanelStats); a stat /set_stat set keeps its value.
         ActorScale.Project(stats, rawOverrides, CosmeticScaleSources(conn));
         int Get(string name) => Stats.Key(name) is uint k ? stats.GetValueOrDefault(k) : 0;
@@ -242,7 +243,7 @@ partial class Program
                 name => Stats.Key(name) is uint key && rawOverrides.TryGetValue(key, out int value) ? value : null,
                 CriticalOnLowLife(conn, stats)))
             .Concat(FlaskCharges.GainStats(Get))
-            .Concat(new[] { ("energy_shield_recovery_per_minute", (int)Math.Round(EnergyShield.PredictionPerMinute(conn.Pools.EnergyShield, Get, conn.EnergyShield.Recharging))),
+            .Concat(new[] { ("energy_shield_recovery_per_minute", (int)Math.Round(EnergyShield.PredictionPerMinute(conn.Pools.EnergyShield, Get, conn.EnergyShield.Recharging) + InquisitorMirroredPerMinute(conn, Get))),
                 ("total_energy_shield_recovery_per_minute_from_regeneration", (int)Math.Round(EnergyShield.RegenPerMinute(conn.Pools.EnergyShield, Get))),
                 ("energy_shield_recharge_rate_per_minute", (int)Math.Round(EnergyShield.RechargePerMinute(conn.Pools.EnergyShield, Get))),
                 ("energy_shield_recharge_active", 0) })
@@ -280,7 +281,7 @@ partial class Program
         // skill_uses_main_hand, which nothing sent before, so the numbers alone would leave them blank.
         if (Stats.Key("skill_uses_main_hand") is uint usesMainHand && !devSet.Contains(usesMainHand)) stats[usesMainHand] = 1;
         var attackConversion = DamageStats.Conversion(stats, Stats, attack: true);
-        var attack = AttackHitConverted(WeaponFor(conn), stats, MeleeAttack(conn), attackConversion);
+        var attack = AttackHitConverted(WeaponFor(conn), stats, MeleeAttack(conn), attackConversion).Scale(InquisitorAttackFactor(conn));
         foreach (var (stat, value) in PanelStats.HandDamage(attack, "main_hand"))
             if (Stats.Key(stat) is uint key && !devSet.Contains(key)) stats[key] = value;
         // The default attack's damaging-ailment rows per hand (AilmentPanelStats), from the same raw packet and
@@ -520,9 +521,11 @@ partial class Program
             // The native spell action divides virtual BASE time by cast speed itself. Keep the catalog base
             // intact; only the panel's final casts-per-second stat is adjusted here.
             int supportCastSpeed = Stats.Key("base_cast_speed_+%") is uint cs ? own.GetValueOrDefault(cs) : 0;
-            if (SpellCastTiming.ForSkill(SkillsFor(conn), effect, CastSpeedPct(stats) + supportCastSpeed) is { } spellTiming)
+            if (SpellCastTiming.ForSkill(SkillsFor(conn), effect, InquisitorCastSpeed(conn, effect, CastSpeedPct(stats) + supportCastSpeed)) is { } spellTiming)
             {
                 spellTiming.ApplyTo(stats, Stats);
+                if (Stats.Key("cast_speed_+%") is uint inquisitorSpeed)
+                    stats[inquisitorSpeed] = InquisitorCastSpeed(conn, effect, CastSpeedPct(stats) + supportCastSpeed);
             }
             // Preserve the legacy non-spell/attack display path; attack timing is outside this fix.
             else if ((CastSpeedPct(stats) + supportCastSpeed) is int castSpeed and not 0 && SkillsFor(conn).CastMs(effect) is int castMs and > 0)

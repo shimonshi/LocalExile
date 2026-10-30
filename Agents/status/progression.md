@@ -190,6 +190,16 @@ Part of [Status](../Status.md); what to build next in this area is in
   Default Phrecia admission is gated; the explicit Gambler opt-in verifies installed graph bytes read-only.
   Docs: [Gambler checklist, scope and verification](../docs/game/gambler.md).
 
+- Ordinary Inquisitor: all eight notables have supported server consumers on the original Default graph.
+  Thirty-nine real-client checks cover choice/points, refunds, relog/restart, enemy life loss, mana/ES recovery,
+  Fanaticism, equipped buff effect and ground movement/linger.
+  Production-path regressions include typed Battlemage, reflected Impale, incoming ignite and stale area publishers.
+  Native acquisition and unsupported shared executors retain the documented model boundaries.
+  The [class PR](https://github.com/shimonshi/LocalExile/pull/1) awaits the #318 owner's reconciliation
+  and an upstream readiness recheck.
+  Code: `Program.Inquisitor.cs`, `InquisitorOffense.cs`, `InquisitorCombatState.cs`, `InquisitorGround.cs`.
+  Docs: [node audit, verification and integration limits](../docs/game/inquisitor.md).
+
 ## Partly working
 
 - Aristocrat: every node in its installed graph has a server consumer (gem levels and quality, attribute requirements,

@@ -304,8 +304,11 @@ sealed partial class ClientState(AreaLayout layout, uint ticket, uint seed)
     {
         var l = Layout;
         Func<int, int, bool>? walkable = l.Walkable is { } w ? (cx, cy) => w(cx, cy) && !Barrier.Contains((cx, cy)) : null;
-        return new(l.SpawnX, l.SpawnY, Program.WalkSpeed, walkable, l.GridW > 0 ? l.GridW : 4096, l.GridH > 0 ? l.GridH : 4096,
+        var walk = new PlayerWalk(l.SpawnX, l.SpawnY, Program.WalkSpeed, walkable, l.GridW > 0 ? l.GridW : 4096, l.GridH > 0 ? l.GridH : 4096,
             () => Blockers, stationary: CrowdEscapeBlockers);
+        walk.Changing += (walker, now) => Program.InquisitorMotionChanged(this, walker, now);
+        walk.Changed += (walker, now) => Program.InquisitorMotionChanged(this, walker, now);
+        return walk;
     }
     public bool PlayerSent;
     // Server frames ended so far (0x2b5).

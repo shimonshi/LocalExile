@@ -4,6 +4,33 @@ namespace GameServer.Core.Tests;
 
 public class PlayerWalkTests
 {
+    [Fact]
+    public void Motion_callbacks_bracket_orders_approaches_teleports_and_speed_changes_at_the_accepted_time()
+    {
+        var walk = new PlayerWalk(10, 10, 10);
+        var samples = new List<(string Phase, double Time, (int X, int Y) Position, double Arrival)>();
+        walk.Changing += (w, now) => samples.Add(("before", now, w.Position(now), w.ArrivesAt));
+        walk.Changed += (w, now) => samples.Add(("after", now, w.Position(now), w.ArrivesAt));
+        walk.Order(20, 10, 2);
+        Assert.Equal(("before", 2d, (10, 10), 0d), samples[0]);
+        Assert.Equal("after", samples[1].Phase);
+        Assert.Equal(3, samples[1].Arrival, 5);
+        walk.Approach(30, 10, 2, 2.5);
+        walk.WalkUpTo(30, 10, 2, 2.6);
+        walk.SetSpeed(20, 2.7);
+        walk.Teleport(50, 50, 2.8);
+        walk.Order(50, 50, 2.9); // Even an order which stops immediately closes the previous walk.
+        Assert.Equal(12, samples.Count);
+        Assert.Equal((50, 50), samples[9].Position);
+        Assert.Equal(2.8, samples[9].Arrival);
+        for (int i = 0; i < samples.Count; i += 2)
+        {
+            Assert.Equal("before", samples[i].Phase);
+            Assert.Equal("after", samples[i + 1].Phase);
+            Assert.Equal(samples[i].Time, samples[i + 1].Time);
+        }
+    }
+
     static List<ClientPathfinder.Blocker> Ring(int cx, int cy) =>
         [.. Enumerable.Range(0, 16).Select(i => new ClientPathfinder.Blocker(
             cx + (int)Math.Round(5 * Math.Cos(i * Math.PI / 8)), cy + (int)Math.Round(5 * Math.Sin(i * Math.PI / 8)), 2))];
