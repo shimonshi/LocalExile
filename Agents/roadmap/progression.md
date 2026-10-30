@@ -71,7 +71,8 @@ Items keep the Roadmap's priority groups, and are in rough priority order within
   reflection, unaffected bleeding, shared leech/overkill/cull and one lethal reward commit.
   Verify paid source removal, delayed publication, pause/death, failed/successful transfer, relog and restart.
   Earlier native maxima/lifecycle evidence does not establish final-source combat acceptance.
-  The latest bounded native run found missing Headsman buff UI despite correct derived stats; fix and revalidate it.
+  The latest bounded native run found missing Headsman buff UI despite correct derived stats.
+  The publication candidate includes the adapter and tick hook; revalidate real buff UI/timer on its final code.
 - **Deadeye (#392):** all 19 Default nodes have connected consumers, including marks/Mirage and Gale/projectiles.
   Complete the [final native matrix](../docs/game/deadeye.md#related-integration-and-final-acceptance-work):
   real hit/Ignite distance and in-flight refund, terrain/barrage, all marks and live incoming Focal DoT,

@@ -492,6 +492,7 @@ partial class Program
                         return InstanceEntities.StatsUpdate(PlayerId, [(bleedingKey, bleeding.Value ? 1 : 0)]);
                     }
                 });
+            await SendSlayerBuffs(remote, stream, ciphers, conn);
             await SendAntiquarian(remote, stream, ciphers, conn);
             await SendRecentEnemyHits(remote, stream, ciphers, conn);
             await PushOutOfCollision(remote, stream, ciphers, conn);

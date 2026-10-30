@@ -212,7 +212,8 @@ Part of [Status](../Status.md); what to build next in this area is in
   Shared owner/proxy attribution, lethal reward draining and lifecycle/publication paths retain their model boundaries.
   The earlier native smoke passed nine bounded Slayer lifecycle checks; full final-source combat remains pending.
   Source `762fbe43` passed a warning-free build and Core 434, Data 34 and default-parallel Gateway 3799.
-  Its bounded native cull/refund/relog run found missing Headsman buff UI; the source fix remains required.
+  Its bounded native cull/refund/relog run found missing Headsman buff UI.
+  The local publication candidate integrates the presentation fix and tick hook, pending native revalidation.
   The separate local publication candidate reconciles ordinary features onto an explicit main/#339 snapshot.
   Its acceptance does not inherit native evidence from the source ancestor; see the combined evidence below.
   Docs: [Slayer model and combat matrix](../docs/game/slayer.md),

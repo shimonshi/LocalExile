@@ -50,9 +50,18 @@ public partial class ConditionalCriticalGatewayTests
         try
         {
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(3));
-            while (!first.Dead) await Task.Delay(5, timeout.Token);
-            if (reflect) Assert.Equal(0u, f.Conn.PlayerLife);
-            else Interlocked.Increment(ref f.Conn.ActionCount);
+            while (true)
+            {
+                // Death and reflection are one combat-lock commit; never inspect its intermediate dead flag.
+                lock (f.Conn.Monsters)
+                    if (first.Dead)
+                    {
+                        if (reflect) Assert.Equal(0u, f.Conn.PlayerLife);
+                        else Interlocked.Increment(ref f.Conn.ActionCount);
+                        break;
+                    }
+                await Task.Delay(5, timeout.Token);
+            }
         }
         finally { f.SendGate.Release(); }
         await sweep;

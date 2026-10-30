@@ -289,7 +289,8 @@ The parent reports source `762fbe43` passing a warning-free solution build and C
 That source retains the subsequent Mirage/Poacher, incoming Focal, action override and Barrage admission fixes.
 Those checks certify the source revision, not the reconciled Harbinger publication candidate.
 The parent's bounded native cull/refund/relog checks on `762fbe43` found missing Headsman buff presentation.
-That gap requires a source fix and revalidation; no whole-class native acceptance follows from the partial run.
+The publication candidate includes fix `7ac25737` and its tick hook; final native revalidation remains required.
+No whole-class native acceptance follows from the partial run.
 Earlier full-suite totals certify their own revisions, not changed publication code.
 
 Current coverage includes pinned nodes, legal allocation/refund/reload, production release/contact provenance,

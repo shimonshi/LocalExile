@@ -3,7 +3,7 @@
 Issue [#391](https://github.com/LocalExile/LocalExile/issues/391) owns ordinary Slayer.
 The source candidate connects pinned Default effects to supported owner hit, Ignite and RF routes.
 Parent native testing exposed a missing Headsman native-buff presentation despite working kill/stat execution.
-The native presentation follow-up below supplies the adapter; its single common tick hook is still unapplied here.
+The native presentation follow-up supplies the adapter and the local publication candidate includes its tick hook.
 It is an isolated source candidate for parent integration, not native acceptance or publication readiness.
 The parent owns combined integration, general documentation, the shared runtime and PR publication.
 No client or Gateway process was started, stopped, attached to or commanded by this worker.
@@ -14,7 +14,7 @@ The ordinary feature source is `762fbe43`; the local publication candidate uses 
 Its explicit snapshot, publication boundary and revalidation requirements are recorded in
 [the combined acceptance contract](deadeye.md#related-integration-and-final-acceptance-work).
 The parent's bounded native run on `762fbe43` found missing Headsman buff presentation despite derived stats.
-Publication remains on hold for that source fix; earlier native checks do not certify reconciled code.
+The adapter and tick hook are now integrated; final checks and native acceptance of reconciled code remain pending.
 The following revisions document earlier isolated implementation evidence.
 
 The original allocated branch `t3/ordinary-slayer-full` was clean at `864da152` and remains untouched.
@@ -86,14 +86,13 @@ Pause leaves the game clock frozen; projecting a pending valid buff during pause
 Loading emits no old-world packets, failed-transfer resume replaces rebased grants, and a new connection starts fresh.
 No independent timer, replacement EffectClock, archive mutation or existing common hook is introduced by this fix.
 
-The parent must add this one call in `RunPlayerTick`, after the existing bleed/native-condition publication:
+The publication candidate adds this one call in `RunPlayerTick`, after the bleed/native-condition publication:
 
 ```csharp
 await SendSlayerBuffs(remote, stream, ciphers, conn);
 ```
 
-Place it immediately before `SendAntiquarian`, preserving earlier condition-send ordering and held-gate tests.
-Until that hook is integrated, the new adapter is directly tested but not automatically invoked by production ticks.
+It is immediately before `SendAntiquarian`, preserving earlier condition-send ordering and held-gate tests.
 Native timer/UI acceptance requires the parent's rebuilt combined head and an actual client rerun.
 
 ### Overwhelm 17315
@@ -301,7 +300,8 @@ Logs remain in `logs/slayer-full/native-buffs-*`; the single common hook and nat
 Exact code/test `7ac25737` builds with zero warnings/errors and passes Core 434, Data 34 and Gateway 3,811.
 The Gateway run uses default parallel execution; all three suites report zero failures/skips.
 Logs are `native-buffs-build-final.log` and `native-buffs-{core,data,gateway}-final.log`.
-The following documentation-only commit does not alter the tested code or install the common hook.
+That worker's following documentation-only commit did not alter tested code or install the common hook.
+The publication branch separately installs the hook and validates its full current-main composition.
 
 ## Offline native matrix for the parent
 
