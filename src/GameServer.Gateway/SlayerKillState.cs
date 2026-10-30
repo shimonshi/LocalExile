@@ -10,6 +10,22 @@ sealed class SlayerKillState
     readonly Queue<double> kills = new();
     EffectClock? movement, attack;
     double rate = 1;
+    long nextGrant, movementGrant, attackGrant;
+
+    // Immutable presentation data, read under the same owner combat lock as RecordKill/Read.
+    // Identity changes on refresh/restore even if the +10 stat and recipient rate did not change.
+    public readonly record struct BuffGrant(long Identity, int Value, double Remaining, double Deadline, double Rate);
+    public readonly record struct BuffSnapshot(BuffGrant? Movement, BuffGrant? Attack);
+
+    public BuffSnapshot ReadBuffs(double now, Func<string, int> get)
+    {
+        ValidateTime(now);
+        Trim(now, get);
+        BuffGrant? Grant(EffectClock? clock, long identity, string source) => Remaining(clock, now) > 0
+            ? new(identity, get(source), clock!.Remaining, clock.Deadline, clock.Rate) : null;
+        return new(Grant(movement, movementGrant, SlayerRules.KillMovementSpeed),
+            Grant(attack, attackGrant, SlayerRules.RareKillAttackSpeed));
+    }
 
     public sealed record Carried(double[] Kills, double Movement, double Attack, double Rate);
 
@@ -25,6 +41,8 @@ sealed class SlayerKillState
         foreach (double seconds in value.Kills) kills.Enqueue(now + seconds);
         movement = new(value.Movement, now, rate);
         attack = new(value.Attack, now, rate);
+        movementGrant = ++nextGrant;
+        attackGrant = ++nextGrant;
     }
 
     // BuffDefinitions rows 1341/1342 use category 18, not category 1.
@@ -48,8 +66,10 @@ sealed class SlayerKillState
         Trim(now, get);
         kills.Enqueue(now + RecentlySeconds);
         // These are buffs gained while the source is held, not a retrospective test of "killed recently".
-        if (get(SlayerRules.KillMovementSpeed) != 0) movement = new(HeadsmanSeconds, now, rate);
-        if (rareOrUnique && get(SlayerRules.RareKillAttackSpeed) != 0) attack = new(HeadsmanSeconds, now, rate);
+        if (get(SlayerRules.KillMovementSpeed) != 0)
+        { movement = new(HeadsmanSeconds, now, rate); movementGrant = ++nextGrant; }
+        if (rareOrUnique && get(SlayerRules.RareKillAttackSpeed) != 0)
+        { attack = new(HeadsmanSeconds, now, rate); attackGrant = ++nextGrant; }
     }
 
     public Snapshot Read(double now, Func<string, int> get)
