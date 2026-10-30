@@ -178,11 +178,14 @@ public partial class SpellNoDamageTests
         Assert.Equal(350, offense.Hit[DamageType.Chaos].Min); // 100 * 2.5 * 140% effectiveness.
         Assert.Equal(350, offense.AreaHit![DamageType.Chaos].Min);
         Assert.Equal(.6, use.Profile.ContactArea!.Multiplier); // Only the secondary explosion takes 40% less.
-        // Keep only one damage route and end its synthetic 28-cell flight at the target. Weapon contact origins
-        // vary by animation; this attribute-snapshot test fixes its geometry independently of that presentation.
-        use = use with { Origin = new(32, 32), Profile = use.Profile with
+        // End the isolated explosion at the target from the captured weapon-keyframe muzzle.
+        // Its forward offset differs from a spell's 1.5-cell launch offset.
+        var targetAt = f.Target.Walk.Position(0);
+        double targetRange = (new ProjectileVector(targetAt.X, targetAt.Y) - use.Origin).Length;
+        // Keep only one existing damage route to make the target's life-loss assertion unambiguous.
+        use = use with { Profile = use.Profile with
         {
-            Count = 1, Speed = 100, Range = 28, Radius = .1, Pierce = 0,
+            Count = 1, Speed = 100, Range = targetRange, Radius = .1, Pierce = 0,
             DirectDamage = !area, ContactArea = null, Pulse = null, EndEmission = null,
             EndArea = area ? new("arcane-snapshot-area", 5, Multiplier: .6) : null,
         } };
