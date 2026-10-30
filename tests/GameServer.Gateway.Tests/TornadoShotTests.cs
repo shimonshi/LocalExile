@@ -12,15 +12,18 @@ public partial class SpellNoDamageTests
     {
         using var f = new Fixture("TornadoShot", "Crude Bow");
         Assert.Equal(("Metadata/Projectiles/TornadoShotArrow", 2173), Program.Skills.ProjectileFor(f.Effect));
-        var start = f.Conn.Walk.Position(f.Conn.Clock.Elapsed.TotalSeconds);
+        // Supply the socket-read timestamp so dispatch latency cannot finish the walk before the use.
+        long readAt = System.Diagnostics.Stopwatch.GetTimestamp();
+        double orderAt = f.Conn.Clock.Elapsed.TotalSeconds;
+        var start = f.Conn.Walk.Position(orderAt);
         var click = (start.X, Y: start.Y + 40);
-        f.Conn.Walk.Order(click.X, click.Y, f.Conn.Clock.Elapsed.TotalSeconds);
-        await Task.Delay(100);
+        f.Conn.Walk.Order(click.X, click.Y, orderAt - .1);
+        Assert.NotEqual(click, f.Conn.Walk.Position(orderAt));
 
         var use = new LoginWriter().U16(InstanceProtocol.UseSkillAtLocationId)
             .U32((uint)(click.X - 20)).U32((uint)click.Y).U16(f.Skill).U16(7).U16(0x408).ToArray();
         await Program.OnClientMessages("spell-no-damage-test", f.Stream, f.Ciphers,
-            [(InstanceProtocol.UseSkillAtLocationId, use)], [], f.Conn).WaitAsync(TimeSpan.FromSeconds(5));
+            [(InstanceProtocol.UseSkillAtLocationId, use)], [], f.Conn, readAt).WaitAsync(TimeSpan.FromSeconds(5));
 
         double now = f.Conn.Clock.Elapsed.TotalSeconds;
         var stop = f.Conn.Walk.Destination;
