@@ -77,7 +77,14 @@ Pure timing tests additionally cover pause, death, source removal and one-use ar
 
 ### Recorded checks
 
-Final production source `6b3c7a2fd86505cd48d9e89692e4c5d5432554f3` contains main
+Current contributor composition `6872b6f90353978ffee7969f8051d5470e9d3949` contains owner head `cb8ff7ee`
+and the shared lifecycle prerequisite `ada116ae`.
+Its solution builds with zero warnings/errors; Core **390**, Data **34** and Gateway **2645** pass.
+This includes 67 Inquisitor checks and the prerequisite's 17 generic lifecycle regressions.
+Nine native choice/refund/Providence/Pious/Justice/relog controls pass again on this composition.
+The detailed 39-check matrix below retains its original revision and scope.
+
+The 39-check production source `6b3c7a2fd86505cd48d9e89692e4c5d5432554f3` contains main
 `5d5b5150e1b2e287c642edcaf75a49d075b9b4fe` and the declared panel prerequisite
 `f651d0e6af8ea42614a8a137fced4b005a23b189`.
 The solution builds with zero warnings/errors; Core **390**, Data **34** and Gateway **2629** pass.
@@ -87,7 +94,7 @@ Game data was generated through `extract-data.ps1`; production paths and shared 
 
 Native verification uses an isolated account/database through `scripts/dev/live.ps1` and ordinary client actions.
 Read-only probes distinguish received stats and buffs from actual resource changes and enemy life loss.
-All **39** final-source checks pass and cover:
+All **39** checks on that source pass and cover:
 
 - Ordinary choice and eight separate points; Providence attributes/critical chance; five-point refunds;
   Pious recovery publication; Justice main-hand critical base, cannot-crit and relog.
@@ -108,11 +115,11 @@ All **39** final-source checks pass and cover:
   Life-only recovery and ES recovery controls verify the copy's separate scaling; paid refund stops it.
 - A real Gateway-process restart restoring saved Providence nodes, attributes and critical increase.
 
-Final native Gateway DLL SHA-256:
+Gateway DLL SHA-256 for the 39-check matrix:
 `7eb64825efc60cbf073bbbb12743ea6f77d9ee9de525a87676456801ddc39048`.
 Source/build metadata and local logs are retained under `logs/` and contain local game/account data.
 They are not committed.
-Earlier isolated source revisions also supplied native evidence; they are superseded for final combined acceptance.
+Earlier isolated class-development revisions also supplied native evidence.
 
 The basic lifecycle is reproducible with `scripts/re/inquisitor-smoke.py` on a fresh isolated Templar.
 Its default invocation checks protocol/path assumptions offline.
@@ -144,18 +151,21 @@ These boundaries do not claim exact official-server rounding or sub-tick timing.
 
 Issue #363 owns this class and its feature-specific helpers/tests.
 Juggernaut (#152), native acquisition (#151) and the panel/leech implementation in PR #318 keep their existing owners.
-Shared feature edits call `Program.Inquisitor.cs`, propagate the reflected-hit owner and reject stale publishers.
-The retirement guards also close the existing slower resource/critical/charge/flask publication paths.
+Shared feature edits call `Program.Inquisitor.cs` and propagate the reflected-hit owner.
+The generic retirement/publication guards now belong to the #318 prerequisite.
+Inquisitor observations use its non-publishing raw-source resolver.
 No client graph, archive maintenance, extraction format or production data-path change is added.
 
 The [Inquisitor draft PR](https://github.com/shimonshi/LocalExile/pull/1) is based on
 `candidate/pr318-main361-admission` in the contributor fork.
-Its base is the standalone reconciliation candidate `f651d0e6`, proposed to the #318 owner in
+Its base is the shared lifecycle candidate `ada116ae2a26bbd674d322fc49f9f2375fc0fdd9`, proposed to the #318 owner in
 [evrydayjunglist/evryPath#1](https://github.com/evrydayjunglist/evryPath/pull/1).
-That candidate includes exact #318 head `ff61e93791682558d25f4dc609c2217e9245772c` and current main.
-The post-merge fixture migrations change tests/docs only and contain no Inquisitor source or tests.
-Its independent build and Core **389**, Data **34**, Gateway **2562** tests pass.
-They preserve main's host inactivation for unmet socketed gems and the client-predicted projectile policy.
+The owner independently integrated main; the earlier `f651d0e6` admission proposal is superseded.
+The current candidate includes exact #318 head `cb8ff7ee6b416b9b1d4e05acb510c3d57285ffb8` and current main.
+Its independent build and Core **389**, Data **34**, Gateway **2578** tests pass, with 12 native lifecycle controls.
+It contains no Inquisitor source or fixtures.
+The dependent merge retains the owner's current requirement/projectile fixtures and the new generic regressions.
+See [character stat lifecycle](../dev/character-stat-lifecycle.md) for exact evidence and scope.
 
 Intended upstream order: the owner reconciles/accepts the proposal into #318, #318 merges, then Inquisitor rebases
 onto the resulting main and repeats the required checks before upstream readiness.
@@ -163,7 +173,17 @@ No other owner's published branch is modified.
 The contributor-fork draft provides a class-only review diff while the upstream prerequisite is pending.
 It is not an upstream merge-ready PR.
 
-A disposable checkout tested main `5d5b5150` -> repaired #318 `f651d0e6` -> Inquisitor `6b3c7a2f` ->
+The updated composition `6872b6f9` is tested after merging that prerequisite into the class branch.
+Its production diff from the previous published class head `5f79e568` changes only requirement-related comments
+in `Program.Progression.cs` and `Program.Skills.cs`; class mechanics and the common lifecycle fix are preserved.
+The fresh nine-check native Gateway SHA-256 is
+`f5c1d4c8690212024d8d642bea1465bbe9e79d3c9b065f9197f7e38880674951`.
+Evidence: `logs/inquisitor-panel-update-{build,core,data,gateway,native-run}.log` and
+`logs/inquisitor-native-20261030-032644/{metadata,results}.json`.
+This smoke checks class/panel lifecycle, while the larger damage/timing matrix above retains its original revision.
+The isolated runtime is restored to its initial stopped state.
+
+A previous disposable checkout tested main `5d5b5150` -> repaired #318 `f651d0e6` -> Inquisitor `6b3c7a2f` ->
 #328 `07699a51a0b235ca668c6223a51d1362d375d7e9` ->
 #333 `7b9e1061862ea410d05f2304bd8ebb43a0b554de` ->
 #339 `e7d4cf43013e6175157970c13c3c1aed4292b62a`.
