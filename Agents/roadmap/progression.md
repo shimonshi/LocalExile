@@ -82,13 +82,13 @@ Items keep the Roadmap's priority groups, and are in rough priority order within
 - **Combined acceptance:** final publication build and Core/Data/full serial Gateway evidence are recorded.
   The local ordinary publication candidate uses explicit main `89b7aa90` plus #339 `13aeea19` snapshot `7476a054`.
   #385 is already merged; keep unmerged #328/#333 class completions out of the ordinary publication diff.
-  Validate #328 `4c90a1f9` -> #333 `1aa9a177` -> #339 `13aeea19` privately before downstream readiness.
+  Exact #328 `4c90a1f9` -> #333 `1aa9a177` -> #339 `13aeea19` private validation passes all 4185 Gateway tests.
   Automatic representative native controls passed on actual publication tip `dcbe3afc` and its frozen build.
   Whole-class acceptance remains false for that subset; finish the remaining manual and visual boundaries.
-  Final private all-related validation follows runtime release and remains separate from the published diff.
+  Final private all-related validation passed after runtime release and remains separate from the published diff.
   Newer-main reconciliation remains a separate acceptance requirement after the tested base changes.
-  Keep both classes Partly working until native combat and exact related-head acceptance are recorded.
-  Parent owns any contributor-fork draft against the new prerequisite snapshot and the later upstream PR.
+  Keep both classes Partly working while the remaining exhaustive manual and visual boundaries are open.
+  The parent published [fork draft #2](https://github.com/shimonshi/LocalExile/pull/2) against that snapshot.
   The upstream prerequisite merges are external dependencies; never merge into the active Harbinger owner branch.
 - **Ownership:** #391 and #392 are claimed; common hooks integrate in Slayer-then-Deadeye order with one writer.
   Juggernaut #152, Inquisitor #363 and native selection #151 remain with their existing owners.

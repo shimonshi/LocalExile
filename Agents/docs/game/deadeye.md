@@ -410,15 +410,21 @@ The initial main `7cca5594` snapshot `b94deb1f` and ordinary `47280f4e` remain o
 Their build/test logs remain separate; their evidence cannot certify the current-main composition.
 Any later upstream or prerequisite movement again requires reconciliation and affected checks.
 
-All refs remain local, with no push, PR, comment or runtime action from the publication worker.
-The parent may publish both new refs and a contributor-fork draft against the snapshot after accepting the result.
+The parent published both new refs and [contributor-fork draft #2](https://github.com/shimonshi/LocalExile/pull/2).
+The publication worker itself performed no push, PR, comment or runtime operation.
 Such a draft must explicitly remain blocked on upstream #328 -> #333 -> #339 serial integration.
 It must not merge into the active `codex/harbinger-completion` branch.
 The actual upstream ordinary PR depends on prerequisite merges and owner-coordinated revalidation.
 Private sequence validation is separate evidence, never a publication branch or whole-class acceptance.
-The parent retains private audit `64a567d6fd9d5fa29de27d70ed0a4c7fc119d08c` with the exact related-head graph.
-Its reported 4174 serial Gateway cases apply to its own `412ed4b0` code and test-equivalent `643f0da5` fixture update.
-It predates the framing fix and does not certify this publication candidate; none of its combined production was copied.
+The earlier private audit `64a567d6` and its 4174-case result remain history preceding the framing fix.
+Final private continuation `2e61e95930468140c90f4487111062bbd3af3b0c` includes framing and ground-admission fixes.
+Its code/tests equal `b71d78becb6140ea43a644d81cc786c2041663f9`.
+Solution build has zero warnings/errors; Core 434, Data 34, focused 75 and full serial Gateway 4185 pass.
+The complete run has zero failures/skips and no filter; collections are off, with stop-on-fail off.
+It composes exact main `89b7aa90`, #328 `4c90a1f9`, #333 `1aa9a177`, #339 `13aeea19` and final ordinary input.
+#385 `ad1e7e32` is already ancestral; all remote input heads were reverified unchanged before the final run.
+Its logs/TRX and artifact hashes are `compat-final-b3-*` in the separate private checkout.
+None of its combined class production is copied into the published ordinary diff.
 
 Preserve #328 Rampage/non-player ownership and one shared lethal callback, including owner Ignite/RF kills.
 Preserve #333 selected accuracy/Blind snapshots, accepted-hit callbacks and Mana-recoup disposal.

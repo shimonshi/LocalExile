@@ -226,8 +226,8 @@ Part of [Status](../Status.md); what to build next in this area is in
   explicit final action-speed overrides and unsupported Barrage rejection before payment.
   The publication suite results above apply; actual publication-head controls observe Far Shot/count/Focal contacts,
   Gale/Wind Ward, autonomous Mirage damage, moving Frenzy/accuracy and legal allocation/refund/relog.
-  `WholeClassAccepted=false` remains explicit for the representative subset; remaining manual/visual boundaries
-  and the final exact related-head integration remain separate requirements.
+  `WholeClassAccepted=false` remains explicit for the representative subset and remaining manual/visual boundaries.
+  The final exact related-head private sequence passes all 4185 serial Gateway tests without failures/skips.
   Ground ordinary melee swings now share paced Gale admission; distant approach and Move grant nothing.
   The #339 composition retains ailment-only wrapping around its raw-action-scaled weapon timing.
   Docs: [node audit, connected model and acceptance matrix](../docs/game/deadeye.md).
