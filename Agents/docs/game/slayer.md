@@ -15,7 +15,7 @@ Its explicit snapshot, publication boundary and revalidation requirements are re
 [the combined acceptance contract](deadeye.md#related-integration-and-final-acceptance-work).
 The parent's bounded native run on `762fbe43` found missing Headsman buff presentation despite derived stats.
 The adapter and tick hook are integrated; final local automated checks are recorded in the combined acceptance doc.
-Native acceptance of the reconciled publication head remains a separate parent-owned step.
+Representative native controls on the reconciled publication head passed; remaining boundaries are recorded below.
 The following revisions document earlier isolated implementation evidence.
 
 The original allocated branch `t3/ordinary-slayer-full` was clean at `864da152` and remains untouched.
@@ -318,8 +318,13 @@ Bane damage controls observed 120/132, Overwhelm 160/170 and Impact 115 versus r
 Masterful Form observed 4/0 maxima; actual retained full-Life leech, caps and source removal also passed.
 Legal connected builds, allocation/refund and relog are included in the parent's bounded checks.
 
-This is coordinator-source evidence, not native verification of this main/#339 publication head.
-The parent will own a separate bounded automatic subset on the actual handed-off code and frozen build.
+The coordinator repeated the automatic subset on actual publication head `dcbe3afce125604ded71487bffad388ccd23beca`.
+Its code and tests equal fully tested `94d9d5bf`; base `7476a054` includes current main and exact #339.
+Gateway SHA-256: `BCBB98B15B0C18E76AF76EF6172596ED1AA09FB8C7274F54781099AF40E1C078`.
+All six legal Slayer/Deadeye builds, paid refunds and relogs passed in that run.
+The Slayer combat controls above passed again, with natural Headsman attack-buff expiry at 20.071 seconds.
+Evidence is publication `logs/ordinary-native-full-prep/run-20261031-033311-47360/`.
+The run used one `live.ps1` client, synthetic saves and a frozen build; stopped state was restored and released.
 No whole-class, every-manual-row or official parity claim follows from the automated subset.
 Earlier failed presentation and fixture/protocol attempts remain retained, rather than being relabelled as passes.
 

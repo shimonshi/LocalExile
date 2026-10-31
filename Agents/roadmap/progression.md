@@ -71,8 +71,9 @@ Items keep the Roadmap's priority groups, and are in rough priority order within
   reflection, unaffected bleeding, shared leech/overkill/cull and one lethal reward commit.
   Verify paid source removal, delayed publication, pause/death, failed/successful transfer, relog and restart.
   Earlier native maxima/lifecycle evidence does not establish final-source combat acceptance.
-  The latest bounded native run found missing Headsman buff UI despite correct derived stats.
-  The publication candidate includes the adapter and tick hook; revalidate real buff UI/timer on its final code.
+  The missing Headsman native presentation and non-recovery packet framing are fixed.
+  Actual reconciled-tip controls passed cull, timed buffs, Bane, Overwhelm, Impact, Masterful and retained leech.
+  Complete the remaining manual matrix without treating those representative controls as exhaustive parity.
 - **Deadeye (#392):** all 19 Default nodes have connected consumers, including marks/Mirage and Gale/projectiles.
   Complete the [final native matrix](../docs/game/deadeye.md#related-integration-and-final-acceptance-work):
   real hit/Ignite distance and in-flight refund, terrain/barrage, all marks and live incoming Focal DoT,
@@ -82,9 +83,9 @@ Items keep the Roadmap's priority groups, and are in rough priority order within
   The local ordinary publication candidate uses explicit main `89b7aa90` plus #339 `13aeea19` snapshot `7476a054`.
   #385 is already merged; keep unmerged #328/#333 class completions out of the ordinary publication diff.
   Validate #328 `4c90a1f9` -> #333 `1aa9a177` -> #339 `13aeea19` privately before downstream readiness.
-  The parent owns automatic native validation of the actual reconciled publication tip and frozen build.
-  Coordinator subset passes leave whole-class acceptance false; finish the remaining manual and visual boundaries.
-  Final private all-related validation must wait for runtime release and remain separate from the published diff.
+  Automatic representative native controls passed on actual publication tip `dcbe3afc` and its frozen build.
+  Whole-class acceptance remains false for that subset; finish the remaining manual and visual boundaries.
+  Final private all-related validation follows runtime release and remains separate from the published diff.
   Newer-main reconciliation remains a separate acceptance requirement after the tested base changes.
   Keep both classes Partly working until native combat and exact related-head acceptance are recorded.
   Parent owns any contributor-fork draft against the new prerequisite snapshot and the later upstream PR.

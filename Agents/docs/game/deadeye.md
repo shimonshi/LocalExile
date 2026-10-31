@@ -317,7 +317,8 @@ The parent reports source `762fbe43` passing a warning-free solution build and C
 That source retains the subsequent Mirage/Poacher, incoming Focal, action override and Barrage admission fixes.
 Those checks certify the source revision, not the reconciled Harbinger publication candidate.
 The parent's bounded native cull/refund/relog checks on `762fbe43` found missing Headsman buff presentation.
-The publication candidate includes fix `7ac25737` and its tick hook; final native revalidation remains required.
+The publication candidate includes fix `7ac25737`, the framing correction and its tick hook.
+Actual publication-head native evidence is recorded below.
 No whole-class native acceptance follows from the partial run.
 Earlier full-suite totals certify their own revisions, not changed publication code.
 
@@ -357,7 +358,7 @@ New native combat evidence belongs to the parent after final-source acceptance.
 ## Coordinator native subsets and their boundary
 
 These are parent-reported actual-client observations on coordinator `0b997b37` and `b3be9ba9`.
-They do not certify this reconciled main/#339 publication head; the parent owns a separate actual-tip native window.
+Those ancestor observations remain separate from the actual publication-head repetition recorded here.
 The detailed Slayer subset is recorded in [Slayer's evidence](slayer.md#coordinator-native-subset).
 
 Deadeye D1 run `031232` on `b3be9ba9` observed Far Shot damage 100/130 and paid-refund negative 100,
@@ -373,6 +374,17 @@ Burning Arrow dealt 280 owner damage: the raw DamageEffectiveness value 18000 is
 Mirage then dealt autonomous 168 damage without another owner attack, with native Life updates.
 Moving Frenzy/accuracy, legal eight-point builds, paid refunds and relog controls also passed.
 
+The coordinator then repeated both classes' complete automatic subset on actual publication head
+`dcbe3afce125604ded71487bffad388ccd23beca`, code/test equivalent to fully tested `94d9d5bf`.
+Its base is snapshot `7476a054`, current main `89b7aa90` plus exact #339 `13aeea19`.
+Gateway SHA-256: `BCBB98B15B0C18E76AF76EF6172596ED1AA09FB8C7274F54781099AF40E1C078`.
+All six legal builds/refunds/relogs and the Slayer/Deadeye combat controls above passed again.
+Native Life correlated with Far Shot 100/130/refund 100, Focal 117/110/117 and owner/Mirage 280/168 damage.
+Gale reached ten distinct native instances with one Tailwind; incoming Chaos 100 became 60 before stack removal.
+Moving Frenzy/accuracy and natural Headsman expiry at 20.071 seconds passed.
+Evidence is publication `logs/ordinary-native-full-prep/run-20261031-033311-47360/`.
+One client ran only through `live.ps1` with isolated synthetic saves and a frozen build.
+Initial stopped runtime was restored and explicitly released; the helper's intentional exit 2 retains its subset scope.
 These results do not establish every manual matrix row, whole-class or official visual parity.
 Mirage appearance, overhead/equipment/height presentation and untested interaction boundaries remain explicit.
 Failed fixtures, the malformed non-recovery packets and all earlier unsuccessful attempts remain retained evidence.

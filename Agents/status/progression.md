@@ -211,12 +211,12 @@ Part of [Status](../Status.md); what to build next in this area is in
   melee reach/proximity, kill-based area, reflection and incoming unaffected bleeding have automated coverage.
   Shared owner/proxy attribution, lethal reward draining and lifecycle/publication paths retain their model boundaries.
   The final local publication build is warning-free; Core 434, Data 34 and full serial Gateway 4037 pass.
-  Parent coordinator-source native subsets cover actual cull/refund, timed Headsman, Bane, Overwhelm, Impact,
+  Actual publication-head native controls cover cull/refund, timed Headsman, Bane, Overwhelm, Impact,
   Masterful Form and retained full-Life leech/caps/removal.
   The publication candidate integrates the presentation fix and tick hook.
   Its non-recovery native packet framing now follows table flags rather than sending unused stat words.
   The separate local publication candidate reconciles ordinary features onto an explicit main/#339 snapshot.
-  Its acceptance does not inherit native evidence from the source ancestor; see the combined evidence below.
+  These controls passed again on reconciled publication head `dcbe3afc`; remaining manual boundaries stay explicit.
   Docs: [Slayer model and combat matrix](../docs/game/slayer.md),
   [combined-source evidence and acceptance boundaries](../docs/game/deadeye.md).
 - Ordinary Deadeye: all 19 pinned Default nodes have connected consumers in source `762fbe43`.
@@ -224,10 +224,10 @@ Part of [Status](../Status.md); what to build next in this area is in
   linked Mirage actors and Gale/Tailwind/Wind Ward have production-path automated coverage.
   Review controls cover same-actor Mirage refresh, Poacher frozen Ignite inputs, incoming Focal Ignite/Bleed,
   explicit final action-speed overrides and unsupported Barrage rejection before payment.
-  The publication suite results above apply; parent coordinator subsets observe Far Shot/count/Focal contacts,
+  The publication suite results above apply; actual publication-head controls observe Far Shot/count/Focal contacts,
   Gale/Wind Ward, autonomous Mirage damage, moving Frenzy/accuracy and legal allocation/refund/relog.
-  `WholeClassAccepted=false` remains explicit; actual reconciled-tip native checks, remaining manual/visual
-  boundaries and the final exact related-head integration remain separate requirements.
+  `WholeClassAccepted=false` remains explicit for the representative subset; remaining manual/visual boundaries
+  and the final exact related-head integration remain separate requirements.
   Ground ordinary melee swings now share paced Gale admission; distant approach and Move grant nothing.
   The #339 composition retains ailment-only wrapping around its raw-action-scaled weapon timing.
   Docs: [node audit, connected model and acceptance matrix](../docs/game/deadeye.md).
