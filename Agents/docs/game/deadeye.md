@@ -293,7 +293,10 @@ Those passes precede the framing correction and cannot certify its native behavi
 Default-parallel attempts retain cadence, overleech and recent-hit timing failures under host contention.
 The final fixture corrections preserve captured projectile muzzle geometry and the actual ingress timestamp contract.
 No production timing, damage bounds, test selections, skips or timeout extensions were used to conceal failures.
-Post-framing validation waits for the parent's scheduled test window; no runtime was accessed by this worker.
+Post-framing docs descendant `bf45ce2f` has identical `src/` and `tests/` to `6598d3b1`.
+Its local solution build has zero warnings/errors; 45 focused framing and shared-seam cases pass without skips.
+Logs are `logs/publication-post-framing-build.log` and `logs/publication-post-framing-focus.log`.
+The complete post-framing Gateway suite waits for native-window release; this worker accessed no runtime.
 
 The parent's recorded full-source checkpoint `a2c054c39438813741e235af89f4b11b6539be4e` has a solution build
 with zero warnings/errors and Core 423, Data 34 and default-parallel Gateway 3757 passing.
