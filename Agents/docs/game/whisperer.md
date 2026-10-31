@@ -82,6 +82,10 @@ The current resource writer owns expiry; pending End edges and presentation data
 End reuse checks the accepted activation, original item/cell and current enchant again at payment, so old expiry,
 manual refresh, moved/replaced items and removed enchants cannot remove or reuse a newer effect.
 Smoke, consecrated ground and taunt updates share the current area claim and keep pending output across replacement.
+Each trigger root retains neutral chain data for accepted recipients and its generated Adjacent edges.
+Payment records recipient progress atomically; replacement skips paid recipients and finishes unprocessed ones.
+Distinct later roots/End events use fresh progress, and reciprocal Adjacent edges terminate within their chain.
+Accepted utility duration/stat/ward logs and Start/End receipt labels keep main's observable meanings and reasons.
 SavageHit uses actual Life lost after Ward, ES and defensive Mana; Block and ailment-transition triggers are retained.
 
 Successful travel uses the checkpoint captured at `TryBeginAreaChange`, before the Auth await.
@@ -105,8 +109,10 @@ This dispatch boundary does not promise that every mid-command file-watcher race
 
 ## Validation limits
 
-This candidate starts directly at actual main `33ea01513d38a839da09c0e77900e106540459dc`.
-It reconstructs the feature-only changes from frozen `918fbc6e`, originally based on merged main `825b9711`.
+The modular feature was reconstructed at main `33ea01513d38a839da09c0e77900e106540459dc` from frozen `918fbc6e`,
+originally based on merged main `825b9711`.
+Parent reconciliation `5f284df6` merges the feature with actual main `cc0f9c344d121b9ca5d86a8800648a8446896dc3`;
+that merge leaves the preceding feature production/test paths unchanged.
 Original PR head `1aa9a177` and private candidates `33c9a0c2`/`918fbc6e` remain historical references.
 Their obsolete Gateway foundations, fixtures and historical native results do not establish this port's readiness.
 Two new deterministic Gateway Facts exercise the actual policy/catalog, legal node sources, paid refunds,
@@ -142,5 +148,12 @@ and their actual builders. A manually scheduled isolated dependency wave drives 
 then a later packet, requiring current strength publication while the old cached closure remains unable to send.
 It also checks unchanged area/connection, current league filtering and Gateway sinks/mod-fallback wiring.
 This deterministic control does not replace the unchanged native same-area reload acceptance flow.
+Independent R5 at `5f284df6` resolved the earlier objections but found replay of an already-paid trigger recipient
+across Game replacement. The same Fact now drives actual Block payment behind a held cipher gate with distinct Game
+assemblies, unfinished recipients and reciprocal Adjacent edges. It checks no replay payment, later valid End/new roots,
+and refusal before payment after old Game retirement. Captured production logs check accepted 7.2-second uses,
+native Start/natural End labels and actual paid Iron Flask Ward restoration.
+The `5f284df6` native V4 run was partial (34 checks), stopping on the missing accepted-use log before utility reload.
+The chain/log correction has deterministic evidence only; it does not turn that run into native acceptance.
 Current full-suite, independent-review and native acceptance require their own exact-head PR receipts;
 these deterministic/build checks and historical full/native passes do not establish whole-class readiness.

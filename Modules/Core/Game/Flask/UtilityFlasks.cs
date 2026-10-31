@@ -9,12 +9,13 @@ static partial class Game
     // and movement speed sent again at the start and the end. Refused while dead or with too few charges.
     // Reusing this flask replaces its timer; another flask of the same kind keeps its own, strongest effect applies.
     internal static async Task<bool> UseUtilityFlaskCore(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn, uint slot,
-        InventoryItem flask, ItemCatalog.BaseType type, UtilityFlasks.Utility utility, FlaskAutomationEvent? signal = null)
+        InventoryItem flask, ItemCatalog.BaseType type, UtilityFlasks.Utility utility, FlaskAutomationStep? signal = null)
     {
         var owner = CombatLifetime;
         bool CurrentUse() => CurrentGameWork && ReferenceEquals(CombatLifetime, owner) && !conn.Closed
             && !conn.LeavingArea && !conn.RageRetired && !conn.Paused && conn.PlayerLife > 0
             && ItemsOf(conn).Items(PlayerInventories.Flask).FirstOrDefault(i => i.Id == flask.Id && i.X == slot) is { } current
+            && (signal is null || Automation(conn).CanAccept(signal.Value, current.Id))
             && EndSignalCurrent(conn, current, signal);
         if (!CurrentUse()) return false;
         // Mageblood: its magic utility flasks are always on and cannot be used (the client enforces the mod; this is the
@@ -49,18 +50,23 @@ static partial class Game
         // strand paid charges without their accepted snapshot, deadline, Adjacent edge and presentation.
         if (await SpendFlask(remote, stream, ciphers, conn, flask, charges, slot, CurrentUse, _ =>
         {
+            var state = Automation(conn);
+            if (signal is { } step) state.Accepted(step, flask.Id);
             double now = AreaTime(conn);
             var effect = new UtilityFlasks.Active(flask.Id, (byte)slot, type.Name, utility, conn.NextBuff++,
                 utility.Extra is null ? null : conn.NextBuff++, stats, now, now + seconds);
-            var state = Automation(conn);
             if (conn.UtilityFlaskEffects.Of(flask.Id) is { } previous)
-                state.Packets.AddRange(UtilityFlasks.EndPackets(previous, PlayerId).Select(p => new FlaskOutput(p)));
+                QueueUtilityFlaskEnd(state, previous, "refreshed");
             UtilityFlasks.Start(conn, effect, () => RecomputePoolsAndSpeed(conn));
-            UtilityFlasks.RestoreWardAfterPaidUse(conn.Ward, name => local.GetValueOrDefault(name), now);
-            state.Packets.AddRange(UtilityFlasks.StartPackets(effect, PlayerId).Select(p => new FlaskOutput(p)));
+            if (UtilityFlasks.RestoreWardAfterPaidUse(conn.Ward, name => local.GetValueOrDefault(name), now))
+                Console.WriteLine($"[gateway] Ward restored on paid {type.Name}: {conn.Ward.Current}/{conn.Ward.Maximum}");
+            Console.WriteLine($"[gateway] {remote} <= 0x0070 use flask {slot} ({type.Name}): {utility.BuffId} for {seconds:0.##} s: " +
+                string.Join(", ", stats.Select(s => $"{s.Stat} {s.Value}")) + $"; walk estimate {conn.Walk.Speed:0.##} cells/s");
+            state.Packets.AddRange(UtilityFlasks.StartPackets(effect, PlayerId)
+                .Select(p => new FlaskOutput(p, $"0x01c1 player buff: {type.Name} (flask {slot}), {seconds:0.##} s")));
             MakeFlaskGroundsLocked(conn, local, seconds, now);
             state.StatRevision++;
-            state.Enqueue(new(FlaskEnchantments.Trigger.Adjacent, flask.Id, (byte)slot));
+            state.Enqueue(new(FlaskEnchantments.Trigger.Adjacent, flask.Id, (byte)slot), signal?.Chain);
         }) is null) return false;
         await PublishFlaskChanges(remote, stream, ciphers, conn);
         return true;
@@ -112,7 +118,7 @@ static partial class Game
             var state = Automation(conn);
             foreach (var effect in ended)
             {
-                state.Packets.AddRange(UtilityFlasks.EndPackets(effect, PlayerId).Select(p => new FlaskOutput(p)));
+                QueueUtilityFlaskEnd(state, effect, dead ? "death" : Gone(effect) ? "the flask left its cell" : "its time is up");
                 // Record this admitted edge before any await or second lifetime read can lose it.
                 if (!dead && !Gone(effect)) state.Enqueue(new(FlaskEnchantments.Trigger.End,
                     effect.ItemId, effect.Slot, effect.Activation));
@@ -120,6 +126,10 @@ static partial class Game
             state.StatRevision++;
         }
     }
+
+    static void QueueUtilityFlaskEnd(FlaskAutomationState state, UtilityFlasks.Active effect, string why) =>
+        state.Packets.AddRange(UtilityFlasks.EndPackets(effect, PlayerId)
+            .Select(p => new FlaskOutput(p, $"0x01c2 player buff: {effect.Name} (flask {effect.Slot}) effect ends ({why})")));
 
     internal static async Task PublishFlaskChanges(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn)
     {

@@ -436,6 +436,7 @@ public sealed class WhispererRuntimeTests
         await UtilityAcrossGameAssemblies(h);
         await RecoveryAcrossGameAssemblies(h);
         await CommandsAcrossGameAssemblies(h);
+        await TriggerChainAcrossGameAssemblies(h);
         Assert.Equal(definition.Identity, CharacterSaves.Load(c.Character!)!.MainAscendancy!.Selection);
     }
 
@@ -611,7 +612,7 @@ public sealed class WhispererRuntimeTests
             {
                 Assert.Null(c.UtilityFlaskEffects.Of(one.Id)); Assert.Same(second, c.UtilityFlaskEffects.Of(two.Id));
                 var edge = Assert.Single(c.FlaskAutomation.Events, e => e.Trigger == FlaskEnchantments.Trigger.End);
-                Assert.Equal(new(FlaskEnchantments.Trigger.End, one.Id, one.X, first.Activation), edge);
+                Assert.Equal(new(FlaskEnchantments.Trigger.End, one.Id, one.X, first.Activation), edge.Signal);
                 Assert.NotEmpty(c.FlaskAutomation.Packets);
             }
             // Stop without releasing the old output. The other flask becomes due in the no-current-Game gap.
@@ -906,6 +907,122 @@ public sealed class WhispererRuntimeTests
             c.Closed = true; oldModule.Dispose(); ((IDisposable)currentModule).Dispose();
             oldOwner.Stop(_ => { }); owner.Stop(_ => { });
             Game.CombatLifetime = previousRules; Program.SetGameLogic(previousLogic); context.Unload();
+        }
+    }
+
+    // A real Block root must retain accepted recipients and finish its unprocessed/Adjacent recipients on reload.
+    static async Task TriggerChainAcrossGameAssemblies(Harness h)
+    {
+        const BindingFlags flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance;
+        var previousLogic = Program.Logic; var previousRules = Game.CombatLifetime; var previousSchedule = Game.PlayerUpdatesSchedule;
+        var acceptedLogs = new List<string>();
+        foreach (var scenario in new[] { (Reload: false, BeforePayment: false), (Reload: true, BeforePayment: false), (Reload: true, BeforePayment: true) })
+        {
+            var oldOwner = new ModuleLifetime("Game"); var owner = new ModuleLifetime("Game");
+            var context = new AssemblyLoadContext("Whisperer trigger-chain handover", isCollectible: true);
+            context.Resolving += (_, name) => AssemblyLoadContext.Default.Assemblies.FirstOrDefault(a => a.GetName().Name == name.Name);
+            var replacement = context.LoadFromAssemblyPath(typeof(Game).Assembly.Location); Assert.NotSame(typeof(Game).Assembly, replacement);
+            var c = h.NewConnection("chain" + Guid.NewGuid().ToString("N"), optional: false); c.MainAscendancy = new();
+            c.PlayerSent = true; c.Wire = ("Whisperer", h.Wire, h.Ciphers); c.AiEnabled = false;
+            c.PlayerStats[Key("flask_duration_+%")] = 20;
+            var runtime = new ManualRuntime { At = 10 }; c.ProjectileRuntimeState = runtime;
+            var before = new ManualUpdates(runtime) { At = 10 }; var after = new ManualUpdates(runtime) { At = 10 };
+            PlayerUpdatesState? oldState = null; object? state = null; Task? completion = null; Task? drain = null;
+            Type game = typeof(Game); ManualUpdates schedule = before;
+            object? Call(string name, params object?[] args) => game.GetMethods(flags).Single(m => m.Name == name && m.GetParameters().Length == args.Length).Invoke(null, args);
+            async Task CurrentDrain()
+            {
+                var local = game.GetField("AreaUpdateContext", flags)!.GetValue(null)!; var value = local.GetType().GetProperty("Value")!;
+                object? prior = value.GetValue(local); value.SetValue(local, state);
+                try { await (Task)Call("DrainFlaskTriggers", "Whisperer", h.Wire, h.Ciphers, c)!; }
+                finally { value.SetValue(local, prior); }
+            }
+            var gate = Program.SendGates.GetValue(h.Ciphers, _ => new(1, 1)); bool held = false, barHeld = false;
+            var originalOutput = Console.Out; using var output = new StringWriter(); Console.SetOut(TextWriter.Synchronized(output));
+            try
+            {
+                Game.CombatLifetime = oldOwner; Game.PlayerUpdatesSchedule = before; Program.SetGameLogic(new GameServer.Modules.Game.GameLogic(oldOwner));
+                Program.ActivatePlayerUpdates(c); oldState = Assert.IsType<PlayerUpdatesState>(c.PlayerUpdatesState); before.Completion = oldState.Completion;
+                var fast = await before.Next(PlayerUpdateRole.Recovery); await before.Next(PlayerUpdateRole.Player); await before.OtherRoles();
+                state = oldState;
+                var type = Program.Items.Find("Quicksilver Flask")!; var utility = Program.Items.UtilityFlaskOf(type)!;
+                var plain = ItemCatalog.Create(type) with { Charges = 60 };
+                Item Enchanted(FlaskEnchantments.Trigger trigger) => Program.Items.Mods.All.Where(m => m.GenerationType == 22 && m.WeightFor(type.Tags) > 0)
+                    .Select(m => plain with { Mods = [.. plain.Mods, m.Roll(ModSection.Enchant, new Random(1))] })
+                    .Single(i => FlaskEnchantments.Matches(ItemModStats.Local(i, Program.Items.Mods), trigger, 2, 1, false));
+                var block = Enchanted(FlaskEnchantments.Trigger.Block); var adjacent = Enchanted(FlaskEnchantments.Trigger.Adjacent);
+                var end = Enchanted(FlaskEnchantments.Trigger.End);
+                var items = Game.ItemsOf(c); foreach (var initial in items.Items(PlayerInventories.Flask).ToArray()) items.Remove(PlayerInventories.Flask, initial.Id);
+                InventoryItem[] flasks = [items.Add(PlayerInventories.Flask, 0, 0, block), items.Add(PlayerInventories.Flask, 1, 0, block),
+                    items.Add(PlayerInventories.Flask, 2, 0, adjacent), items.Add(PlayerInventories.Flask, 3, 0, adjacent)];
+                int Charges(int slot) => items.Items(PlayerInventories.Flask).Single(f => f.Id == flasks[slot].Id).Item.Charges;
+                Game.QueueFlaskTrigger(c, FlaskEnchantments.Trigger.Block); Assert.Single(c.FlaskAutomation.Events);
+                await gate.WaitAsync(); held = true;
+                if (scenario.BeforePayment) { await c.FlaskBarGate.WaitAsync(); barHeld = true; }
+                Game.AreaUpdateContext.Value = oldState;
+                try { drain = Game.DrainFlaskTriggers("Whisperer", h.Wire, h.Ciphers, c); }
+                finally { Game.AreaUpdateContext.Value = null; }
+                Assert.False(drain.IsCompleted); Assert.Equal(scenario.BeforePayment ? 60 : 30, Charges(0));
+                var first = c.UtilityFlaskEffects.Of(flasks[0].Id);
+                if (!scenario.BeforePayment) { Assert.NotNull(first); Assert.Equal(1, first.Activation); Assert.Equal(7.2, first.Ends - first.Started, 8); }
+                if (scenario.Reload)
+                {
+                    oldOwner.Stop(ex => throw ex); await oldState.Completion;
+                    if (barHeld) { c.FlaskBarGate.Release(); barHeld = false; await drain; Assert.Equal(60, Charges(0)); }
+                    game = replacement.GetType("Game")!; schedule = after;
+                    game.GetField("CombatLifetime", flags)!.SetValue(null, owner); game.GetField("PlayerUpdatesSchedule", flags)!.SetValue(null, after);
+                    Program.SetGameLogic((IGameLogic)Activator.CreateInstance(replacement.GetType("GameServer.Modules.Game.GameLogic")!, flags, null, [owner], null)!);
+                    state = c.PlayerUpdatesState!; completion = (Task)state.GetType().GetField("Completion", flags)!.GetValue(state)!; after.Completion = completion;
+                    fast = await after.Next(PlayerUpdateRole.Recovery);
+                }
+                gate.Release(); held = false; await drain;
+                if (scenario.Reload) { await after.Next(PlayerUpdateRole.Player); await after.OtherRoles(); }
+                await CurrentDrain();
+                Assert.Equal(30, Charges(0)); // R5 RED: reload replayed Block, paying this same recipient twice (0).
+                Assert.Equal(1, c.UtilityFlaskEffects.Of(flasks[0].Id)!.Activation);
+                foreach (int slot in new[] { 1, 2, 3 }) Assert.Equal(30, Charges(slot));
+                Assert.Empty(c.FlaskAutomation.Events); // The unfinished Block recipient and Adjacent pair both completed.
+                var committed = flasks.Select(f => c.UtilityFlaskEffects.Of(f.Id)!).ToArray();
+                await CurrentDrain(); foreach (int slot in Enumerable.Range(0, 4)) Assert.Equal(30, Charges(slot));
+                // A later actual End has a fresh chain and can legitimately use the first item again.
+                items.Change(PlayerInventories.Flask, flasks[0].Id, i => i with { Mods = end.Mods });
+                fast.Advance(committed.Max(e => e.Ends)); fast = await schedule.Next(PlayerUpdateRole.Recovery);
+                Assert.Equal(4, c.FlaskAutomation.Events.Count(e => e.Trigger == FlaskEnchantments.Trigger.End));
+                await CurrentDrain(); Assert.Equal(0, Charges(0)); Assert.Equal(30, Charges(1));
+                Assert.True(c.UtilityFlaskEffects.Of(flasks[0].Id)!.Activation > committed[0].Activation);
+                Assert.Empty(c.FlaskAutomation.Events);
+                // A distinct later root drives another finite Adjacent chain, not a retained 'used forever' set.
+                Call("QueueFlaskTrigger", c, FlaskEnchantments.Trigger.Adjacent, flasks[1].Id, flasks[1].X);
+                await CurrentDrain(); Assert.Equal(0, Charges(2)); Assert.Equal(0, Charges(3)); Assert.Equal(30, Charges(1));
+                Assert.Empty(c.FlaskAutomation.Events); Assert.False(c.Closed); Assert.False(c.LeavingArea);
+                // The real Iron Flask's paid Ward restoration keeps its observable main log too.
+                var ironType = Program.Items.Find("Iron Flask")!; var ironUse = Program.Items.UtilityFlaskOf(ironType)!;
+                var iron = items.Add(PlayerInventories.Flask, 4, 0, ItemCatalog.Create(ironType) with { Charges = ironUse.MaxCharges });
+                Assert.True(ItemModStats.Local(iron.Item, Program.Items.Mods).GetValueOrDefault("local_flask_restore_ward") > 0);
+                c.PlayerStats[Key("base_ward")] = 100; c.Ward.SetMaximum(100); c.Ward.Damage(1, schedule.At, _ => 0); Assert.True(c.Ward.Broken);
+                var localContext = game.GetField("AreaUpdateContext", flags)!.GetValue(null)!;
+                var localValue = localContext.GetType().GetProperty("Value")!; localValue.SetValue(localContext, state);
+                try { Assert.True(await (Task<bool>)Call("UseUtilityFlask", "Whisperer", h.Wire, h.Ciphers, c, 4u, iron, ironType, ironUse)!); }
+                finally { localValue.SetValue(localContext, null); }
+                Assert.False(c.Ward.Broken);
+                acceptedLogs.Add(output.ToString());
+            }
+            finally
+            {
+                Console.SetOut(originalOutput);
+                c.Closed = true; oldOwner.Stop(_ => { }); owner.Stop(_ => { }); if (barHeld) c.FlaskBarGate.Release(); if (held) gate.Release();
+                if (drain is not null) await drain; if (oldState is not null) await oldState.Completion; if (completion is not null) await completion;
+                Game.CombatLifetime = previousRules; Game.PlayerUpdatesSchedule = previousSchedule; Program.SetGameLogic(previousLogic); context.Unload();
+            }
+        }
+        foreach (string log in acceptedLogs)
+        {
+            var lines = log.Split('\n');
+            Assert.Equal(7, lines.Count(l => l.Contains("<= 0x0070 use flask", StringComparison.Ordinal)
+                && l.Contains("flask_utility_sprint for 7.2 s:", StringComparison.Ordinal)));
+            Assert.Equal(2, lines.Count(l => l.Contains("0x01c1 player buff: Quicksilver Flask (flask 0), 7.2 s", StringComparison.Ordinal)));
+            Assert.Single(lines, l => l.Contains("0x01c2 player buff: Quicksilver Flask (flask 1) effect ends (its time is up)", StringComparison.Ordinal));
+            Assert.Single(lines, l => l.Contains("Ward restored on paid Iron Flask:", StringComparison.Ordinal));
         }
     }
 
