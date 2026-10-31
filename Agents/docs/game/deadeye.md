@@ -284,6 +284,16 @@ The admission guard prevents a paid use from failing only later at release.
 
 ## Automated evidence and historical native qualification
 
+The current publication code is `6598d3b15b428214b0501246a6c078e1b495c675`.
+It includes `0b997b37`'s non-recovery Headsman/Tailwind/Mark framing fix and independent row-flag/sentinel tests.
+The preceding `f58a5b9a` built without warnings and passed the complete serial Gateway suite: 4026, zero skips.
+Core 434 and Data 34 passed on production-equivalent `22223d9d`; the later changes were Gateway-test-only.
+Those passes precede the framing correction and cannot certify its native behavior or final publication readiness.
+Default-parallel attempts retain cadence, overleech and recent-hit timing failures under host contention.
+The final fixture corrections preserve captured projectile muzzle geometry and the actual ingress timestamp contract.
+No production timing, damage bounds, test selections, skips or timeout extensions were used to conceal failures.
+Post-framing validation waits for the parent's scheduled test window; no runtime was accessed by this worker.
+
 The parent's recorded full-source checkpoint `a2c054c39438813741e235af89f4b11b6539be4e` has a solution build
 with zero warnings/errors and Core 423, Data 34 and default-parallel Gateway 3757 passing.
 The parent reports source `762fbe43` passing a warning-free solution build and Core 434, Data 34 and Gateway 3799.
@@ -353,6 +363,9 @@ Such a draft must explicitly remain blocked on upstream #328 -> #333 -> #339 ser
 It must not merge into the active `codex/harbinger-completion` branch.
 The actual upstream ordinary PR depends on prerequisite merges and owner-coordinated revalidation.
 Private sequence validation is separate evidence, never a publication branch or whole-class acceptance.
+The parent retains private audit `64a567d6fd9d5fa29de27d70ed0a4c7fc119d08c` with the exact related-head graph.
+Its reported 4174 serial Gateway cases apply to its own `412ed4b0` code and test-equivalent `643f0da5` fixture update.
+It predates the framing fix and does not certify this publication candidate; none of its combined production was copied.
 
 Preserve #328 Rampage/non-player ownership and one shared lethal callback, including owner Ignite/RF kills.
 Preserve #333 selected accuracy/Blind snapshots, accepted-hit callbacks and Mana-recoup disposal.

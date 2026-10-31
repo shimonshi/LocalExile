@@ -303,6 +303,9 @@ Logs remain in `logs/slayer-full/native-buffs-*`; the single common hook and nat
 Exact code/test `7ac25737` builds with zero warnings/errors and passes Core 434, Data 34 and Gateway 3,811.
 The Gateway run uses default parallel execution; all three suites report zero failures/skips.
 Logs are `native-buffs-build-final.log` and `native-buffs-{core,data,gateway}-final.log`.
+Review subsequently found that its packet tests incorrectly assumed stat words for non-recovery rows.
+Those green checks are retained history, not evidence of correct native framing.
+The publication candidate includes `0b997b37`'s independent table-flag reader and following-packet sentinel checks.
 That worker's following documentation-only commit did not alter tested code or install the common hook.
 The publication branch separately installs the hook and validates its full current-main composition.
 
