@@ -17,7 +17,7 @@ static partial class Game
 
     internal static void QueueFlaskTrigger(ClientState conn, FlaskEnchantments.Trigger trigger, uint item = 0, byte slot = 0)
     {
-        if (!conn.Closed && !conn.LeavingArea && conn.PlayerLife > 0)
+        if (CurrentGameWork && !conn.Closed && !conn.LeavingArea && conn.PlayerLife > 0)
         {
             var state = Automation(conn);
             if (state.Pending.TryAdd((trigger, item, slot), 0)) state.Events.Enqueue((trigger, item, slot));
@@ -46,11 +46,11 @@ static partial class Game
     internal static async Task DrainFlaskTriggers(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn)
     {
         var state = Automation(conn);
-        if (conn.Paused || conn.LeavingArea) return;
+        if (!CurrentGameWork || conn.Paused || conn.LeavingArea) return;
         if (conn.PlayerLife == 0 || InTown(conn) || InGracePeriod(conn))
         { while (state.Events.TryDequeue(out var discarded)) state.Pending.TryRemove(discarded, out _); return; }
         var used = new HashSet<uint>();
-        while (state.Events.TryDequeue(out var signal))
+        while (CurrentGameWork && state.Events.TryDequeue(out var signal))
         {
             state.Pending.TryRemove(signal, out _);
             foreach (var flask in ItemsOf(conn).Items(PlayerInventories.Flask).OrderBy(i => i.X))

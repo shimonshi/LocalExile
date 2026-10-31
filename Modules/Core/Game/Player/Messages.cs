@@ -564,19 +564,11 @@ static partial class Game
                         await conn.Commands!.Reply(ServerLevels.UnsupportedMessage);
                     await Program.ServerHooks.AreaGenerated(PlayerOf(conn));
                     ActivateResourceEffects(conn, ProjectileWorldTime(conn));
-                    _ = RunMonsterRegeneration(remote, stream, ciphers, conn);
                     _ = RunServerFrames(remote, stream, ciphers, conn);
-                    _ = RunMonsterAi(remote, stream, ciphers, conn);
-                    _ = ContinueTour(remote, stream, ciphers, conn);
-                    _ = RunLivingCollisions(remote, stream, ciphers, conn);
                     Program.ActivatePlayerUpdates(conn);
-                    _ = RunCharges(remote, stream, ciphers, conn);
-                    _ = RunFortification(remote, stream, ciphers, conn);
-                    _ = RunRage(remote, stream, ciphers, conn);
                     _ = conn.RampageWorld;
                     lock (conn.Monsters)
                         if (conn.OwnedCombatState is RampageWorld world) EnsureRampageWorker(conn, world);
-                    _ = RunFlaskChargeRegen(remote, stream, ciphers, conn);
                 }
             }
         }

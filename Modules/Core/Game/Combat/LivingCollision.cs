@@ -5,31 +5,35 @@ using GameServer.Core.World;
 
 static partial class Game
 {
-    internal static async Task RunLivingCollisions(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn)
+    internal static async Task RunLivingCollisions(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn, PlayerUpdatesState updates)
     {
+        if (!PlayerUpdatesCurrent(conn, updates)) return;
         int frames = 0;
         try
         {
-            while (!conn.Closed && conn.PendingTransfer is null)
+            while (PlayerUpdatesCurrent(conn, updates) && conn.PendingTransfer is null)
             {
                 if (!conn.Paused)
                 {
                     await CorrectMonsterCollisions(remote, stream, ciphers, conn);
+                    if (!PlayerUpdatesCurrent(conn, updates)) return;
                     await PushOutOfCollision(remote, stream, ciphers, conn, living: true);
+                    if (!PlayerUpdatesCurrent(conn, updates)) return;
                 }
                 PublishPlayerPose(conn);
                 if ((frames++ & 1) == 0) await SyncInstancePlayers(remote, stream, ciphers, conn);
-                await Task.Delay(50);
+                await updates.Schedule.Wait(PlayerUpdateRole.LivingCollisions, 50, updates.Stop.Token);
             }
         }
         catch (Exception ex) when (ex is IOException or ObjectDisposedException or OperationCanceledException) { }
-        finally { conn.Instance.RemovePlayer(conn.PeerId); }
+        finally { if (conn.Closed || conn.LeavingArea) conn.Instance.RemovePlayer(conn.PeerId); }
     }
 
     internal static void PublishPlayerPose(ClientState conn)
     {
         lock (conn.Monsters)
         {
+            if (!CurrentGameWork) return;
             if (conn.Closed || conn.LeavingArea) { conn.Instance.RemovePlayer(conn.PeerId); return; }
             if (conn.PeerTemplate is null || !conn.PlayerSent) return;
             RefreshPeerScale(conn, CharacterPlayerStats(conn)[ActorScale.Final]);
@@ -56,7 +60,7 @@ static partial class Game
         foreach (uint id in ids)
             await Send(remote, stream, ciphers, [], null, atGate: () =>
             {
-                if (conn.Closed || conn.LeavingArea) return null;
+                if (!CurrentGameWork || conn.Closed || conn.LeavingArea) return null;
                 var packets = new List<byte[]>();
                 // Read after waiting: queued creation/change must not restore an older scale or departed owner.
                 if (conn.Instance.Player(id) is not { } peer)
@@ -95,6 +99,7 @@ static partial class Game
     {
         using (ProjectileMutation(conn, phase: "collision"))
         {
+            if (!CurrentGameWork) return Task.CompletedTask;
             double now = ProjectileWorldTime(conn);
             var player = conn.Walk.Position(now);
             var peers = conn.Instance.PlayersExcept(conn.PeerId).Where(p => p.Life > 0).ToArray();

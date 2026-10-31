@@ -3,6 +3,8 @@ using System.Net.Sockets;
 using System.Reflection;
 using System.Collections.Concurrent;
 using System.Threading.Channels;
+using System.Runtime.Loader;
+using System.Collections;
 using League = GameServer.Core.Accounts.League;
 using GameServer.Core.Protocol.Instance;
 using GameServer.Core.Projectiles;
@@ -350,6 +352,7 @@ public sealed class WhispererRuntimeTests
         oldSchedule.Completion = oldUpdates.Completion;
         var oldFast = await oldSchedule.Next(Game.RecoveryStepMs);
         await oldSchedule.Next(Game.PlayerTickMs);
+        await oldSchedule.OtherRoles();
         Program.ActivatePlayerUpdates(ordinary);
         Assert.Same(oldUpdates, ordinary.PlayerUpdatesState); Assert.Equal(1, oldSchedule.FastWaits);
         // The old writer commits while current, but its output remains queued across replacement.
@@ -374,6 +377,7 @@ public sealed class WhispererRuntimeTests
         oldLogic.ResumePlayerUpdates(ordinary); Program.ActivatePlayerUpdates(ordinary);
         Assert.Same(nextUpdates, ordinary.PlayerUpdatesState); Assert.Equal(1, nextSchedule.FastWaits);
         gate.Release(); await oldUpdates.Completion;
+        await nextSchedule.OtherRoles();
         Assert.Empty(h.Wire.Drain(h.Receive)); Assert.False(ordinary.Closed);
         Assert.Equal(reloadLife, ordinary.PlayerLife); Assert.Equal(reloadMana, ordinary.PlayerMana);
         Assert.Equal(reloadEs, ordinary.EnergyShield.Current);
@@ -428,7 +432,138 @@ public sealed class WhispererRuntimeTests
         }
         replacementRules.Stop(ex => throw ex); Assert.Null(ordinary.ResourceEffectsState);
         await nextUpdates.Completion; Assert.Null(ordinary.PlayerUpdatesState);
+        ordinary.Closed = true;
+        await AcrossGameAssemblies(h);
         Assert.Equal(definition.Identity, CharacterSaves.Load(c.Character!)!.MainAscendancy!.Selection);
+    }
+
+    // Exercise real distinct Game identities, sharing only the framework/catalog/protocol assemblies.
+    static async Task AcrossGameAssemblies(Harness h)
+    {
+        const BindingFlags flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance;
+        var previousLogic = Program.Logic; var previousRules = Game.CombatLifetime; var previousSchedule = Game.PlayerUpdatesSchedule;
+        var oldOwner = new ModuleLifetime("Game"); var owner = new ModuleLifetime("Game");
+        var context = new AssemblyLoadContext("Whisperer current Game regression", isCollectible: true);
+        context.Resolving += (_, name) => AssemblyLoadContext.Default.Assemblies.FirstOrDefault(a => a.GetName().Name == name.Name);
+        var assembly = context.LoadFromAssemblyPath(typeof(Game).Assembly.Location);
+        Assert.NotSame(typeof(Game).Assembly, assembly);
+        var game = assembly.GetType("Game")!;
+        object? Call(string name, params object?[] args) => game.GetMethods(flags).Single(m => m.Name == name && m.GetParameters().Length == args.Length).Invoke(null, args);
+        static object Field(object value, string name) => value.GetType().GetField(name, flags)!.GetValue(value)!;
+        var c = h.NewConnection("cross" + Guid.NewGuid().ToString("N"), optional: false); c.MainAscendancy = new();
+        c.PlayerSent = true; c.Wire = ("Whisperer", h.Wire, h.Ciphers); c.AiEnabled = false;
+        c.IncomingHitRandom = new HighDraw(); c.Pools = new(68, 1000, 1000, 100, 0) { Armour = 0, Evasion = 0 };
+        c.PlayerLife = c.PlayerMana = 1000; c.EnergyShield.SetMaximum(0, false); c.Ward.SetMaximum(0);
+        c.PlayerStats[Key("gain_x_rage_when_hit")] = 1; c.PlayerStats[Key(ManaRecoveryRules.RagePer200)] = 10;
+        c.PlayerStats[Key("no_inherent_rage_loss")] = 1; c.PlayerStats[Key("virtual_intelligence_for_requirements")] = 1000;
+        var runtime = new ManualRuntime(); c.ProjectileRuntimeState = runtime;
+        var before = new ManualUpdates(runtime); var after = new ManualUpdates(runtime);
+        PlayerUpdatesState? oldState = null; object? currentState = null; Task? currentCompletion = null;
+        try
+        {
+            Game.CombatLifetime = oldOwner; Game.PlayerUpdatesSchedule = before; Program.SetGameLogic(new GameServer.Modules.Game.GameLogic(oldOwner));
+            Program.ActivatePlayerUpdates(c); oldState = Assert.IsType<PlayerUpdatesState>(c.PlayerUpdatesState); before.Completion = oldState.Completion;
+            await before.Next(Game.RecoveryStepMs); await before.Next(Game.PlayerTickMs); await before.OtherRoles();
+            var attack = new MonsterAttack(0x102, 0, 10, DamagePacket.Of(DamageType.Physical, 100, 100));
+            var enemy = new SpawnedMonster("replacement AI", new(105, 100, 0), 100, 5, 1000) { Attack = attack, Aggro = true };
+            var stage = new SpawnedMonster("pending stage", new(180, 180, 0), 0, 0, 1000)
+                { Stage = new(50, 1, 1, 1), StageRunning = true, StageTaken = true, Life = 500, BusyUntil = 0 };
+            c.Monsters[43] = stage;
+            c.Monsters[42] = enemy; c.AiEnabled = true; c.Walk.Teleport(100, 100, 0);
+            oldOwner.Stop(ex => throw ex); await oldState.Completion;
+            game.GetField("CombatLifetime", flags)!.SetValue(null, owner);
+            game.GetField("PlayerUpdatesSchedule", flags)!.SetValue(null, after);
+            var logic = (IGameLogic)Activator.CreateInstance(assembly.GetType("GameServer.Modules.Game.GameLogic")!, flags, null, [owner], null)!;
+            Program.SetGameLogic(logic); currentState = c.PlayerUpdatesState!; Assert.NotSame(oldState, currentState);
+            currentCompletion = (Task)Field(currentState, "Completion"); after.Completion = currentCompletion;
+            await after.Next(Game.RecoveryStepMs); await after.Next(Game.PlayerTickMs);
+            await after.Next(PlayerUpdateRole.MonsterAi); await after.Next(PlayerUpdateRole.MonsterRegeneration);
+            await after.Next(PlayerUpdateRole.LivingCollisions); await after.Next(PlayerUpdateRole.Charges);
+            await after.Next(PlayerUpdateRole.Fortification); var rageFrame = await after.Next(PlayerUpdateRole.Rage);
+            await after.Next(PlayerUpdateRole.FlaskCharges);
+            // A retired stage continuation cannot leave a surviving boss permanently StageRunning.
+            while (stage.StageRunning)
+            {
+                var read = h.Wire.Plain.Reader.ReadAsync().AsTask();
+                if (await Task.WhenAny(read, currentCompletion) == currentCompletion)
+                { await currentCompletion; throw new InvalidOperationException("Area owner stopped before stage completion"); }
+                var packet = await read;
+                if (packet.AsSpan().IndexOf(InstanceProtocol.LifeUpdate(43, 1000)) >= 0) break;
+            }
+            Assert.False(stage.StageRunning); Assert.Equal(1000u, stage.Life);
+            Assert.Equal(900u, c.PlayerLife); Assert.False(c.Closed); // Started current AI did the actual 100-damage contact.
+            Assert.Equal(1, after.Count(PlayerUpdateRole.MonsterAi)); Assert.Equal(1, after.Count(PlayerUpdateRole.Rage));
+            var retiredContact = Game.CommitMonsterHitLocked("Whisperer", c, 42, enemy, attack,
+                c.Clock.Elapsed.TotalSeconds, (100, 100), (105, 100), false);
+            Assert.Equal(900u, c.PlayerLife);
+            Assert.True((bool)Call("InflictPlayerBlind", c, 4d, 0, null)!);
+            Call("BlindPresentation", c, null);
+            var items = Game.ItemsOf(c);
+            foreach (var old in items.Items(PlayerInventories.Weapon1).ToArray()) items.Remove(PlayerInventories.Weapon1, old.Id);
+            var gem = ItemCatalog.Create(Program.Items.Find("Metadata/Items/Gems/SkillGemFireball")!);
+            items.Add(PlayerInventories.Weapon1, 0, 0, ItemCatalog.Create(Program.Items.Find("Driftwood Wand")!) with
+                { Sockets = [new(SocketColour.White, gem)], Links = [1] });
+            ushort skill = (ushort)((IEnumerable)Call("GemSkillEffects", c)!).Cast<object>().Single().GetType().GetField("Item1")!.GetValue(
+                ((IEnumerable)Call("GemSkillEffects", c)!).Cast<object>().Single())!;
+            void Spend()
+            {
+                for (int i = 0; i < 40; i++)
+                {
+                    object?[] args = [c, skill, 0u]; Assert.True((bool)Call("PayMana", args)!); Assert.Equal(5u, args[2]);
+                }
+            }
+            Spend(); // Accepted ordinary skill payments naturally change Rage after Blind was sent.
+            var sent = c.SentRage; var keys = c.SentStatKeys.Order().ToArray();
+            var stale = Game.RagePresentation(c);
+            bool untouched = sent == c.SentRage && keys.SequenceEqual(c.SentStatKeys.Order());
+            Spend(); // Ensure a further real change even on the red path that wrongly acknowledged the earlier value.
+            while (h.Wire.Plain.Reader.TryRead(out _)) { }
+            var gate = Program.SendGates.GetValue(h.Ciphers, _ => new(1, 1)); await gate.WaitAsync();
+            var oldContact = Game.MonsterContact("Whisperer", h.Wire, h.Ciphers, c, 42, enemy, enemy.ActionGeneration);
+            Assert.True(oldContact.IsCompleted); await oldContact; Assert.Equal(900u, c.PlayerLife);
+            int oldReads = 0; Task oldSend;
+            using (GameEvents.PlayerStatSources.Add("Game", (_, stats) => { oldReads++; return stats; })) oldSend = Game.SendRage("Whisperer", h.Wire, h.Ciphers, c);
+            bool refusedBeforeBuild = oldSend.IsCompleted && oldReads == 0;
+            rageFrame.Advance(0); gate.Release(); await oldSend; await after.Next(PlayerUpdateRole.Rage);
+            var packets = new List<byte>(); while (h.Wire.Plain.Reader.TryRead(out var packet)) packets.AddRange(packet);
+            var rows = PlayerStatRows([.. packets]);
+            Assert.True(retiredContact is null && stale is null && untouched && refusedBeforeBuild,
+                $"Retired accepted contact={retiredContact is not null}; retired Rage bytes={stale?.Length}; bookkeeping unchanged={untouched}; refused before build={refusedBeforeBuild}");
+            Assert.Contains((973u, 1), rows); Assert.Contains((15023u, -20), rows); Assert.Contains((15024u, -20), rows);
+            Assert.DoesNotContain(rows, row => row.Key is 973 or 15023 or 15024 && row.Value == 0);
+            Assert.Null(Call("BlindPresentation", c, null)); Assert.Equal(80, Call("PlayerAccuracy", c, null));
+            c.PlayerUpdatesWorker.Complete(oldOwner, null, oldState, oldState.Generation);
+            Assert.True((bool)Call("PlayerUpdatesCurrent", c, currentState)!);
+            Assert.False(c.PlayerUpdatesWorker.TryStart(c, owner, null, currentState, out _));
+        }
+        finally
+        {
+            c.Closed = true; oldOwner.Stop(_ => { }); owner.Stop(_ => { });
+            if (currentCompletion is not null) await currentCompletion;
+            Game.CombatLifetime = previousRules; Game.PlayerUpdatesSchedule = previousSchedule; Program.SetGameLogic(previousLogic);
+            context.Unload();
+        }
+    }
+
+    static List<(uint Key, int Value)> PlayerStatRows(byte[] packet)
+    {
+        var result = new List<(uint, int)>(); byte[] header = InstanceEntities.StatsUpdate(Program.PlayerId, [])[..12];
+        int at = 0;
+        while (at < packet.Length && packet.AsSpan(at).IndexOf(header) is int found && found >= 0)
+        {
+            at += found + header.Length; int count = (int)Read(false);
+            for (int i = 0; i < count; i++) result.Add((Read(false), (int)Read(true)));
+        }
+        return result;
+        uint Read(bool signed)
+        {
+            uint first = packet[at++]; int length = first < 128 ? 1 : first < 192 ? 2 : first < 224 ? 3 : first < 240 ? 4 : 5;
+            int bits = length == 5 ? 32 : 8 * length - length;
+            uint value = first & (length == 5 ? 0u : (uint)((1 << (8 - length)) - 1));
+            for (int i = 1; i < length; i++) value = (value << 8) | packet[at++];
+            if (signed && bits < 32 && (value & (1u << (bits - 1))) != 0) value |= uint.MaxValue << bits;
+            return value;
+        }
     }
 
     sealed class FixedDraw(int value) : Random { public override int Next(int maxValue) => value; public override double NextDouble() => 0; }
@@ -440,11 +575,15 @@ public sealed class WhispererRuntimeTests
     }
     sealed class ManualUpdates(ManualRuntime runtime) : IPlayerUpdateSchedule
     {
-        readonly Channel<Frame> fast = Channel.CreateUnbounded<Frame>(), slow = Channel.CreateUnbounded<Frame>();
+        readonly ConcurrentDictionary<PlayerUpdateRole, Channel<Frame>> queues = new();
+        readonly ConcurrentDictionary<PlayerUpdateRole, int> waits = new();
         readonly ManualRuntime runtime = runtime;
         internal Task? Completion;
-        internal double At; internal int FastWaits;
+        internal double At;
+        internal int FastWaits => Count(PlayerUpdateRole.Recovery);
+        internal int Count(PlayerUpdateRole role) => waits.GetValueOrDefault(role);
         Frame? observing;
+        Channel<Frame> Queue(PlayerUpdateRole role) => queues.GetOrAdd(role, _ => Channel.CreateUnbounded<Frame>());
         internal sealed class Frame(ManualUpdates schedule)
         {
             readonly TaskCompletionSource release = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -454,24 +593,33 @@ public sealed class WhispererRuntimeTests
             { schedule.At = at; schedule.runtime.At = at; schedule.observing = this; release.SetResult(); }
         }
         public double Now(ClientState conn) { observing?.Observed.TrySetResult(); return At; }
-        public Task Wait(int milliseconds, CancellationToken stopping)
+        public Task Wait(int milliseconds, CancellationToken stopping) =>
+            Wait(milliseconds == Game.RecoveryStepMs ? PlayerUpdateRole.Recovery : PlayerUpdateRole.Player, milliseconds, stopping);
+        public Task Wait(PlayerUpdateRole role, int milliseconds, CancellationToken stopping)
         {
-            var frame = new Frame(this);
-            if (milliseconds == Game.RecoveryStepMs) { FastWaits++; fast.Writer.TryWrite(frame); }
-            else { Assert.Equal(Game.PlayerTickMs, milliseconds); slow.Writer.TryWrite(frame); }
-            return frame.Wait(stopping);
+            var frame = new Frame(this); waits.AddOrUpdate(role, 1, (_, n) => n + 1);
+            Queue(role).Writer.TryWrite(frame); return frame.Wait(stopping);
         }
-        internal async Task<Frame> Next(int milliseconds)
+        internal Task<Frame> Next(int milliseconds) => Next(milliseconds == Game.RecoveryStepMs ? PlayerUpdateRole.Recovery : PlayerUpdateRole.Player);
+        internal async Task<Frame> Next(PlayerUpdateRole role)
         {
-            var read = (milliseconds == Game.RecoveryStepMs ? fast : slow).Reader.ReadAsync().AsTask();
+            var read = Queue(role).Reader.ReadAsync().AsTask();
             if (Completion is not null && await Task.WhenAny(read, Completion) == Completion)
-            { await Completion; throw new InvalidOperationException("Player updates stopped before their next scheduled boundary"); }
+            { await Completion; throw new InvalidOperationException("Area updates stopped before " + role); }
             return await read;
+        }
+        internal async Task OtherRoles()
+        {
+            foreach (var role in new[] { PlayerUpdateRole.MonsterAi, PlayerUpdateRole.MonsterRegeneration,
+                PlayerUpdateRole.LivingCollisions, PlayerUpdateRole.Charges, PlayerUpdateRole.Fortification,
+                PlayerUpdateRole.Rage, PlayerUpdateRole.FlaskCharges }) await Next(role);
         }
     }
     sealed class CaptureStream : NetworkStream
     {
         readonly MemoryStream bytes = new(); readonly Socket peer;
+        readonly ConnectionCiphers observer = new(new byte[64], true);
+        internal readonly Channel<byte[]> Plain = Channel.CreateUnbounded<byte[]>();
         static (Socket Writer, Socket Peer) Pair()
         {
             using var listener = new TcpListener(IPAddress.Loopback, 0); listener.Start();
@@ -481,7 +629,7 @@ public sealed class WhispererRuntimeTests
         public CaptureStream() : this(Pair()) { }
         CaptureStream((Socket Writer, Socket Peer) pair) : base(pair.Writer, ownsSocket: true) => peer = pair.Peer;
         public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
-        { bytes.Write(buffer.Span); return ValueTask.CompletedTask; }
+        { bytes.Write(buffer.Span); var plain = buffer.ToArray(); observer.Receive.Process(plain); Plain.Writer.TryWrite(plain); return ValueTask.CompletedTask; }
         public byte[] Drain(ConnectionCiphers receive) { var result = bytes.ToArray(); bytes.SetLength(0); receive.Receive.Process(result); return result; }
         protected override void Dispose(bool disposing) { if (disposing) { peer.Dispose(); bytes.Dispose(); } base.Dispose(disposing); }
     }

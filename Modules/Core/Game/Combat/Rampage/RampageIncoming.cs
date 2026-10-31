@@ -41,7 +41,7 @@ static partial class Game
         uint targetId, SpawnedMonster weapon)
     {
         try { await MonsterSwingAtRampageWeapon(remote, stream, ciphers, conn, id, attacker, action, targetId, weapon); }
-        catch (Exception ex) when (ex is IOException or ObjectDisposedException or InvalidOperationException) { }
+        catch (Exception ex) when (ex is IOException or ObjectDisposedException or InvalidOperationException or OperationCanceledException) { }
         finally { lock (conn.Monsters) cadence.CompleteSwing(attacker, action); }
     }
 

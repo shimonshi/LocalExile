@@ -26,10 +26,15 @@ Only primitive buff-removal receipts survive cleanup.
 An ordinary connection's resources do not depend on the optional provider's lifetime.
 Current module reload policy closes affected optional areas; durable class progress remains available on re-entry.
 Already active areas register a Gateway identity for current Game replacement to resume player updates.
-A separate Game lifetime lease claims one recovery loop and one slower player loop, independently of Rampage and resources.
-Retirement cancels the old pair, and completion cannot release a replacement's claim.
+A separate Game lifetime lease claims the current area loops, independently of Rampage and resources.
+It starts recovery, the slower player tick, AI, monster regeneration, collisions, Charges, Fortification, Rage and flask charges.
+Retirement cancels old roles, and completion cannot release a replacement's claim.
+Gateway server frames retain their existing single framework loop.
+Tour is a finite guarded continuation; its normal completion does not stop the area owner.
+Pending boss stages resume their existing deadline, and old projectile runtimes retire with the host lifetime.
 Send-gate generation checks reject queued old output; old full stat/skill refreshes cannot overwrite current Blind.
 Ordinary connections keep their area and resume recovery and Blind publication without a new character action.
+Retired monster contacts are refused before hit bookkeeping, and retired Rage publishers stop before stat construction.
 
 | Notable | Consumer |
 |---|---|
@@ -97,8 +102,13 @@ Combined assertions retain actual-Life SavageHit and accepted recovery-trigger b
 The existing Behemoth admission Fact adds a positive captured-payment/once-only spending control.
 The replacement regression drives the actual admitted-area loops and Game-replacement bridge with manual scheduling.
 It checks one replacement writer, Life/Mana/ES/flask/new Recoup progress, current Blind expiry and late old output/completion.
+An additional control in that same Fact loads two distinct Game assemblies sharing Gateway.
+It drives the replacement AI's actual 100-damage contact and current Rage publication under Blind and a held send gate.
+Retired contact/Rage callbacks cannot accept zero-damage hits, clear Blind rows or acknowledge current publication state.
 Exact-head build, suite, review and native results are recorded in PR #333 and ignored validation receipts.
 At `a8cb0ee6`, the recorded full suites passed Core 436, Data 45 and Gateway 15.
 Fourteen partial native controls covered legal A/B nodes and resource/outgoing-Blind behavior, then stopped at missing `/blind`.
 Incoming immunity/refund, reload and build C were not accepted by that run.
 The reload fix and restored command require their own current-head acceptance; older passes do not establish it.
+The `8c8898e9` full suites also passed, but its native harness did not execute and review found the retained AI/Rage bugs.
+The current area-ownership correction has deterministic coverage; exact-head full suites, native checks and review remain separate.

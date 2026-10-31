@@ -35,15 +35,17 @@ static partial class Game
         readonly Dictionary<SpawnedMonster, int> generations = new(ReferenceEqualityComparer.Instance);
         int generation, seed;
         bool invalid;
+        readonly IDisposable? lifetime;
         public ProjectileRuntime Runtime { get; }
         public Task OutputCompleted { get; }
-        public bool Active => !invalid && Conn.ProjectileActive(epoch);
+        public bool Active => CurrentGameRules && !invalid && Conn.ProjectileActive(epoch);
 
         public ProjectileSession(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn)
         {
             (this.remote, this.stream, this.ciphers, Conn, epoch) = (remote, stream, ciphers, conn, conn.ProjectileEpoch);
             Runtime = new(this);
             OutputCompleted = RunOutput();
+            lifetime = CombatLifetime?.Own(new ConnectionProjectileRetirement(conn, this));
         }
 
         public void Start() => _ = Pump();
@@ -112,6 +114,7 @@ static partial class Game
             {
                 if (invalid) return;
                 invalid = true;
+                lifetime?.Dispose();
                 Runtime.Clear();
                 foreach (var visual in visuals.Values) Conn.ProjectileObjects.Remove(visual.Id);
                 visuals.Clear(); output.Writer.TryComplete();
@@ -510,8 +513,10 @@ static partial class Game
     {
         lock (conn.Monsters)
         {
+            if (!CurrentGameWork) throw new OperationCanceledException("The Game generation retired");
             if (conn.ProjectileRuntime is { Active: true } current) return current;
             var session = new ProjectileSession(remote, stream, ciphers, conn);
+            if (!CurrentGameWork || !session.Active) { session.Invalidate(); throw new OperationCanceledException("The Game generation retired"); }
             conn.ProjectileRuntime = session; session.Start();
             return session;
         }

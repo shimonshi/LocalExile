@@ -374,7 +374,7 @@ static partial class Game
         var ailments = conn.ElementalAilments.Snapshot(last);
         while (PlayerUpdatesCurrent(conn, updates))
         {
-            await updates.Schedule.Wait(PlayerTickMs, updates.Stop.Token);
+            await updates.Schedule.Wait(PlayerUpdateRole.Player, PlayerTickMs, updates.Stop.Token);
             if (!PlayerUpdatesCurrent(conn, updates)) break;
             double tickNow = updates.Schedule.Now(conn);
             double seconds = tickNow - last;
@@ -491,7 +491,7 @@ static partial class Game
         var cachedRf = conn.RighteousFire;
         while (PlayerUpdatesCurrent(conn, updates))
         {
-            await updates.Schedule.Wait(RecoveryStepMs, updates.Stop.Token);
+            await updates.Schedule.Wait(PlayerUpdateRole.Recovery, RecoveryStepMs, updates.Stop.Token);
             if (!PlayerUpdatesCurrent(conn, updates)) break;
             await EndGracePeriod(remote, stream, ciphers, conn);
             if (!PlayerUpdatesCurrent(conn, updates)) return;

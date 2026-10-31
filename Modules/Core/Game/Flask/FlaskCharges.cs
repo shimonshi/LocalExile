@@ -19,7 +19,7 @@ static partial class Game
             string message;
             lock (conn.Monsters)
             {
-                if (HardcoreProgressBlocked(conn)) return;
+                if (!CurrentGameWork || HardcoreProgressBlocked(conn)) return;
                 var items = ItemsOf(conn);
                 var before = items.Items(PlayerInventories.Flask).ToDictionary(i => i.Id, i => i.Item.Charges);
                 if (change(items) is not { } done || done.Changed.Count == 0) return;
@@ -154,18 +154,20 @@ static partial class Game
 
     // "Flasks gain # charges every 3 seconds" (FlaskCharges.PerThreeSeconds: every flask, utility, life, life on low life,
     // mana), every 3 s of game time (a pause holds it) while the connection is open.
-    internal static async Task RunFlaskChargeRegen(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn)
+    internal static async Task RunFlaskChargeRegen(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn, PlayerUpdatesState updates)
     {
-        double next = conn.Clock.Elapsed.TotalSeconds + 3;
+        if (!PlayerUpdatesCurrent(conn, updates)) return;
+        double next = updates.Schedule.Now(conn) + 3;
         try
         {
-            while (!conn.Closed && !conn.RageRetired)
+            while (PlayerUpdatesCurrent(conn, updates))
             {
-                await Task.Delay(250);
-                if (conn.Closed || conn.RageRetired) break;
-                if (conn.LeavingArea) { next = conn.Clock.Elapsed.TotalSeconds + 3; continue; }
+                await updates.Schedule.Wait(PlayerUpdateRole.FlaskCharges, 250, updates.Stop.Token);
+                if (!PlayerUpdatesCurrent(conn, updates)) break;
+                if (conn.LeavingArea) { next = updates.Schedule.Now(conn) + 3; continue; }
                 await DrainFlaskTriggers(remote, stream, ciphers, conn);
-                if (conn.Clock.Elapsed.TotalSeconds < next || conn.PlayerLife == 0) continue;
+                if (!PlayerUpdatesCurrent(conn, updates)) return;
+                if (updates.Schedule.Now(conn) < next || conn.PlayerLife == 0) continue;
                 next += 3;
                 var character = CharacterPlayerStats(conn);
                 int Get(string name) => Stats.Key(name) is uint key ? character.GetValueOrDefault(key) : 0;
@@ -176,6 +178,7 @@ static partial class Game
                     "every 3 seconds");
             }
         }
+        catch (OperationCanceledException) when (updates.Stop.IsCancellationRequested) { }
         catch (Exception ex)
         {
             if (!conn.Closed) Console.WriteLine($"[gateway] {remote} flask charges every 3 s: {ServerLog.Describe(ex)}");

@@ -1,14 +1,6 @@
 using GameServer.Modding;
 using GameServer.Core.Diagnostics;
 
-// Scheduling is separate from game time; deterministic drivers use the same loops without wall-clock waits.
-interface IPlayerUpdateSchedule
-{
-    double Now(ClientState conn);
-    double ResourceNow(ClientState conn) => Now(conn);
-    Task Wait(int milliseconds, CancellationToken stopping);
-}
-
 sealed class PlayerUpdatesState(IModuleLifetime rules, IPlayerUpdateSchedule schedule) : ITransientCombatState
 {
     internal readonly IModuleLifetime Rules = rules;
@@ -16,6 +8,7 @@ sealed class PlayerUpdatesState(IModuleLifetime rules, IPlayerUpdateSchedule sch
     internal readonly CancellationTokenSource Stop = new();
     internal long Generation;
     internal Task Completion = Task.CompletedTask;
+    internal (uint Id, SpawnedMonster Monster)[] PendingStages = [];
     public void Clear() => Stop.Cancel();
 }
 
@@ -27,6 +20,12 @@ static partial class Game
         public double ResourceNow(ClientState conn) => ProjectileWorldTime(conn);
         public Task Wait(int milliseconds, CancellationToken stopping) => Task.Delay(milliseconds, stopping);
     }
+    internal static readonly AsyncLocal<PlayerUpdatesState?> AreaUpdateContext = new();
+    internal static bool CurrentGameWork => CurrentGameRules && (Program.ProjectileOutputGuard.Value?.Invoke() ?? true);
+    internal static double AreaTime(ClientState conn) => AreaUpdateContext.Value?.Schedule.Now(conn) ?? conn.Clock.Elapsed.TotalSeconds;
+    internal static Task AreaWait(PlayerUpdateRole role, int milliseconds) => AreaUpdateContext.Value is { } state
+        ? state.Schedule.Wait(role, milliseconds, state.Stop.Token) : Task.Delay(milliseconds);
+
     internal static IPlayerUpdateSchedule PlayerUpdatesSchedule = new PlayerUpdateSchedule();
 
     internal static bool PlayerUpdatesCurrent(ClientState conn, PlayerUpdatesState state) => CurrentGameRules
@@ -44,6 +43,7 @@ static partial class Game
             {
                 conn.RetirePlayerUpdates();
                 state = new(CombatLifetime!, PlayerUpdatesSchedule); conn.PlayerUpdatesState = state;
+                state.PendingStages = [.. conn.Monsters.Where(p => p.Value.StageRunning).Select(p => (p.Key, p.Value))];
             }
             if (!conn.PlayerUpdatesWorker.TryStart(conn, state.Rules, null, state, out long generation)) return;
             state.Generation = generation;
@@ -58,23 +58,55 @@ static partial class Game
     {
         var previous = Program.ProjectileOutputGuard.Value;
         Program.ProjectileOutputGuard.Value = () => PlayerUpdatesCurrent(conn, state);
+        AreaUpdateContext.Value = state;
         try
         {
             var (remote, stream, ciphers) = conn.Wire;
             await Task.WhenAll(Drive(() => RunPlayerTick(remote, stream, ciphers, conn, state)),
-                Drive(() => RunResourceRecovery(remote, stream, ciphers, conn, state)));
+                Drive(() => RunResourceRecovery(remote, stream, ciphers, conn, state)),
+                Drive(() => RunMonsterAi(remote, stream, ciphers, conn, state)),
+                Drive(() => RunMonsterRegeneration(remote, stream, ciphers, conn, state)),
+                Drive(() => RunLivingCollisions(remote, stream, ciphers, conn, state)),
+                Drive(() => RunCharges(remote, stream, ciphers, conn, state)),
+                Drive(() => RunFortification(remote, stream, ciphers, conn, state)),
+                Drive(() => RunRage(remote, stream, ciphers, conn, state)),
+                Drive(() => RunFlaskChargeRegen(remote, stream, ciphers, conn, state)),
+                Drive(() => ResumeBossStages(remote, stream, ciphers, conn, state)),
+                Drive(() => ContinueTour(remote, stream, ciphers, conn)));
         }
         catch (OperationCanceledException) when (state.Stop.IsCancellationRequested) { }
         catch (Exception ex) { Console.WriteLine($"[gateway] {conn.Wire.Remote} player updates failed: {ServerLog.Describe(ex)}"); throw; }
         finally
         {
+            AreaUpdateContext.Value = null;
             Program.ProjectileOutputGuard.Value = previous;
             lock (conn.Monsters) conn.PlayerUpdatesWorker.Complete(state.Rules, null, state, state.Generation);
         }
         async Task Drive(Func<Task> loop)
         {
             try { await loop(); }
-            finally { state.Stop.Cancel(); }
+            catch { state.Stop.Cancel(); throw; }
+        }
+    }
+
+    static async Task ResumeBossStages(string remote, System.Net.Sockets.NetworkStream stream,
+        GameServer.Core.Protocol.Login.ConnectionCiphers ciphers, ClientState conn, PlayerUpdatesState state)
+    {
+        foreach (var (id, monster) in state.PendingStages)
+        {
+            while (true)
+            {
+                int wait;
+                lock (conn.Monsters)
+                {
+                    if (!PlayerUpdatesCurrent(conn, state)) return;
+                    if (!MonsterPresent(conn, id, monster) || !monster.StageRunning) break;
+                    double left = monster.BusyUntil - state.Schedule.Now(conn);
+                    wait = !conn.Paused && left <= 0 ? 0 : (int)Math.Clamp(Math.Ceiling(left * 1000), 16, 1000);
+                }
+                if (wait == 0) { await CompleteMonsterStage(remote, stream, ciphers, conn, id, monster); break; }
+                await state.Schedule.Wait(PlayerUpdateRole.MonsterAction, wait, state.Stop.Token);
+            }
         }
     }
 }

@@ -218,18 +218,20 @@ static partial class Game
         public readonly List<(uint Id, SpawnedMonster Monster)> BossBars = [];
     }
 
-    internal static async Task RunMonsterAi(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn)
+    internal static async Task RunMonsterAi(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn, PlayerUpdatesState updates)
     {
+        if (!PlayerUpdatesCurrent(conn, updates)) return;
         var cadence = new MonsterAiCadence();
         try
         {
-            while (!conn.Closed && !conn.LeavingArea && conn.PendingTransfer is null)
+            while (PlayerUpdatesCurrent(conn, updates) && !conn.LeavingArea && conn.PendingTransfer is null)
             {
                 await StepMonsterAi(remote, stream, ciphers, conn, cadence);
+                if (!PlayerUpdatesCurrent(conn, updates)) return;
                 int delay;
                 lock (conn.Monsters)
-                    delay = cadence.DelayMilliseconds(conn.Clock.Elapsed.TotalSeconds);
-                await Task.Delay(delay);
+                    delay = cadence.DelayMilliseconds(updates.Schedule.Now(conn));
+                await updates.Schedule.Wait(PlayerUpdateRole.MonsterAi, delay, updates.Stop.Token);
             }
         }
         catch (Exception ex) when (ex is IOException or ObjectDisposedException or InvalidOperationException)
@@ -244,7 +246,7 @@ static partial class Game
         var plan = new MonsterAiPlan();
         lock (conn.Monsters)
         {
-            if (conn.Closed || conn.LeavingArea || conn.PendingTransfer is not null
+            if (!CurrentGameWork || conn.Closed || conn.LeavingArea || conn.PendingTransfer is not null
                 || !cadence.TryBeginStep(now, conn.AiEnabled && !conn.Paused && conn.PlayerLife > 0)) return plan;
             using var blockers = conn.BeginMonsterBlockerFrame(now);
             var (px, py) = conn.Walk.Position(now);
@@ -337,7 +339,7 @@ static partial class Game
     {
         MonsterAiPlan plan;
         // Advance the projectile runtime first: decisions and committed projectile contacts share one game time and pose.
-        using (ProjectileMutation(conn, phase: "ai")) plan = PlanMonsterAi(conn, cadence, ProjectileWorldTime(conn));
+        using (ProjectileMutation(conn, phase: "ai")) plan = PlanMonsterAi(conn, cadence, Math.Max(ProjectileWorldTime(conn), AreaTime(conn)));
         const ushort Move = 0x2909;
         // A chase is re-ordered every few ticks: its lines only with Game_TRACE=ai (the packet history keeps them).
         foreach (var (id, m, action, from, to, why) in plan.Moves)
@@ -349,6 +351,7 @@ static partial class Game
             lock (conn.Monsters) if (!MonsterPresent(conn, id, m)) continue;
             await ShowBossLifeBar(remote, stream, ciphers, id, m, conn);
         }
+        if (!CurrentGameWork) return;
         foreach (var (id, m, action) in plan.Swings)
             _ = RunPlannedMonsterSwing(remote, stream, ciphers, conn, cadence, id, m, action);
         foreach (var (id, m, action, target, weapon) in plan.WeaponSwings)
@@ -360,7 +363,7 @@ static partial class Game
         ClientState conn, MonsterAiCadence cadence, uint id, SpawnedMonster m, int action)
     {
         try { await MonsterSwing(remote, stream, ciphers, conn, id, m, action); }
-        catch (Exception ex) when (ex is IOException or ObjectDisposedException or InvalidOperationException) { }
+        catch (Exception ex) when (ex is IOException or ObjectDisposedException or InvalidOperationException or OperationCanceledException) { }
         // Anything else is a server bug: the swing was already shown, so name the lost hit instead of faulting the task
         // unobserved (review 2026-10-30).
         catch (Exception ex) { Console.WriteLine($"[gateway] {remote} monster 0x{id:x} swing {action} failed: {ServerLog.Describe(ex)}"); }
@@ -395,7 +398,7 @@ static partial class Game
     }
 
     internal static bool MonsterPresent(ClientState conn, uint id, SpawnedMonster m) =>
-        !conn.Closed && !conn.LeavingArea && !conn.RageRetired && conn.PendingTransfer is null && !m.Dead && m.Life > 0
+        CurrentGameWork && !conn.Closed && !conn.LeavingArea && !conn.RageRetired && conn.PendingTransfer is null && !m.Dead && m.Life > 0
         && ReferenceEquals(conn.Monsters.GetValueOrDefault(id), m);
 
     // Keep the stage's final transition, refill and ActionEnded contiguous at the actual send gate. Only then may
@@ -428,7 +431,7 @@ static partial class Game
                 }
             });
             if (completed) return;
-            await Task.Delay(16);
+            await AreaWait(PlayerUpdateRole.MonsterAction, 16);
         }
     }
 
@@ -452,22 +455,22 @@ static partial class Game
                 }
             });
             if (checkedAtGate) return sent;
-            await Task.Delay(16);
+            await AreaWait(PlayerUpdateRole.MonsterAction, 16);
         }
         return false;
     }
 
     internal static async Task<bool> WaitMonsterActionTime(ClientState conn, uint id, SpawnedMonster m, int action, double until)
     {
-        if (!double.IsFinite(until)) return false;
+        if (!CurrentGameWork || !double.IsFinite(until)) return false;
         while (true)
         {
             lock (conn.Monsters)
             {
                 if (!MonsterActionCurrent(conn, id, m, action)) return false;
-                if (!conn.Paused && conn.Clock.Elapsed.TotalSeconds >= until) return true;
+                if (!conn.Paused && AreaTime(conn) >= until) return true;
             }
-            await Task.Delay(16);
+            await AreaWait(PlayerUpdateRole.MonsterAction, 16);
         }
     }
 
@@ -500,7 +503,7 @@ static partial class Game
                 }
             });
             if (checkedAtGate) return;
-            await Task.Delay(16);
+            await AreaWait(PlayerUpdateRole.MonsterAction, 16);
         }
     }
 
@@ -509,11 +512,11 @@ static partial class Game
     {
         if (m.Attack is not { } a) return;
         // Entry protection: a protected player is not attacked (the planner also skips hostile monsters meanwhile).
-        if (InGracePeriod(conn)) return;
+        if (!CurrentGameWork || InGracePeriod(conn)) return;
         double startedAt = 0;
         if (!await SendMonsterAction(remote, stream, ciphers, conn, id, m, action, () =>
         {
-            startedAt = conn.Clock.Elapsed.TotalSeconds;
+            startedAt = AreaTime(conn);
             var from = m.Walk.Position(startedAt);
             var player = conn.Walk.Position(startedAt);
             m.BusyUntil = startedAt + a.Seconds;
@@ -570,6 +573,8 @@ static partial class Game
     internal static MonsterHitOutcome? CommitMonsterHitLocked(string remote, ClientState conn, uint id, SpawnedMonster m, MonsterAttack a,
         double now, (int X, int Y) here, (int X, int Y) from, bool checkRange)
     {
+        // A retired producer is refused before recording an accepted hit or touching any current resource state.
+        if (!CurrentGameWork) return null;
         int priorContacts = conn.RecentEnemyHits.Count(now);
         using var defenceTime = FortificationOf(conn).Capture(now);
         // Resolve lazy final defences here, never at AI collection or before a queued echo/pause wait.
@@ -672,8 +677,11 @@ static partial class Game
     internal static async Task PresentMonsterHit(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn, uint id,
         MonsterHitOutcome hit)
     {
+        if (!CurrentGameWork) return;
         await SendPlayerEnergyShield(remote, stream, ciphers, conn);
+        if (!CurrentGameWork) return;
         if (hit.Recovery is not null) await SendPlayerHitRecovery(remote, stream, ciphers, conn, hit.Recovery);
+        if (!CurrentGameWork) return;
         // At 0 the Life tick stops refreshing the overhead life bar (see Attack): hide it.
         if (hit.Life == 0)
             await Send(remote, stream, ciphers, InstanceEntities.StatsUpdate(PlayerId, [(StatKeys.HideMiniLifeBar, 1)]),
@@ -685,6 +693,7 @@ static partial class Game
         if (hit.Mana != hit.ManaBefore)
             await SendPlayerMana(remote, stream, ciphers, conn,
                 $"0x01b1 player mana {hit.Mana} ({(hit.Blocked ? $"+{conn.Pools.ManaGainedOnBlock} on block" : "no block gain")})");
+        if (!CurrentGameWork) return;
         if (hit.Life == 0)
             await PlayerDied(remote, stream, ciphers, conn, $"0x0055 death screen ({conn.League ?? "?"} league)");
         else
