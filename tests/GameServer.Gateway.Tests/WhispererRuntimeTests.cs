@@ -11,6 +11,7 @@ using GameServer.Core.Projectiles;
 using GameServer.Core.Protocol.Login;
 using GameServer.Core.World;
 using GameServer.Modding;
+using MonsterRarity = GameServer.Core.Protocol.Instance.MonsterRarity;
 
 public sealed class WhispererRuntimeTests
 {
@@ -164,6 +165,26 @@ public sealed class WhispererRuntimeTests
         Game.StartRecoveryEffectsLocked(c, [queuedLife, queuedMana], copy: true);
         recovered = Game.AdvanceFlaskRecovery(c, 10, 12);
         Assert.Equal(40 + recovered.Mana, recovered.Life, 7); Assert.Single(recovered.Ended);
+
+        var combined = h.NewConnection("totem-resource", optional: false);
+        combined.Pools = combined.Pools with { Mana = 1000 };
+        combined.PlayerLife = 1000; combined.PlayerMana = 100;
+        combined.Ward.SetMaximum(20); combined.EnergyShield.SetMaximum(30, true);
+        var totem = new TotemState.Totem(77, 1, (100, 100), 1000, double.PositiveInfinity, null);
+        combined.Totems.Place(totem, 1, 0);
+        var combinedStats = new Dictionary<uint, int>
+        {
+            [Key(Game.TotemRedirectStat)] = 20,
+            [Key("physical_damage_%_taken_from_mana_before_life")] = 100,
+            [Key("damage_taken_goes_to_mana_%")] = 20,
+        };
+        var combinedState = Game.ResourceEffectsOf(combined);
+        Assert.Equal(80, Game.DamagePlayerHitTyped(combined, 100, 50, 50, 10, combinedStats));
+        Assert.Equal(960u, totem.Life); Assert.Equal(70u, combined.PlayerMana);
+        Assert.Equal(0u, combined.EnergyShield.Current); Assert.True(combined.Ward.Broken);
+        Assert.Equal(28, combinedState.Mana.Take(14)); // Totem first; post-Ward Recoup includes ES and Mana.
+        Assert.Equal(0, combinedState.Mana.SpentRemainder);
+
     }
 
     [Fact]
@@ -192,7 +213,14 @@ public sealed class WhispererRuntimeTests
         Has(renewed, InstanceEntities.RemoveBuff(42, firstBuff));
         Assert.NotEqual(firstBuff, state.TargetBlind(42, target).Buff);
         Assert.Equal((20, 5d), state.TargetBlind(42, target).SentOwn);
-        Assert.Equal((30, 0d), state.TargetBlind(42, target).Sent); // Merged value unchanged, own native timer renewed.
+        Assert.Equal((30, 0d), state.TargetBlind(42, target).Sent);
+        c.BlindAura.Reconcile(new HashSet<uint> { 42 }, c.Monsters.ContainsKey, () => c.NextBuff++).ToArray();
+        Assert.True(Game.Blinded(c, 42)); Assert.Equal(70, Game.UnderBlind(c, 42, 100));
+        Assert.Equal(75, Game.CriticalChanceOn(c, 42, 25, 75));
+        Assert.Equal(-10, Game.DamageTakenFromBlindedPct(c, 42,
+            new Dictionary<uint, int> { [Key(Game.FromBlindedDamageTakenStat)] = -10 }));
+        c.BlindAura.Reconcile(new HashSet<uint>(), c.Monsters.ContainsKey, () => c.NextBuff++).ToArray();
+ // Merged value unchanged, own native timer renewed.
         int reads = 0;
         using (GameEvents.PlayerStatSources.Add("Game", (_, stats) => { reads++; return stats; }))
         {
@@ -462,6 +490,13 @@ public sealed class WhispererRuntimeTests
         var runtime = new ManualRuntime(); c.ProjectileRuntimeState = runtime;
         var before = new ManualUpdates(runtime); var after = new ManualUpdates(runtime);
         PlayerUpdatesState? oldState = null; object? currentState = null; Task? currentCompletion = null;
+        var spawnGate = Program.SendGates.GetValue(h.Ciphers, _ => new(1, 1)); bool spawnHeld = false;
+        int spawnCommits = 0;
+        Action<uint, SpawnedMonster> admitMinion = (id, m) =>
+        {
+            spawnCommits++;
+            c.Minions.Add(new(id, m, "spawn-admission-control", "relic") { Until = double.PositiveInfinity });
+        };
         try
         {
             Game.CombatLifetime = oldOwner; Game.PlayerUpdatesSchedule = before; Program.SetGameLogic(new GameServer.Modules.Game.GameLogic(oldOwner));
@@ -473,11 +508,46 @@ public sealed class WhispererRuntimeTests
                 { Stage = new(50, 1, 1, 1), StageRunning = true, StageTaken = true, Life = 500, BusyUntil = 0 };
             c.Monsters[43] = stage;
             c.Monsters[42] = enemy; c.AiEnabled = true; c.Walk.Teleport(100, 100, 0);
+            // A reserved new-main minion contact and its neutral roster survive distinct Game replacement.
+            var minion = new SpawnedMonster("owned melee", new(105, 102, 0), 100, 5, 1000)
+                { Attack = attack with { Seconds = .4 }, Hostile = false, Aggro = true, Level = 68, BusyUntil = .4 };
+            var minionVictim = new SpawnedMonster("minion victim", new(105, 103, 0), 0, 0, 1000) { Level = 0 };
+            c.Monsters[44] = minion; c.Monsters[45] = minionVictim;
+            var owned = new PlayerMinions.Minion(44, minion, "current-minion-control", "melee")
+            {
+                Fights = true, Until = double.PositiveInfinity,
+                OwnerAura = new("Anger", AuraCatalog.BuffRow("Anger"), 60, [(Key("base_life_regeneration_rate_per_minute"), 1)]),
+            };
+            c.Minions.Add(owned);
+            var pendingMinion = new PlayerMinions.Attack(44, minion, (105, 102), 45, minionVictim, (105, 103), .2);
+            c.Minions.Attacks[44] = pendingMinion;
+            c.PlayerStats[Key("link_skills_can_target_minions")] = 1;
+            var link = new LinkSkills.Link(44, 1, "SoulLink") { Until = 100, ManaPerMinute = 300 };
+            c.Links.Add(link); c.Links.PaidAt = 0;
+            Game.AreaUpdateContext.Value = oldState;
+            Task oldMinion;
+            try { oldMinion = Game.MinionSwing("Whisperer", h.Wire, h.Ciphers, c, pendingMinion); }
+            finally { Game.AreaUpdateContext.Value = null; }
+            await before.Next(PlayerUpdateRole.MonsterAction); Assert.True(pendingMinion.Started);
+            var variety = Game.Monsters.Find("Metadata/Monsters/AnimatedItem/ElementalLivingRelicFire")!;
+            Assert.True(variety.Supported);
+            await spawnGate.WaitAsync(); spawnHeld = true;
+            var oldSpawn = Game.SpawnMonster("Whisperer", h.Wire, h.Ciphers, c, variety, 68, MonsterRarity.Normal,
+                110, 110, friendly: true, log: false, owned: admitMinion, ownedCurrent: () => true);
+            Assert.False(oldSpawn.IsCompleted);
+
+
             oldOwner.Stop(ex => throw ex); await oldState.Completion;
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => oldMinion);
+            Assert.Same(pendingMinion, c.Minions.Attacks[44]); Assert.Equal(1000u, minionVictim.Life);
+
             game.GetField("CombatLifetime", flags)!.SetValue(null, owner);
             game.GetField("PlayerUpdatesSchedule", flags)!.SetValue(null, after);
             var logic = (IGameLogic)Activator.CreateInstance(assembly.GetType("GameServer.Modules.Game.GameLogic")!, flags, null, [owner], null)!;
             Program.SetGameLogic(logic); currentState = c.PlayerUpdatesState!; Assert.NotSame(oldState, currentState);
+            spawnGate.Release(); spawnHeld = false;
+            Assert.Equal(0u, await oldSpawn); Assert.Equal(0, spawnCommits);
+
             currentCompletion = (Task)Field(currentState, "Completion"); after.Completion = currentCompletion;
             await after.Next(Game.RecoveryStepMs); await after.Next(Game.PlayerTickMs);
             await after.Next(PlayerUpdateRole.MonsterAi); await after.Next(PlayerUpdateRole.MonsterRegeneration);
@@ -496,6 +566,36 @@ public sealed class WhispererRuntimeTests
             Assert.False(stage.StageRunning); Assert.Equal(1000u, stage.Life);
             Assert.Equal(900u, c.PlayerLife); Assert.False(c.Closed); // Started current AI did the actual 100-damage contact.
             Assert.Equal(1, after.Count(PlayerUpdateRole.MonsterAi)); Assert.Equal(1, after.Count(PlayerUpdateRole.Rage));
+            var minionContact = await after.Next(PlayerUpdateRole.MonsterAction);
+            minionContact.Advance(.2);
+            while (minionVictim.Life != 900)
+            {
+                var read = h.Wire.Plain.Reader.ReadAsync().AsTask();
+                if (await Task.WhenAny(read, currentCompletion) == currentCompletion)
+                { await currentCompletion; throw new InvalidOperationException("Area owner stopped before resumed minion contact"); }
+                await read;
+            }
+            Assert.False(c.Minions.Attacks.ContainsKey(44)); Assert.Same(owned, c.Minions.All.Single());
+            uint freshMinion = await (Task<uint>)Call("SpawnMonster", "Whisperer", h.Wire, h.Ciphers, c, variety, (byte)68,
+                MonsterRarity.Normal, 110, 110, null, true, false, null, null, true, null, null, admitMinion, (Func<bool>)(() => true))!;
+            Assert.True(freshMinion > 0); Assert.Equal(1, spawnCommits);
+            Assert.Same(c.Monsters[freshMinion], c.Minions.All.Single(m => m.Id == freshMinion).Monster);
+            Has(h.Wire.Drain(h.Receive), InstanceProtocol.EnterWakeZone(freshMinion));
+
+            var minionFrame = await after.Next(PlayerUpdateRole.Minions);
+            minionFrame.Advance(.2); await after.Next(PlayerUpdateRole.Minions);
+            Assert.True(owned.OwnerBuff > 0); Assert.Same(link, c.Links.On(44)); Assert.Equal(.2, c.Links.PaidAt);
+            Assert.Equal(999u, c.PlayerMana); // Current 100 ms minion -> link producer paid its real running cost.
+            Assert.Equal(1, after.Count(PlayerUpdateRole.Footsteps));
+            var footstepFrame = await after.Next(PlayerUpdateRole.Footsteps);
+            footstepFrame.Advance(.2); await after.Next(PlayerUpdateRole.Footsteps);
+            var keptBuff = owned.OwnerBuff; double paidAt = c.Links.PaidAt;
+            await Game.PlayerMinionsTick("Whisperer", h.Wire, h.Ciphers, c, 101);
+            await Game.LinkSkillsTick("Whisperer", h.Wire, h.Ciphers, c, 101);
+            await Game.MinionSwing("Whisperer", h.Wire, h.Ciphers, c, pendingMinion);
+            Assert.Equal(keptBuff, owned.OwnerBuff); Assert.Equal(paidAt, c.Links.PaidAt);
+            Assert.Same(link, c.Links.On(44)); Assert.Equal(900u, minionVictim.Life); Assert.Equal(999u, c.PlayerMana);
+
             var retiredContact = Game.CommitMonsterHitLocked("Whisperer", c, 42, enemy, attack,
                 c.Clock.Elapsed.TotalSeconds, (100, 100), (105, 100), false);
             Assert.Equal(900u, c.PlayerLife);
@@ -535,12 +635,29 @@ public sealed class WhispererRuntimeTests
             Assert.Contains((973u, 1), rows); Assert.Contains((15023u, -20), rows); Assert.Contains((15024u, -20), rows);
             Assert.DoesNotContain(rows, row => row.Key is 973 or 15023 or 15024 && row.Value == 0);
             Assert.Null(Call("BlindPresentation", c, null)); Assert.Equal(80, Call("PlayerAccuracy", c, null));
+            // Field Medicine and new Onslaught scaling keep the accepted recipient snapshot too.
+            c.PlayerStats[Key("flasks_apply_to_your_linked_targets")] = 1;
+            c.PlayerStats[Key("flask_effect_+%")] = 50; c.PlayerStats[Key("onslaught_effect_+%")] = 100;
+            foreach (var old in items.Items(PlayerInventories.Flask).ToArray()) items.Remove(PlayerInventories.Flask, old.Id);
+            var silver = Program.Items.Find("Silver Flask")!; var silverUtility = Program.Items.UtilityFlaskOf(silver)!;
+            items.Add(PlayerInventories.Flask, 0, 0, ItemCatalog.Create(silver) with { Charges = silverUtility.MaxCharges });
+            await (Task)Call("UseFlask", "Whisperer", h.Wire, h.Ciphers, c, 0u)!;
+            var received = Assert.Single(c.Links.Flasks); Assert.Equal(44u, received.Target);
+            Assert.Contains(received.Stats, s => s.Stat == "attack_speed_+%" && s.Value == 40);
+            Assert.Contains(c.UtilityFlaskEffects.Stats(), s => s.Stat == "attack_speed_+%" && s.Value == 50);
+            await Game.LinkSkillsTick("Whisperer", h.Wire, h.Ciphers, c, received.Until);
+            Assert.Same(received, Assert.Single(c.Links.Flasks));
+            await (Task)Call("LinkSkillsTick", "Whisperer", h.Wire, h.Ciphers, c, received.Until)!;
+            Assert.Empty(c.Links.Flasks); Assert.False(c.Closed);
+            Has(h.Wire.Drain(h.Receive), InstanceEntities.RemoveBuff(44, received.Buff));
+
             c.PlayerUpdatesWorker.Complete(oldOwner, null, oldState, oldState.Generation);
             Assert.True((bool)Call("PlayerUpdatesCurrent", c, currentState)!);
             Assert.False(c.PlayerUpdatesWorker.TryStart(c, owner, null, currentState, out _));
         }
         finally
         {
+            if (spawnHeld) spawnGate.Release();
             c.Closed = true; oldOwner.Stop(_ => { }); owner.Stop(_ => { });
             if (currentCompletion is not null) await currentCompletion;
             Game.CombatLifetime = previousRules; Game.PlayerUpdatesSchedule = previousSchedule; Program.SetGameLogic(previousLogic);
@@ -603,7 +720,7 @@ public sealed class WhispererRuntimeTests
             var monster = new SpawnedMonster("flask smoke", new(100, 100, 0), 0, 0, 1000); c.Monsters[44] = monster;
             c.FlaskGrounds.Add(new(FlaskGrounds.Kind.SmokeCloud, 100, 100, 10, second.Ends));
             c.FlaskGrounds.Add(new(FlaskGrounds.Kind.ConsecratedGround, 100, 100, 10, second.Ends));
-            Game.AdvanceFlaskGrounds(c, oldState); Assert.Equal(80, c.FlaskGrounds.Accuracy(44, 100)); Assert.NotEmpty(c.FlaskGrounds.PlayerStats());
+            Game.AdvanceFlaskGrounds(c, oldState); Assert.Equal(80, Game.UnderBlind(c, 44, 100)); Assert.NotEmpty(c.FlaskGrounds.PlayerStats());
             await Game.PublishFlaskChanges("Whisperer", h.Wire, h.Ciphers, c);
             h.Wire.Drain(h.Receive); while (h.Wire.Plain.Reader.TryRead(out _)) { }
             await gate.WaitAsync(); held = true;
@@ -644,7 +761,7 @@ public sealed class WhispererRuntimeTests
             var drain = await after.Next(PlayerUpdateRole.FlaskCharges); var ground = await after.Next(PlayerUpdateRole.FlaskGrounds);
             // Actual replacement ground producer removes expired smoke/consecration and publishes current state.
             ground.Advance(after.At); await after.Next(PlayerUpdateRole.FlaskGrounds);
-            Assert.Equal(100, c.FlaskGrounds.Accuracy(44, 100)); Assert.Empty(c.FlaskGrounds.PlayerStats());
+            Assert.Equal(100, Call("UnderBlind", c, 44u, 100)); Assert.Empty(c.FlaskGrounds.PlayerStats());
             drain.Advance(after.At); drain = await after.Next(PlayerUpdateRole.FlaskCharges);
             var reusedOne = c.UtilityFlaskEffects.Of(one.Id)!; var reusedTwo = c.UtilityFlaskEffects.Of(two.Id)!;
             Assert.NotNull(reusedOne); Assert.NotNull(reusedTwo);
@@ -683,6 +800,14 @@ public sealed class WhispererRuntimeTests
             c.FlaskAutomation.Enqueue(new(FlaskEnchantments.Trigger.End, removed.Id, removed.X, reusedTwo.Activation));
             drain.Advance(after.At); await after.Next(PlayerUpdateRole.FlaskCharges);
             Assert.Equal(utility.MaxCharges, Charges(replacement.Id)); Assert.Null(c.UtilityFlaskEffects.Of(replacement.Id));
+            // Main's stationary ground and linger use this same replacement-owned ground step.
+            c.Walk.Teleport(100, 100, after.At); c.FlaskGrounds.Configure(12, 2000);
+            Call("AdvanceFlaskGrounds", c, currentState); Assert.NotEmpty(c.FlaskGrounds.PlayerStats());
+            c.FlaskGrounds.Configure(0, 2000); Call("AdvanceFlaskGrounds", c, currentState);
+            Assert.NotEmpty(c.FlaskGrounds.PlayerStats());
+            after.At += 2; Call("AdvanceFlaskGrounds", c, currentState); Assert.Empty(c.FlaskGrounds.PlayerStats());
+            await (Task)Call("PublishFlaskChanges", "Whisperer", h.Wire, h.Ciphers, c)!;
+
         }
         finally
         {
@@ -1093,7 +1218,8 @@ public sealed class WhispererRuntimeTests
         {
             foreach (var role in new[] { PlayerUpdateRole.MonsterAi, PlayerUpdateRole.MonsterRegeneration,
                 PlayerUpdateRole.LivingCollisions, PlayerUpdateRole.Charges, PlayerUpdateRole.Fortification,
-                PlayerUpdateRole.Rage, PlayerUpdateRole.FlaskCharges, PlayerUpdateRole.FlaskGrounds }) await Next(role);
+                PlayerUpdateRole.Rage, PlayerUpdateRole.FlaskCharges, PlayerUpdateRole.FlaskGrounds,
+                PlayerUpdateRole.Minions, PlayerUpdateRole.Footsteps }) await Next(role);
         }
     }
     sealed class CaptureStream : NetworkStream

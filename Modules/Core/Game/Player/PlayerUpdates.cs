@@ -9,6 +9,7 @@ sealed class PlayerUpdatesState(IModuleLifetime rules, IPlayerUpdateSchedule sch
     internal long Generation;
     internal Task Completion = Task.CompletedTask;
     internal (uint Id, SpawnedMonster Monster)[] PendingStages = [];
+    internal readonly HashSet<PlayerMinions.Attack> MinionAttacks = [];
     public void Clear() => Stop.Cancel();
 }
 
@@ -72,6 +73,8 @@ static partial class Game
                 Drive(() => RunRage(remote, stream, ciphers, conn, state)),
                 Drive(() => RunFlaskChargeRegen(remote, stream, ciphers, conn, state)),
                 Drive(() => RunFlaskGrounds(remote, stream, ciphers, conn, state)),
+                Drive(() => RunPlayerMinions(remote, stream, ciphers, conn, state)),
+                Drive(() => RunFootstepSkills(remote, stream, ciphers, conn, state)),
                 Drive(() => ResumeBossStages(remote, stream, ciphers, conn, state)),
                 Drive(() => ContinueTour(remote, stream, ciphers, conn)));
         }

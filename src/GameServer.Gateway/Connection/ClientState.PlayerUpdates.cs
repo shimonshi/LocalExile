@@ -1,5 +1,5 @@
 // Named roles share one generation claim, while retaining each loop's existing cadence.
-enum PlayerUpdateRole { Recovery, Player, MonsterAi, MonsterRegeneration, LivingCollisions, Charges, Fortification, Rage, FlaskCharges, FlaskGrounds, MonsterAction, Tour }
+enum PlayerUpdateRole { Recovery, Player, MonsterAi, MonsterRegeneration, LivingCollisions, Charges, Fortification, Rage, FlaskCharges, FlaskGrounds, MonsterAction, Tour, Minions, Footsteps }
 interface IPlayerUpdateSchedule
 {
     double Now(ClientState conn);
@@ -11,6 +11,8 @@ interface IPlayerUpdateSchedule
 sealed partial class ClientState
 {
     internal ITransientCombatState? PlayerUpdatesState;
+    internal double FootstepRun;
+    internal readonly Dictionary<uint, double> TemporarySkillEffects = [];
     internal ConnectionWorker PlayerUpdatesWorker { get; } = new("player-updates");
 
     internal void RetirePlayerUpdates()

@@ -22,7 +22,9 @@ static partial class Game
     internal static int PlayerAccuracy(ClientState conn, IReadOnlyDictionary<uint, int>? player = null) =>
         PlayerBlindAccuracy(conn, conn.Pools.Accuracy, player);
     internal static int PlayerEvasion(ClientState conn, IReadOnlyDictionary<uint, int>? player = null) =>
-        TimedBlind.Apply(conn.Pools.Evasion, PlayerBlindValue(conn, player).Less);
+        TimedBlind.Apply(PlayerEvasionBase(conn, ResourceEffectsTime(conn)), PlayerBlindValue(conn, player).Less);
+    internal static int PlayerEvasion(ClientState conn, double now) =>
+        TimedBlind.Apply(PlayerEvasionBase(conn, now), PlayerBlindValue(conn).Less);
     static void WithBlind(ClientState conn, Dictionary<uint, int> stats)
     {
         var blind = PlayerBlindValue(conn, stats);
@@ -50,13 +52,13 @@ static partial class Game
         var value = state.Read(at, immune);
         if (immune) return (0, 0);
         if (target.RampageBlindUntil > at && value.Less < 20) value = (20, target.RampageBlindUntil);
-        return conn.FlaskGrounds.Accuracy(id, 100) != 100 && smokeLess > value.Less ? (smokeLess, 0) : value;
+        return (conn.FlaskGrounds.Blinded(id) || conn.BlindAura.Blinded(id)) && smokeLess > value.Less ? (smokeLess, 0) : value;
     }
     internal static int MonsterBlindRating(ClientState conn, uint id, SpawnedMonster target, int rating, double at,
         IReadOnlyDictionary<uint, int>? player = null)
     {
         // The synchronous caller reuses its captured sources. Never build a full player panel for each target.
-        int smoke = conn.FlaskGrounds.Accuracy(id, 100) == 100 ? 0
+        int smoke = !conn.FlaskGrounds.Blinded(id) && !conn.BlindAura.Blinded(id) ? 0
             : BlindEffectLess(player ?? CharacterStatSources(conn).Stats);
         return TimedBlind.Apply(rating, MonsterBlindValue(conn, id, target, at, smoke).Less);
     }
@@ -100,6 +102,7 @@ static partial class Game
             state.CollectRetiredTargets(conn);
             bool work = state.PlayerBlind.Read(now).Less > 0 || state.PlayerBlind.Sent.Less > 0 || state.Targets.Count > 0
                 || conn.RetiredResourceBuffs.Count > 0 || conn.FlaskGrounds.BlindedMonsters().Any()
+                || conn.Monsters.Keys.Any(conn.BlindAura.Blinded)
                 || conn.Monsters.Values.Any(m => m.RampageBlindUntil > now);
             if (!work) return null;
             var player = snapshot ?? CharacterPlayerStats(conn); // One fresh snapshot for the whole publication pass, at the gate.
@@ -135,7 +138,7 @@ static partial class Game
             Present(PlayerId, state.PlayerBlind, PlayerBlindValue(conn, player), conn.PlayerLife == 0 || BlindImmune(conn, player), true);
             foreach (var (id, target) in conn.Monsters)
             {
-                if (!state.Targets.ContainsKey(id) && target.RampageBlindUntil <= now && conn.FlaskGrounds.Accuracy(id, 100) == 100) continue;
+                if (!state.Targets.ContainsKey(id) && target.RampageBlindUntil <= now && !conn.FlaskGrounds.Blinded(id) && !conn.BlindAura.Blinded(id)) continue;
                 var value = MonsterBlindValue(conn, id, target, now, smoke);
                 Present(id, state.TargetBlind(id, target), value,
                     target.Dead || target.Life == 0 || target.Mods.Effects["cannot_be_blinded"] != 0, false);
@@ -145,4 +148,46 @@ static partial class Game
     }
     internal static Task SendBlind(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn) =>
         Send(remote, stream, ciphers, [], null, atGate: () => BlindPresentation(conn));
+
+    internal const string VsBlindedCriticalStat = "critical_strike_chance_+%_vs_blinded_enemies";
+    internal const string FromBlindedDamageTakenStat = "damage_taken_+%_from_blinded_enemies";
+
+    internal static bool Blinded(ClientState conn, uint monster) => conn.Monsters.TryGetValue(monster, out var target)
+        && !target.Dead && target.Life > 0 && target.Mods.Effects["cannot_be_blinded"] == 0
+        && (conn.FlaskGrounds.Blinded(monster) || conn.BlindAura.Blinded(monster)
+            || target.RampageBlindUntil > ResourceEffectsTime(conn)
+            || conn.ResourceEffectsState is ResourceEffectsState owner && owner.Targets.TryGetValue(monster, out var value)
+                && ReferenceEquals(value.Target, target) && value.Blind.Read(ResourceEffectsTime(conn)).Less > 0);
+
+    internal static int UnderBlind(ClientState conn, uint monster, int value) =>
+        conn.Monsters.TryGetValue(monster, out var target) ? MonsterBlindRating(conn, monster, target, value, ResourceEffectsTime(conn)) : value;
+
+    static int StatOf(IReadOnlyDictionary<uint, int> stats, string name) =>
+        Stats.Key(name) is uint key ? stats.GetValueOrDefault(key) : 0;
+
+    // critical_strike_chance_+%_vs_blinded_enemies (PoB "against Blinded Enemies": ActorCondition enemy Blinded) is an
+    // increase: a hit's chance against a Blinded target is recomputed from its base with it in the increased sum, never
+    // the final chance scaled. Each site computes that second chance once (null without the stat) and picks it here.
+    internal static int CriticalChanceOn(ClientState conn, uint target, int chance, int? vsBlinded) =>
+        vsBlinded is int blinded && Blinded(conn, target) ? blinded : chance;
+
+    // The default attack's (and an ordinary bow's) chance against a Blinded target: the main hand's base with the pooled
+    // attack increases and the vs-Blinded one, as Pools.AttackCriticalStrikeChance is built. A release keeps the
+    // unprohibited chance, as the bow's ordinary one; the roll checks the prohibitions.
+    internal static int? AttackCriticalChanceVsBlinded(ClientState conn, IReadOnlyDictionary<uint, int> player, bool release = false)
+    {
+        if (StatOf(player, VsBlindedCriticalStat) is not (not 0 and var extra)) return null;
+        var weapon = WeaponProfileFor(conn, activeSet: true);
+        return AttackBaseCriticalStrike.Chance(!weapon.Unarmed, weapon.Critical, conn.Pools.CriticalStrikeChancePct + extra,
+            name => release && IsCriticalProhibition(name) ? 0 : StatOf(player, name));
+    }
+
+    // A supported gem's chance against a Blinded target (its attack or spell base, the pooled and own increases).
+    internal static int? SupportedCriticalChanceVsBlinded(ClientState conn, ushort skillId, bool release) =>
+        conn.Pools.VsBlindedCriticalPct is not 0 and var extra ? SupportedCriticalChanceFor(conn, skillId, release, extra) : null;
+
+    // damage_taken_+%_from_blinded_enemies (PoB DamageTaken INC, "from Blinded Enemies") for a Blinded monster's hits, where
+    // it joins the other increased damage taken (shock), and the ticks of the ignite its hit inflicted (Advance's takenFrom).
+    internal static int DamageTakenFromBlindedPct(ClientState conn, uint monster, IReadOnlyDictionary<uint, int> player) =>
+        Blinded(conn, monster) ? StatOf(player, FromBlindedDamageTakenStat) : 0;
 }

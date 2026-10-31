@@ -64,11 +64,13 @@ static partial class Game
                 string.Join(", ", stats.Select(s => $"{s.Stat} {s.Value}")) + $"; walk estimate {conn.Walk.Speed:0.##} cells/s");
             state.Packets.AddRange(UtilityFlasks.StartPackets(effect, PlayerId)
                 .Select(p => new FlaskOutput(p, $"0x01c1 player buff: {type.Name} (flask {slot}), {seconds:0.##} s")));
-            MakeFlaskGroundsLocked(conn, local, seconds, now);
+            FlaskToLinkedTargetsLocked(conn, flask.Item, local, utility, Get);
+            MakeFlaskGroundsLocked(conn, local, seconds, now, character);
             state.StatRevision++;
             state.Enqueue(new(FlaskEnchantments.Trigger.Adjacent, flask.Id, (byte)slot), signal?.Chain);
         }) is null) return false;
         await PublishFlaskChanges(remote, stream, ciphers, conn);
+        if (CurrentGameWork && !conn.Closed && !conn.LeavingArea) await EnemyDebuffsTick(remote, stream, ciphers, conn, AreaTime(conn));
         return true;
     }
 

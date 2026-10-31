@@ -27,11 +27,16 @@ An ordinary connection's resources do not depend on the optional provider's life
 Current module reload policy closes affected optional areas; durable class progress remains available on re-entry.
 Already active areas register a Gateway identity for current Game replacement to resume player updates.
 A separate Game lifetime lease claims the current area loops, independently of Rampage and resources.
-It starts recovery, the slower player tick, AI, monster regeneration, collisions, Charges, Fortification, Rage and flask charges.
+It starts recovery, the slower player tick, AI, monster regeneration, collisions, Charges, Fortification, Rage, flask charges,
+grounds, and the current minion/link and footstep roles at their existing cadences.
 Retirement cancels old roles, and completion cannot release a replacement's claim.
 Gateway server frames retain their existing single framework loop.
 Tour is a finite guarded continuation; its normal completion does not stop the area owner.
-Pending boss stages resume their existing deadline, and old projectile runtimes retire with the host lifetime.
+Pending boss stages and fighting-minion contacts resume their existing deadlines, and old projectile runtimes retire
+with the host lifetime. The neutral minion roster stays on the connection; Game replacement preserves its identity.
+Minions step before links at 100 ms. Spirit, totem and enemy-aura publication rejects retired rules before bookkeeping.
+Owned monster creation commits its roster callback with native create/wake at the current gate; pending summons
+are consumed only at admission. Footsteps keep their animation progress and temporary-art deadlines on the connection.
 Send-gate generation checks reject queued old output; old full stat/skill refreshes cannot overwrite current Blind.
 Ordinary connections keep their area and resume recovery and Blind publication without a new character action.
 Retired monster contacts are refused before hit bookkeeping, and retired Rage publishers stop before stat construction.
@@ -40,7 +45,7 @@ Retired monster contacts are refused before hit bookkeeping, and retired Rage pu
 |---|---|
 | 4174 an infinite pursuit | Final Dexterity adds flat Mana before increases; Intelligence's inherent Mana is removed |
 | 22720 we know all | Existing maximum-Mana attack lightning; signed -100% cost reduction doubles the supported cost |
-| 26415 don't panic yet | Ward, then typed ES, then physical-only defensive Mana; 20% post-Ward hit damage recouped as Mana |
+| 26415 don't panic yet | Nearest-totem redirection, Ward, typed ES, then physical-only defensive Mana; 20% post-Ward hit damage recouped as Mana |
 | 53715 breathe deep | Accepted continuous Mana flask recovery also earns Life; independent queues and enduring Mana remain |
 | 2266 there is more | Existing maximum/minimum Power and Frenzy charge consumers |
 | 863 wait a little | Actual accepted Mana spending grants 10 Rage per 200, retaining the remainder |
@@ -82,6 +87,10 @@ The current resource writer owns expiry; pending End edges and presentation data
 End reuse checks the accepted activation, original item/cell and current enchant again at payment, so old expiry,
 manual refresh, moved/replaced items and removed enchants cannot remove or reuse a newer effect.
 Smoke, consecrated ground and taunt updates share the current area claim and keep pending output across replacement.
+Stationary consecrated ground, lingering coverage and scaled effect retain main's rules. Taunt uses the accepted
+character snapshot and duration modifiers; its recovery buff keeps values `[PlayerId, 1]`.
+Linked-target utility effects are installed in the same accepted payment transaction, with main's distinct recipient
+scaling and current link-step expiry. Onslaught retains the character's additional effect scaling.
 Each trigger root retains neutral chain data for accepted recipients and its generated Adjacent edges.
 Payment records recipient progress atomically; replacement skips paid recipients and finishes unprocessed ones.
 Distinct later roots/End events use fresh progress, and reciprocal Adjacent edges terminate within their chain.
@@ -93,7 +102,7 @@ Destination loading freezes remaining Recoup and player Blind duration until are
 A refused transfer resumes the live draft and separately discards loading recovery; it does not restore that checkpoint.
 Transfer tickets are character-bound, one-use and tied to both host generations.
 
-Timed Blind, smoke and Rampage Blind share one strongest Accuracy/Evasion reduction, applied once.
+Timed Blind, smoke, passive-aura Blind and Rampage Blind share one strongest Accuracy/Evasion reduction, applied once.
 Immunity, target identity and removal apply to combat and publication, including owned-actor contacts.
 Native timed-buff renewal tracks its own duration independently of the merged strongest stat value.
 Publication captures sources once per pass; target count does not multiply full player-stat construction.
@@ -108,6 +117,16 @@ Gateway Send/Reply sinks and dynamic mod fallback remain in that factory; retire
 This dispatch boundary does not promise that every mid-command file-watcher race is safe beyond the existing guards.
 
 ## Validation limits
+
+The current candidate merges frozen `57053948` with pinned main
+`bf1fd6d061b0a00da3456b70931ad71d2ff7619b` (#456). Both ancestries are retained.
+The combined source preserves the four newer optional descriptors and generic aura/granted-skill/minion APIs.
+The two existing Whisperer Facts add combined controls for totem/Ward/ES/Mana/Recoup, strongest aura Blind,
+distinct-assembly minion contact and minion/link handover, linked-flask Onslaught scaling and stationary-ground linger.
+Solution build and bounded focused checks are local preparation; this combined head has no full-suite, native or
+independent-review acceptance yet. Exact current-head results belong to the PR's revision-specific receipts.
+
+The evidence below is historical and keeps its tested source/base scope.
 
 The modular feature was reconstructed at main `33ea01513d38a839da09c0e77900e106540459dc` from frozen `918fbc6e`,
 originally based on merged main `825b9711`.
@@ -154,6 +173,9 @@ assemblies, unfinished recipients and reciprocal Adjacent edges. It checks no re
 and refusal before payment after old Game retirement. Captured production logs check accepted 7.2-second uses,
 native Start/natural End labels and actual paid Iron Flask Ward restoration.
 The `5f284df6` native V4 run was partial (34 checks), stopping on the missing accepted-use log before utility reload.
-The chain/log correction has deterministic evidence only; it does not turn that run into native acceptance.
+The corrected `57053948` on main `cc0f9c34` subsequently passed the recorded solution build (zero warnings/errors),
+Core 436, Data 45, Gateway 15, unchanged native V4 all 36 controls and fresh independent R6 (no confirmed P1/P2).
+That exact native run includes one enchanted utility surviving an extra Game reload and two 7.2-second uses
+with charges 60 -> 30 -> 0 from one input. These are historical receipts for `57053948`, not the new combined base.
 Current full-suite, independent-review and native acceptance require their own exact-head PR receipts;
 these deterministic/build checks and historical full/native passes do not establish whole-class readiness.

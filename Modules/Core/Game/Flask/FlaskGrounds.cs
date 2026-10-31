@@ -6,45 +6,43 @@ static partial class Game
 {
     internal static readonly Lazy<Dictionary<FlaskGrounds.Kind, (string Ao, int ArtRadius)>> FlaskGroundArt = new(() => FlaskGrounds.LoadArt("data"));
 
-    // Called in the accepted charge transaction, under Monsters. The accepted position/deadline and
-    // output receipts survive replacement without retaining a Game closure or creating another timer.
-    static void MakeFlaskGroundsLocked(ClientState conn, IReadOnlyDictionary<string, int> local, double seconds, double now)
+    // Ground creation belongs to the accepted charge transaction. Its art receipts and deadline survive
+    // replacement, while taunt uses the same accepted character snapshot as the utility effect.
+    static void MakeFlaskGroundsLocked(ClientState conn, IReadOnlyDictionary<string, int> local, double seconds,
+        double now, IReadOnlyDictionary<uint, int> player)
     {
         var at = conn.Walk.Position(now);
-        var packets = Automation(conn).Packets;
         foreach (var (kind, radius) in FlaskGrounds.OnUse(local))
         {
-            FlaskGrounds.Ground ground;
             if (kind == FlaskGrounds.Kind.Taunt)
             {
-                ground = new(kind, at.X, at.Y, radius, now + FlaskGrounds.TauntSeconds);
-                foreach (var (id, m) in conn.Monsters)
-                    if (!m.Dead && m.Life > 0 && m.Hostile && ground.Covers(m.Walk.Position(now))) ground.Taunted[id] = conn.NextBuff++;
-                uint taunt = BitConverter.SingleToUInt32Bits((float)FlaskGrounds.TauntSeconds);
-                foreach (var (id, buff) in ground.Taunted)
-                    packets.Add(InstanceEntities.AddBuff(id, buff, FlaskGrounds.TauntedBuffRow, PlayerId, u68: taunt));
+                double duration = TauntSeconds(name => Stats.Key(name) is uint key ? player.GetValueOrDefault(key) : 0);
+                TauntLocked(conn, at, radius, now, duration);
+                continue;
             }
-            else
-            {
-                uint? obj = null;
-                if (FlaskGroundArt.Value.TryGetValue(kind, out var art))
-                {
-                    obj = conn.NextObjectId++;
-                    float scale = (float)(radius * (250.0 / 23) / Math.Max(1, art.ArtRadius));
-                    var effect = new EffectObject(at.X, at.Y, art.Ao) { Flags0 = EffectObject.FixedRotation, Scale = scale };
-                    packets.Add(InstanceEntities.CreateObject(obj.Value, InstanceEntities.ObjectTypeHash(EffectObject.TypePath), effect.Blob()));
-                    packets.Add(InstanceProtocol.EnterWakeZone(obj.Value));
-                }
-                ground = new(kind, at.X, at.Y, radius, now + seconds, obj);
-            }
-            conn.FlaskGrounds.Add(ground);
+            conn.FlaskGrounds.Add(new(kind, at.X, at.Y, radius, now + seconds,
+                QueueGroundArtLocked(conn, kind, at, radius)));
         }
     }
 
-    // The existing area claim owns this 100 ms role too: smoke/consecration/taunt bookkeeping and
-    // pending removals must move together, rather than an old timer dropping the current stat refresh.
+    static uint? QueueGroundArtLocked(ClientState conn, FlaskGrounds.Kind kind, (int X, int Y) at, int radius)
+    {
+        if (!FlaskGroundArt.Value.TryGetValue(kind, out var art)) return null;
+        uint obj = conn.NextObjectId++;
+        float scale = (float)(radius * (250.0 / 23) / Math.Max(1, art.ArtRadius));
+        var effect = new EffectObject(at.X, at.Y, art.Ao) { Flags0 = EffectObject.FixedRotation, Scale = scale };
+        var packets = Automation(conn).Packets;
+        packets.Add(new(InstanceEntities.CreateObject(obj, InstanceEntities.ObjectTypeHash(EffectObject.TypePath), effect.Blob()),
+            $"0x02b9 create effect 0x{obj:x} {art.Ao} at ({at.X}, {at.Y}), scale {scale:0.###} for radius {radius}"));
+        packets.Add(InstanceProtocol.EnterWakeZone(obj));
+        return obj;
+    }
+
+    // The current area claim advances flask and stationary grounds together: expiry, smoke, linger and
+    // presentation cannot be stranded in an old timer when Game is replaced.
     internal static void AdvanceFlaskGrounds(ClientState conn, PlayerUpdatesState updates)
     {
+        if (conn.FlaskGrounds.Any) _ = FlaskGroundArt.Value;
         lock (conn.Monsters)
         {
             if (!PlayerUpdatesCurrent(conn, updates) || conn.LeavingArea || conn.Paused || !conn.FlaskGrounds.Any) return;
@@ -52,27 +50,32 @@ static partial class Game
             var state = conn.FlaskGrounds;
             var pending = Automation(conn);
             foreach (var ground in state.Expire(now))
-            {
-                if (ground.Object is uint obj) pending.Packets.Add(InstanceProtocol.RemoveObject(obj));
-                foreach (var (id, buff) in ground.Taunted)
-                    if (conn.Monsters.ContainsKey(id)) pending.Packets.Add(InstanceEntities.RemoveBuff(id, buff));
-            }
+                if (ground.Object is uint obj) pending.Packets.Add(new(InstanceProtocol.RemoveObject(obj),
+                    $"0x02bb remove effect 0x{obj:x} ({ground.Kind} ends)"));
             foreach (uint gone in state.BlindedMonsters().Except(conn.Monsters.Keys)) state.SetBlinded(gone, false, () => 0);
             foreach (var (id, monster) in conn.Monsters)
             {
-                bool inside = !monster.Dead && monster.Life > 0 && monster.Mods.Effects["cannot_be_blinded"] == 0
+                bool inside = monster.Hostile && !monster.Dead && monster.Life > 0 && monster.Mods.Effects["cannot_be_blinded"] == 0
                     && state.Covers(FlaskGrounds.Kind.SmokeCloud, monster.Walk.Position(now));
                 if (state.SetBlinded(id, inside, () => conn.NextBuff++) is { } change)
-                    pending.Packets.Add(change.Added
+                    pending.Packets.Add(new(change.Added
                         ? InstanceEntities.AddBuff(id, change.Buff, FlaskGrounds.BlindedBuffRow, PlayerId)
-                        : InstanceEntities.RemoveBuff(id, change.Buff));
+                        : InstanceEntities.RemoveBuff(id, change.Buff),
+                        $"0x{(change.Added ? "01c1" : "01c2")} monster 0x{id:x} {(change.Added ? "blinded in the smoke cloud" : "no longer blinded")}"));
             }
-            bool on = conn.PlayerLife > 0 && state.Covers(FlaskGrounds.Kind.ConsecratedGround, conn.Walk.Position(now));
-            if (state.SetConsecrated(on, () => conn.NextBuff++) is { } consecrated)
+            bool alive = conn.PlayerLife > 0;
+            var here = conn.Walk.Position(now);
+            var (stale, make) = state.Stationary(alive && now >= conn.Walk.ArrivesAt && !InTown(conn), here);
+            if (stale?.Object is uint old) pending.Packets.Add(new(InstanceProtocol.RemoveObject(old),
+                $"0x02bb remove effect 0x{old:x} (stationary consecrated ground)"));
+            if (make > 0) state.PlaceStationary(new(FlaskGrounds.Kind.ConsecratedGround, here.X, here.Y, make,
+                double.PositiveInfinity, QueueGroundArtLocked(conn, FlaskGrounds.Kind.ConsecratedGround, here, make)));
+            if (state.SetConsecrated(state.OnConsecrated(alive, here, now), () => conn.NextBuff++) is { } consecrated)
             {
-                pending.Packets.Add(consecrated.Added
+                pending.Packets.Add(new(consecrated.Added
                     ? InstanceEntities.AddBuff(PlayerId, consecrated.Buff, FlaskGrounds.ConsecratedBuffRow, PlayerId)
-                    : InstanceEntities.RemoveBuff(PlayerId, consecrated.Buff));
+                    : InstanceEntities.RemoveBuff(PlayerId, consecrated.Buff),
+                    $"0x{(consecrated.Added ? "01c1" : "01c2")} player {(consecrated.Added ? "on" : "off")} consecrated ground"));
                 pending.StatRevision++;
             }
             state.StopTickerIfIdle();

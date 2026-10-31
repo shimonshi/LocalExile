@@ -7,6 +7,12 @@ static partial class Game
         var state = ResourceEffectsOf(conn);
         if (!ResourceEffectsCurrent(conn, state) || conn.LeavingArea) return 0;
         int Get(string name) => Stats.Key(name) is uint key ? player.GetValueOrDefault(key) : 0;
+        // Redirect the combined non-chaos hit before Ward, retaining the physical share for Mana.
+        int nonChaos = (int)Math.Min(int.MaxValue, (long)physical + other);
+        var kept = TotemsTakeHitLocked(conn, nonChaos, chaos, at, player);
+        physical = nonChaos == 0 ? 0 : (int)((long)physical * kept.NonChaos / nonChaos);
+        other = kept.NonChaos - physical;
+        chaos = kept.Chaos;
         (physical, other, chaos) = AbsorbPlayerWard(conn, physical, other, chaos, at, player);
         int physicalLife = conn.EnergyShield.Damage(physical, false, at);
         long rest = (long)conn.EnergyShield.Damage(other, false, at) + conn.EnergyShield.Damage(chaos, true, at);
