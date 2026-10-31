@@ -10,7 +10,6 @@ sealed class ResourceEffectsState(IModuleLifetime? rules, IModuleLifetime? sourc
     internal readonly ManaRecoupState Mana = new();
     internal readonly TimedBlind PlayerBlind = new();
     internal readonly Dictionary<uint, (SpawnedMonster Target, TimedBlind Blind)> Targets = [];
-    internal readonly HashSet<Flasks.Effect> LifeCopies = [];
     readonly HashSet<(uint Actor, ushort Buff)> retired = [];
     internal sealed record Snapshot(ManaRecoupState.Carried Mana, (double Seconds, int Less)[] Blind);
     internal Snapshot? TransferCheckpoint;
@@ -47,10 +46,13 @@ sealed class ResourceEffectsState(IModuleLifetime? rules, IModuleLifetime? sourc
         if (PlayerBlind.Buff != 0) retired.Add((Program.PlayerId, PlayerBlind.Buff));
         foreach (var (id, value) in Targets)
             if (value.Blind.Buff != 0) retired.Add((id, value.Blind.Buff));
-        if (connection is not null)
-            foreach (var effect in connection.FlaskEffects.End(e => LifeCopies.Contains(e)))
+        // Accepted flask records contain only Gateway data. Game retirement hands them to the next writer;
+        // explicit/source/death/connection retirement keeps the existing copied-effect cleanup policy.
+        if (connection is not null && (Rules is not { IsActive: false } || Source is { IsActive: false }
+            || connection.Closed || connection.RageRetired))
+            foreach (var effect in connection.FlaskEffects.End(e => e.CopyManaToLife))
                 if (effect.Buff != 0) retired.Add((Program.PlayerId, effect.Buff));
-        Mana.Clear(); PlayerBlind.Clear(); Targets.Clear(); LifeCopies.Clear(); TransferCheckpoint = null;
+        Mana.Clear(); PlayerBlind.Clear(); Targets.Clear(); TransferCheckpoint = null;
     }
 }
 

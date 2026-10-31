@@ -627,7 +627,7 @@ Part of [Status](../Status.md); what to build next in this area is in
   share the existing resource writer, with synchronous lethal-Ignite cleanup before Mana recovery.
   Timed/smoke/Rampage Blind use one strongest value across ordinary and owned contacts and presentation.
   Two deterministic Gateway Facts cover resource, paid-refund, send-gate, transfer and retirement composition,
-  including distinct-Game utility expiry handover and actual once-only End-trigger payment.
+  including distinct-Game utility expiry/End payment and recovery-flask admission before blocked output.
   Current-head results are recorded in PR #333; partial A/B native checks do not cover reload or whole-class acceptance.
   See [Whisperer](../docs/game/whisperer.md).
 

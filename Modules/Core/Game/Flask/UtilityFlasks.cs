@@ -54,10 +54,10 @@ static partial class Game
                 utility.Extra is null ? null : conn.NextBuff++, stats, now, now + seconds);
             var state = Automation(conn);
             if (conn.UtilityFlaskEffects.Of(flask.Id) is { } previous)
-                state.Packets.AddRange(UtilityFlasks.EndPackets(previous, PlayerId));
+                state.Packets.AddRange(UtilityFlasks.EndPackets(previous, PlayerId).Select(p => new FlaskOutput(p)));
             UtilityFlasks.Start(conn, effect, () => RecomputePoolsAndSpeed(conn));
             UtilityFlasks.RestoreWardAfterPaidUse(conn.Ward, name => local.GetValueOrDefault(name), now);
-            state.Packets.AddRange(UtilityFlasks.StartPackets(effect, PlayerId));
+            state.Packets.AddRange(UtilityFlasks.StartPackets(effect, PlayerId).Select(p => new FlaskOutput(p)));
             MakeFlaskGroundsLocked(conn, local, seconds, now);
             state.StatRevision++;
             state.Enqueue(new(FlaskEnchantments.Trigger.Adjacent, flask.Id, (byte)slot));
@@ -112,7 +112,7 @@ static partial class Game
             var state = Automation(conn);
             foreach (var effect in ended)
             {
-                state.Packets.AddRange(UtilityFlasks.EndPackets(effect, PlayerId));
+                state.Packets.AddRange(UtilityFlasks.EndPackets(effect, PlayerId).Select(p => new FlaskOutput(p)));
                 // Record this admitted edge before any await or second lifetime read can lose it.
                 if (!dead && !Gone(effect)) state.Enqueue(new(FlaskEnchantments.Trigger.End,
                     effect.ItemId, effect.Slot, effect.Activation));
@@ -127,14 +127,35 @@ static partial class Game
         lock (conn.Monsters)
             if (!CurrentGameWork || conn.Closed || conn.LeavingArea
                 || state.Packets.Count == 0 && state.StatRevision == state.PresentedStatRevision) return;
-        await Send(remote, stream, ciphers, [], null, atGate: () =>
+        while (true)
         {
+            FlaskOutput output;
             lock (conn.Monsters)
             {
-                if (!CurrentGameWork || conn.Closed || conn.LeavingArea || conn.RageRetired || state.Packets.Count == 0) return null;
-                byte[] packet = [.. state.Packets.SelectMany(p => p)]; state.Packets.Clear(); return packet;
+                if (!CurrentGameWork || conn.Closed || conn.LeavingArea || conn.RageRetired || state.Packets.Count == 0) break;
+                output = state.Packets[0];
             }
-        });
+            bool sent = false;
+            await Send(remote, stream, ciphers, [], output.Log, atGate: () =>
+            {
+                lock (conn.Monsters)
+                {
+                    if (!CurrentGameWork || conn.Closed || conn.LeavingArea || conn.RageRetired || state.Packets.Count == 0
+                        || !ReferenceEquals(state.Packets[0], output)) return null;
+                    // Pool/reservation output samples current values, never a pre-reload instant snapshot.
+                    byte[] packet = output.Pool switch
+                    {
+                        FlaskOutputPool.Life => InstanceProtocol.LifeUpdate(PlayerId, conn.PlayerLife),
+                        FlaskOutputPool.Mana => WithOwnAuraChanges(conn, () => InstanceProtocol.LifeUpdate(PlayerId,
+                            conn.PlayerMana, (uint)ReservedMana(conn), pool: ManaPool)),
+                        _ => output.Packet,
+                    };
+                    state.Packets.RemoveAt(0); sent = true; return packet;
+                }
+            });
+            if (sent && output.Pool == FlaskOutputPool.Mana && CurrentGameWork)
+                await SendPlayerEnergyShield(remote, stream, ciphers, conn);
+        }
         long revision;
         lock (conn.Monsters)
         {

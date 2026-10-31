@@ -70,8 +70,12 @@ The recovery writer preserves Life, Zealot's Oath, RF and leech ordering.
 Lethal Ignite clears transient resources/Blind before any await and prevents Mana recovery in the same frame.
 Continuous flask Life copying uses the accepted use's recipient snapshot across a paid node refund.
 Instant and at-end Mana do not copy; the original Mana queue and duration remain independent of the Life recipient.
-Accepted recovery uses retain main's Adjacent/LifeFlask triggers after the charge spend and current-owner check.
-The flask-bar gate rechecks that owner before spending, so a queued use cannot charge after source retirement.
+Recovery-flask payment commits instant pools, continuous queues, captured Life recipient and Adjacent/LifeFlask edges
+under the same flask-bar transaction, before any inventory-send await.
+The accepted recipient is neutral effect data, retained over Game replacement without an old Game object.
+The flask-bar gate rechecks the admitting owner and item/cell before spending, so queued retired uses cannot charge.
+Current publication drains retained inventory/use-sound/buff receipts once and samples current pools at its send gate.
+Game retirement preserves paid effects; explicit/source/death/connection retirement retains copied-effect cleanup.
 Life copying from a Mana flask does not turn that use into a LifeFlask trigger.
 Utility-flask payment installs the accepted stat snapshot, pause-clock deadline and output receipts in one transaction.
 The current resource writer owns expiry; pending End edges and presentation data survive Game replacement.
@@ -122,5 +126,12 @@ utility fixture and cannot certify that behavior. The utility correction extends
 assemblies, actual accepted catalog effects, a held send gate, reload-gap expiry and the real current drainer/payment.
 It checks remaining duration, pause, exact End/removal identity, once-only reuse and charge spending, stale item/cell/enchant
 rejection, current smoke/consecration expiry and late old completion. Removing the expiry ownership guard makes it fail.
-Current full-suite, independent-review and native utility-reuse acceptance require their own exact-head PR receipts;
+At `b26a1aec`, full suites passed Core 436, Data 45 and Gateway 15; independent R4 separately confirmed current
+utility End reuse but found that recovery flasks could pay and lose their use during a blocked inventory send.
+The recovery correction extends the same Fact with distinct Game assemblies and actual catalog admission for ordinary
+50-Mana recovery, copied Life, instant Life/Mana, at-end/Enduring Mana and independent hybrid durations.
+It drives current production recovery, verifies one payment/Adjacent classification and native sound/buff output,
+and checks full-Mana leech/Recoup settlement plus retained pre-payment source-stop refusal.
+The `b26a1aec` native V4 run was partial; a separate ordinary Game-reload command dispatch failure is under investigation.
+Current full-suite, independent-review and native acceptance require their own exact-head PR receipts;
 these deterministic/build checks and historical full/native passes do not establish whole-class readiness.

@@ -155,13 +155,13 @@ public sealed class WhispererRuntimeTests
         Assert.Contains((FlaskEnchantments.Trigger.LifeFlask, acceptedLife.Id, (byte)1), FlaskSignals(c));
         c.FlaskEffects.End(_ => true);
         var atEnd = effect with { Started = 0, Ends = 1, ManaPerSecond = 0, ManaAtEnd = 50 };
-        Game.StartRecoveryEffectsLocked(c, Game.ResourceEffectsOf(c), [atEnd], copy: true);
+        Game.StartRecoveryEffectsLocked(c, [atEnd], copy: true);
         recovered = Game.AdvanceFlaskRecovery(c, 0, 1);
         Assert.Equal(50, recovered.Mana); Assert.Equal(0, recovered.Life);
         var queuedMana = effect with { Started = 10, Ends = 12, NoQueue = false, ManaStays = false };
         var queuedLife = effect with { Started = 10, Ends = 14, ManaPerSecond = 0, LifePerSecond = 20, NoQueue = false };
         Assert.Equal(2, queuedMana.Queue); Assert.Equal(1, queuedLife.Queue);
-        Game.StartRecoveryEffectsLocked(c, Game.ResourceEffectsOf(c), [queuedLife, queuedMana], copy: true);
+        Game.StartRecoveryEffectsLocked(c, [queuedLife, queuedMana], copy: true);
         recovered = Game.AdvanceFlaskRecovery(c, 10, 12);
         Assert.Equal(40 + recovered.Mana, recovered.Life, 7); Assert.Single(recovered.Ended);
     }
@@ -395,7 +395,7 @@ public sealed class WhispererRuntimeTests
             await Game.UseFlask("Whisperer", h.Wire, h.Ciphers, ordinary, 0);
             var accepted = Assert.Single(ordinary.FlaskEffects.End(_ => true));
             accepted = accepted with { Started = 1, Ends = 1 + accepted.Ends - accepted.Started };
-            Game.StartRecoveryEffectsLocked(ordinary, currentState, [accepted], copy: false);
+            Game.StartRecoveryEffectsLocked(ordinary, [accepted], copy: false);
             currentState.Mana.Hit(1, 1000, 20);
             double lifeRate = Game.LifeRegenPerSecond(ordinary), manaRate = Game.ManaRegenPerSecond(ordinary);
             var (normalCommands, normalReplies) = h.CommandsFor(ordinary);
@@ -434,6 +434,7 @@ public sealed class WhispererRuntimeTests
         ordinary.Closed = true;
         await AcrossGameAssemblies(h);
         await UtilityAcrossGameAssemblies(h);
+        await RecoveryAcrossGameAssemblies(h);
         Assert.Equal(definition.Identity, CharacterSaves.Load(c.Character!)!.MainAscendancy!.Selection);
     }
 
@@ -686,6 +687,139 @@ public sealed class WhispererRuntimeTests
             c.Closed = true; oldOwner.Stop(_ => { }); owner.Stop(_ => { }); if (held) gate.Release();
             if (oldState is not null) await oldState.Completion; if (currentCompletion is not null) await currentCompletion;
             Game.CombatLifetime = previousRules; Game.PlayerUpdatesSchedule = previousSchedule; Program.SetGameLogic(previousLogic); context.Unload();
+        }
+    }
+
+    // The real charge/send boundary, not a synthetic lifetime facade or a manually inserted recovery.
+    static async Task RecoveryAcrossGameAssemblies(Harness h)
+    {
+        const BindingFlags flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance;
+        var previousLogic = Program.Logic; var previousRules = Game.CombatLifetime; var previousSchedule = Game.PlayerUpdatesSchedule;
+        foreach (string scenario in new[] { "ordinary", "copied", "instantMana", "instantLife", "atEnd", "enduring", "hybrid" })
+        {
+            var oldOwner = new ModuleLifetime("Game"); var owner = new ModuleLifetime("Game");
+            var context = new AssemblyLoadContext("Whisperer accepted recovery " + scenario, isCollectible: true);
+            context.Resolving += (_, name) => AssemblyLoadContext.Default.Assemblies.FirstOrDefault(a => a.GetName().Name == name.Name);
+            var assembly = context.LoadFromAssemblyPath(typeof(Game).Assembly.Location); Assert.NotSame(typeof(Game).Assembly, assembly);
+            var game = assembly.GetType("Game")!;
+            object? Call(string name, params object?[] args) => game.GetMethods(flags).Single(m => m.Name == name && m.GetParameters().Length == args.Length).Invoke(null, args);
+            var c = h.NewConnection("recovery" + Guid.NewGuid().ToString("N"), optional: false); c.MainAscendancy = new();
+            c.PlayerSent = true; c.Wire = ("Whisperer", h.Wire, h.Ciphers); c.AiEnabled = false;
+            c.PlayerStats[Key("mana_regeneration_rate_per_minute_%")] = -PanelStats.BaseManaRegenPctPerMinute;
+            c.PlayerStats[Key("base_life_regeneration_rate_per_minute")] = 0;
+            c.PlayerStats[Key("life_regeneration_rate_per_minute_%")] = 0;
+            var runtime = new ManualRuntime { At = 10 }; c.ProjectileRuntimeState = runtime;
+            var before = new ManualUpdates(runtime) { At = 10 }; var after = new ManualUpdates(runtime) { At = 10 };
+            PlayerUpdatesState? oldState = null; Task? currentCompletion = null; Task? use = null;
+            var gate = Program.SendGates.GetValue(h.Ciphers, _ => new(1, 1)); bool held = false;
+            try
+            {
+                Game.CombatLifetime = oldOwner; Game.PlayerUpdatesSchedule = before; Program.SetGameLogic(new GameServer.Modules.Game.GameLogic(oldOwner));
+                Program.ActivatePlayerUpdates(c); oldState = Assert.IsType<PlayerUpdatesState>(c.PlayerUpdatesState); before.Completion = oldState.Completion;
+                await before.Next(PlayerUpdateRole.Recovery); await before.Next(PlayerUpdateRole.Player); await before.OtherRoles();
+                var type = Program.Items.Find(scenario == "instantLife" ? "Small Life Flask" : scenario == "hybrid" ? "Small Hybrid Flask" : "Small Mana Flask")!;
+                var item = ItemCatalog.Create(type) with { Charges = scenario == "instantLife" ? 21 : 24 };
+                string? localFlag = scenario.StartsWith("instant", StringComparison.Ordinal) ? "local_flask_recovers_instantly"
+                    : scenario == "atEnd" ? "local_flask_mana_recovery_occurs_instantly_at_end_of_flask_effect"
+                    : scenario == "enduring" ? "local_flask_effect_not_removed_at_full_mana" : null;
+                if (localFlag is not null)
+                    item = Program.Items.Mods.All.Where(m => m.GenerationType is 1 or 2 && m.WeightFor(type.Tags) > 0)
+                        .Select(m => item with { Mods = [.. item.Mods, m.With(ModSection.Explicit, m.MaxValues(), new Random(1))] })
+                        .First(i => ItemModStats.Local(i, Program.Items.Mods).GetValueOrDefault(localFlag) > 0);
+                var baseUse = Program.Items.FlaskOf(type)!;
+                if (scenario == "hybrid") item = item with { Charges = baseUse.MaxCharges };
+                var items = Game.ItemsOf(c);
+                foreach (var initial in items.Items(PlayerInventories.Flask).ToArray()) items.Remove(PlayerInventories.Flask, initial.Id);
+                var flask = items.Add(PlayerInventories.Flask, 0, 0, item);
+                c.PlayerLife = scenario == "instantLife" ? c.PlayerMaxLife - 5 : c.PlayerMaxLife - 100;
+                c.PlayerMana = scenario == "instantMana" ? c.Pools.Mana - 5 : 0;
+                if (scenario is "copied" or "atEnd") c.PlayerStats[Key("non_instant_mana_recovery_from_flasks_also_recovers_life")] = 1;
+                if (scenario == "hybrid") c.PlayerStats[Key("flask_mana_recovery_rate_+%")] = 100;
+                if (scenario == "instantMana") c.PlayerStats[Key(ManaRecoveryRules.RagePer200)] = 10;
+                var player = Game.CharacterPlayerStats(c);
+                int Get(string name) => Program.Stats.Key(name) is uint key ? player.GetValueOrDefault(key) : 0;
+                var local = ItemModStats.Local(item, Program.Items.Mods);
+                var accepted = FlaskRecovery.For(baseUse, item, local, Get, c.PlayerLife, c.PlayerMaxLife, c.Pools.Level);
+                var instant = FlaskRecovery.Instant(accepted, c.PlayerLife, c.PlayerMana, c.PlayerMaxLife, Game.UnreservedMana(c))!.Value;
+                var charge = FlaskCharges.Of(baseUse, local, Get);
+                var oldResource = Game.ResourceEffectsOf(c);
+                var leech = Game.LeechOf(c);
+                if (scenario == "instantMana")
+                {
+                    oldResource.Mana.Spent(199, 10); oldResource.Mana.Hit(10, 4, 20);
+                    leech.Mana.Configure(10, new(1, 1000, 1)); leech.Mana.Grant(10, 100, 1000, 100);
+                }
+                Assert.Equal(0, Game.ManaRegenPerSecond(c));
+                while (h.Wire.Plain.Reader.TryRead(out _)) { } h.Wire.Drain(h.Receive);
+                await gate.WaitAsync(); held = true;
+                before.At = runtime.At = after.At = 11;
+                Game.AreaUpdateContext.Value = oldState;
+                try { use = Game.UseFlask("Whisperer", h.Wire, h.Ciphers, c, 0); }
+                finally { Game.AreaUpdateContext.Value = null; }
+                Assert.False(use.IsCompleted); Assert.Equal(item.Charges - charge.ChargesPerUse, items.Items(PlayerInventories.Flask).Single().Item.Charges);
+                if (scenario == "copied") c.PlayerStats[Key("non_instant_mana_recovery_from_flasks_also_recovers_life")] = 0;
+                if (scenario == "instantMana")
+                {
+                    Assert.Equal(instant.Mana, c.PlayerMana); Assert.Equal(0, leech.Mana.Count);
+                    var settled = oldResource.Mana.Capture(11); Assert.Equal(199, settled.Spent); Assert.Equal(0m, settled.Pending);
+                    Assert.Equal(.6m, Assert.Single(settled.Recoup).Remaining); // Future Recoup survives full-pool settlement.
+                }
+                var native = c.FlaskAutomation.Packets.Where(p => p.Log?.StartsWith("0x01c1 player buff", StringComparison.Ordinal) == true)
+                    .Select(p => p.Packet.ToArray()).ToArray();
+                Assert.Equal(accepted.Seconds > 0 ? scenario == "hybrid" ? 2 : 1 : 0, native.Length);
+                var inventory = Assert.Single(c.FlaskAutomation.Packets,
+                    p => p.Log?.StartsWith("0x00bf flask", StringComparison.Ordinal) == true).Packet.ToArray();
+                int pending = c.FlaskAutomation.Packets.Count;
+                oldOwner.Stop(ex => throw ex); await oldState.Completion;
+                game.GetField("CombatLifetime", flags)!.SetValue(null, owner); game.GetField("PlayerUpdatesSchedule", flags)!.SetValue(null, after);
+                Program.SetGameLogic((IGameLogic)Activator.CreateInstance(assembly.GetType("GameServer.Modules.Game.GameLogic")!, flags, null, [owner], null)!);
+                var state = c.PlayerUpdatesState!; currentCompletion = (Task)state.GetType().GetField("Completion", flags)!.GetValue(state)!; after.Completion = currentCompletion;
+                var fast = await after.Next(PlayerUpdateRole.Recovery);
+                gate.Release(); held = false; await use;
+                Assert.Equal(pending, c.FlaskAutomation.Packets.Count); // The late old sender cannot consume current receipts.
+                await after.Next(PlayerUpdateRole.Player); await after.OtherRoles();
+                // Drive the actual replacement writer: pending native output first, then accepted recovery progress.
+                fast.Advance(11); fast = await after.Next(PlayerUpdateRole.Recovery);
+                Assert.Equal(instant.Life, c.PlayerLife); Assert.Equal(instant.Mana, c.PlayerMana);
+                Assert.Single(c.FlaskAutomation.Events, e => e.Trigger == FlaskEnchantments.Trigger.Adjacent && e.Item == flask.Id);
+                Assert.Equal(scenario is "instantLife" or "hybrid" ? 1 : 0, c.FlaskAutomation.Events.Count(e => e.Trigger == FlaskEnchantments.Trigger.LifeFlask));
+                if (accepted.Seconds > 0)
+                {
+                    if (scenario == "atEnd") Assert.Equal(0u, c.PlayerMana);
+                    if (scenario == "enduring")
+                    {
+                        c.PlayerMana = c.Pools.Mana;
+                        fast.Advance(11 + accepted.Seconds / 2); fast = await after.Next(PlayerUpdateRole.Recovery);
+                        Assert.True(c.FlaskEffects.Any); // Full Mana does not discard an accepted Enduring effect.
+                    }
+                    fast.Advance(11 + accepted.Seconds); fast = await after.Next(PlayerUpdateRole.Recovery);
+                    uint expectedMana = scenario == "enduring" ? (uint)Game.UnreservedMana(c)
+                        : (uint)Math.Min(Game.UnreservedMana(c), instant.Mana + accepted.Mana + accepted.ManaAtEnd);
+                    uint expectedLife = (uint)Math.Min(c.PlayerMaxLife, instant.Life + accepted.Life + (scenario == "copied" ? accepted.Mana : 0));
+                    Assert.Equal(expectedMana, c.PlayerMana); Assert.Equal(expectedLife, c.PlayerLife);
+                    if (scenario == "ordinary") Assert.Equal(50u, c.PlayerMana);
+                }
+                Assert.Equal(item.Charges - charge.ChargesPerUse, items.Items(PlayerInventories.Flask).Single().Item.Charges);
+                await (Task)Call("PublishFlaskChanges", "Whisperer", h.Wire, h.Ciphers, c)!;
+                Assert.False(c.Closed); Assert.False(c.LeavingArea);
+                var packets = new List<byte>(); while (h.Wire.Plain.Reader.TryRead(out var packet)) packets.AddRange(packet);
+                byte[] sent = [.. packets];
+                int Count(byte[] needle) { int count = 0, at = 0; while (at <= sent.Length - needle.Length)
+                    { int found = sent.AsSpan(at).IndexOf(needle); if (found < 0) break; count++; at += found + needle.Length; } return count; }
+                Assert.Equal(1, Count(InstanceItems.ItemUsed(item.TypeHash, PlayerInventories.InventoryId(PlayerInventories.Flask), flask.Id)));
+                Assert.Equal(1, Count(inventory));
+                foreach (var buff in native) Assert.Equal(1, Count(buff));
+                // Late old production continuations cannot reinstall the already consumed use or consume output.
+                var stale = Game.PublishFlaskChanges("Whisperer", h.Wire, h.Ciphers, c); Assert.True(stale.IsCompleted); await stale;
+                Assert.Empty(c.FlaskAutomation.Packets);
+                Assert.Empty(c.FlaskEffects.End(_ => true));
+            }
+            finally
+            {
+                c.Closed = true; oldOwner.Stop(_ => { }); owner.Stop(_ => { }); if (held) gate.Release();
+                if (use is not null) await use; if (oldState is not null) await oldState.Completion; if (currentCompletion is not null) await currentCompletion;
+                Game.CombatLifetime = previousRules; Game.PlayerUpdatesSchedule = previousSchedule; Program.SetGameLogic(previousLogic); context.Unload();
+            }
         }
     }
 

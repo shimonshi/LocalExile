@@ -10,7 +10,8 @@ static partial class Game
     // each with the flask's latest charges. `change` makes the change and returns what to send (removed ids and the changed
     // items), or null for nothing.
     internal static async Task ChangeFlaskBar(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn,
-        Func<PlayerInventories, (uint[] Removed, List<InventoryItem> Changed)?> change, Func<List<InventoryItem>, string> log)
+        Func<PlayerInventories, (uint[] Removed, List<InventoryItem> Changed)?> change, Func<List<InventoryItem>, string> log,
+        bool retainOutput = false)
     {
         await conn.FlaskBarGate.WaitAsync();
         try
@@ -22,6 +23,7 @@ static partial class Game
                 if (!CurrentGameWork || HardcoreProgressBlocked(conn)) return;
                 var items = ItemsOf(conn);
                 var before = items.Items(PlayerInventories.Flask).ToDictionary(i => i.Id, i => i.Item.Charges);
+                int outputAt = Automation(conn).Packets.Count;
                 if (change(items) is not { } done || done.Changed.Count == 0) return;
                 foreach (var changed in done.Changed)
                     if (before.TryGetValue(changed.Id, out int held) && changed.Item.Charges > held
@@ -32,13 +34,15 @@ static partial class Game
                 packet = InstanceItems.InventoryChange(PlayerInventories.InventoryId(PlayerInventories.Flask),
                     items.NextRevision(PlayerInventories.Flask), done.Removed, done.Changed);
                 message = log(done.Changed);
-                if (conn.ProjectileRuntime is { Active: true } session)
+                if (retainOutput) Automation(conn).Packets.Insert(outputAt, new(packet, message));
+                else if (conn.ProjectileRuntime is { Active: true } session)
                 {
                     session.Packet(packet, message);
                     return;
                 }
             }
-            await Send(remote, stream, ciphers, packet, message);
+            if (retainOutput) await PublishFlaskChanges(remote, stream, ciphers, conn);
+            else await Send(remote, stream, ciphers, packet, message);
         }
         finally
         {
@@ -64,10 +68,17 @@ static partial class Game
             });
             if (!enough || done is null) return null;
             spent = done;
-            accepted?.Invoke(done);
+            if (accepted is not null)
+            {
+                double now = conn.Clock.Elapsed.TotalSeconds;
+                if (conn.EntryProtection.End(now, conn.Walk.Position(now), action: true) is ushort buff)
+                    Automation(conn).Packets.Add(new(InstanceEntities.RemoveBuff(PlayerId, buff),
+                        "Grace Period ends: movement, action or deadline"));
+                accepted(done);
+            }
             return ([done.Id], [done]);
-        }, changed => $"0x00bf flask {slot}: {changed[0].Item.Charges}/{charges.MaxCharges} charges");
-        if (spent is not null) await EndGracePeriod(remote, stream, ciphers, conn, action: true);
+        }, changed => $"0x00bf flask {slot}: {changed[0].Item.Charges}/{charges.MaxCharges} charges", retainOutput: accepted is not null);
+        if (spent is not null && accepted is null) await EndGracePeriod(remote, stream, ciphers, conn, action: true);
         return spent;
     }
 
