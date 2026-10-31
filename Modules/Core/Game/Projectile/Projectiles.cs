@@ -227,7 +227,7 @@ static partial class Game
             {
                 if (!RampageEffectCurrent(Conn, ownedEpoch) || !target.Hostile || target.OwnerId is not null)
                     return ProjectileHitResult.Miss;
-                if (!shot.Spell && !RampageAttackHits(target, shot.Accuracy, contact.At / (double)ProjectileRuntime.QuantaPerSecond, random))
+                if (!shot.Spell && !RampageAttackHits(Conn, contact.Target.Id, target, shot.Accuracy, contact.At / (double)ProjectileRuntime.QuantaPerSecond, random))
                     return ProjectileHitResult.Miss;
                 if (MonsterBlocks(target, random, shot.Spell)) return ProjectileHitResult.Blocked;
                 var raw = shot.Hit.Scale(contact.Multiplier).Roll(random);
@@ -267,10 +267,10 @@ static partial class Game
             double more = contact.Multiplier * (contact.Phase > 0 ? shot.ReturnMultiplier : 1);
             if (!shot.Spell && shot.FarShot) more *= AntiquarianEffects.FarShot(contact.Projectile.Distance);
             var baseHit = contact.IsArea ? shot.AreaHit ?? shot.Hit : shot.Hit;
-            var packet = new SkillDamageContext(shot.Spell ? SkillHitKind.Spell : SkillHitKind.Attack,
-                CharacterPlayerStats(Conn)).Hit(baseHit).Scale(more);
-            var gambler = GamblerFor(CharacterPlayerStats(Conn));
             var player = CharacterPlayerStats(Conn);
+            var packet = new SkillDamageContext(shot.Spell ? SkillHitKind.Spell : SkillHitKind.Attack,
+                player).Hit(baseHit).Scale(more);
+            var gambler = GamblerFor(player);
             var rolled = GameEvents.WithOutgoingDamage(Conn, player, target, (gambler with { DamageMorePct = 0 }).RollOutgoingHit(packet, random));
             int chance = contact.Projectile.Form > 0 ? shot.SecondFormCriticalChance ?? shot.CriticalChance : shot.CriticalChance;
             // Base chance/multiplier belong to release; conditional owner state is read at this contact.
@@ -289,6 +289,7 @@ static partial class Game
             RageOnHitLocked(Conn, attack: !shot.Spell, melee: false, critical, shot.SkillStats,
                 contact.Projectile.ReactionRandomSource);
             ChargesOnHit(Conn, target, critical, shot.Spell, shot.Effect, shot.Level, shot.Quality, melee: false);
+            InflictMonsterBlind(Conn, contact.Target.Id, target, at, shot.Blind, contact.Projectile.ReactionRandomSource);
             CommitProjectileHit(this, contact, target, hit.Value, damage, shot, critical);
             return ProjectileHitResult.Hit;
         }

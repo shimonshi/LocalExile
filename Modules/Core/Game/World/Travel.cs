@@ -392,6 +392,7 @@ static partial class Game
         CarryCharges(conn, r.Ticket);
         CarryFortification(conn, r.Ticket);
         CarryRampage(conn, r.Ticket);
+        CarryResourceEffects(conn, r.Ticket);
         CarryAntiquarian(conn, r.Ticket);
         CarryRage(conn, r.Ticket);
         CarryVaalSouls(conn, r.Ticket);

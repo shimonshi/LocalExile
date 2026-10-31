@@ -122,7 +122,8 @@ static class Flasks
 
         /// <summary>The life and mana recovered between <paramref name="from"/> and <paramref name="to"/>, and the effects
         /// that ran out by <paramref name="to"/> (removed; one with mana at the end gives it then).</summary>
-        public (double Life, double Mana, List<Effect> Ended) Advance(double from, double to)
+        public (double Life, double Mana, List<Effect> Ended) Advance(double from, double to,
+            Action<Effect, double>? continuousStep = null)
         {
             double life = 0, mana = 0;
             List<Effect> ended = [];
@@ -130,6 +131,7 @@ static class Flasks
             {
                 life += r.Effect.LifePerSecond * seconds;
                 mana += r.Effect.ManaPerSecond * seconds;
+                continuousStep?.Invoke(r.Effect, seconds);
                 r.Remaining -= seconds;
                 if (r.Remaining > Done) return;
                 mana += r.Effect.ManaAtEnd;

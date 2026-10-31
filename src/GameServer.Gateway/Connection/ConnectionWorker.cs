@@ -60,8 +60,12 @@ sealed class ConnectionWorker(string key)
             lock (conn.Monsters)
             {
                 if (worker.generation != started) return;
-                conn.Rampage.Clear();
-                conn.RetireOwnedCombat();
+                if (ReferenceEquals(worker, conn.ResourceEffectsLease)) conn.RetireResourceEffects();
+                else
+                {
+                    conn.Rampage.Clear();
+                    conn.RetireOwnedCombat();
+                }
             }
         }
     }

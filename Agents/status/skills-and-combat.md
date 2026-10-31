@@ -622,6 +622,14 @@ Part of [Status](../Status.md); what to build next in this area is in
 
 ## Partly working
 
+- Shared Mana/Recoup and Blind: actual Whisperer nodes feed generic Game engines through the optional module.
+  Typed hits preserve Ward/ES ordering; accepted skill/Vaal spending, continuous flask Life copying and Recoup
+  share the existing resource writer, with synchronous lethal-Ignite cleanup before Mana recovery.
+  Timed/smoke/Rampage Blind use one strongest value across ordinary and owned contacts and presentation.
+  Two deterministic Gateway Facts cover resource, paid-refund, send-gate, transfer and retirement composition.
+  Full-suite and native acceptance of this modular port remain pending; historical raw-input checks retain their scope.
+  See [Whisperer](../docs/game/whisperer.md).
+
 - Selected supported-spell panel: final linked-support damage replaces both spell and inherited hand ranges,
   clearing removed types and updating pre-critical average/DPS from the supported cast time.
   Eight pipeline controls cover damage, projectiles, added damage, gem level, type prohibition, link lifecycle

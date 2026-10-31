@@ -18,16 +18,16 @@ static partial class Game
     {
         bool unique = target.Rarity == MonsterRarity.Unique;
         bool close = TargetAccuracy.InCloseRange(Dist(conn.Walk.Position(at), target.Walk.Position(at)));
-        return (TargetAccuracy.AgainstTarget(conn.Pools.Accuracy, conn.Pools.AccuracyMoreVsUniquePct,
+        return (TargetAccuracy.AgainstTarget(PlayerAccuracy(conn), conn.Pools.AccuracyMoreVsUniquePct,
             conn.Pools.AccuracyMoreInCloseRangePct, unique, close), unique, close);
     }
 
     // Both accuracy checks use the same target context. Only the first check consumes the defender's entropy.
     internal static int AttackHitChanceAt(ClientState conn, uint id, SpawnedMonster target, double at,
-        AttackAccuracyProfile profile)
+        AttackAccuracyProfile profile, IReadOnlyDictionary<uint, int>? player = null)
     {
         int evasion = target.Mods.Effects.Evasion(Monsters.BaseEvasion(target.Level) ?? 0);
-        evasion = RampageBlindedValue(target, at, evasion, conn.FlaskGrounds.Evasion(id, evasion));
+        evasion = MonsterBlindRating(conn, id, target, evasion, at, player);
         bool close = TargetAccuracy.InCloseRange(Dist(conn.Walk.Position(at), target.Walk.Position(at)));
         return profile.Chance(evasion, target.Rarity == MonsterRarity.Unique, close);
     }
@@ -227,9 +227,10 @@ static partial class Game
             // Settle Rage at accepted contact before this hit's gain. It is a final multiplier on the attack packet,
             // never on an existing impale bonus or on generic damage/DoT.
             var player = CharacterPlayerStats(conn);
-            var accuracy = AttackAccuracyProfile.From(conn.Pools, player, Stats, ownPenetration, weapon.LocalSources);
+            var accuracy = AttackAccuracyProfile.From(conn.Pools, player, Stats, ownPenetration, weapon.LocalSources)
+                with { Rating = PlayerAccuracy(conn, player) };
             double contactAt = conn.Clock.Elapsed.TotalSeconds;
-            int hitChance = AttackHitChanceAt(conn, use.TargetId, m, contactAt, accuracy);
+            int hitChance = AttackHitChanceAt(conn, use.TargetId, m, contactAt, accuracy, player);
             if (!accuracy.CannotBeEvaded && !m.AttackEvasion.Hits(hitChance, contactAt, conn.AttackAccuracyRandom))
             {
                 Console.WriteLine($"[gateway] {remote} attack on 0x{use.TargetId:x} evaded ({hitChance}% chance to hit)");
@@ -270,6 +271,7 @@ static partial class Game
             conn.LastEnemyHitAt = conn.Clock.Elapsed.TotalSeconds;
             if (life == 0) { m.Aggro = false; m.Dead = true; CollectVaalSoulAtDeathLocked(conn, m); }
             RageOnHitLocked(conn, attack: true, melee: WeaponProfileFor(conn, activeSet: true).Melee, critical);
+            InflictMonsterBlind(conn, use.TargetId, m, ResourceEffectsTime(conn), BlindInputs(player));
         }
         ChargesOnHit(conn, m, critical, spell: false);
         if (critical) _ = GainFlaskChargesOnCrit(remote, stream, ciphers, conn);   // the hit landed
@@ -915,7 +917,7 @@ static partial class Game
                     contactHit = contactHit.Scale(1 + Stat("groundslam_damage_to_close_targets_+%_final")
                         / 100.0 * Math.Max(0, 1 - distance / Math.Max(1, radius)));
                 }
-                int hitChance = spell ? 100 : AttackHitChanceAt(conn, id, m, ProjectileWorldTime(conn), accuracy);
+                int hitChance = spell ? 100 : AttackHitChanceAt(conn, id, m, ProjectileWorldTime(conn), accuracy, player);
                 if (!spell && !accuracy.CannotBeEvaded && !m.AttackEvasion.Hits(hitChance, ProjectileWorldTime(conn), conn.AttackAccuracyRandom)) continue;
                 if (MonsterBlocks(m, Random.Shared, spell)) continue;
                 var gambler = GamblerFor(player);
@@ -949,6 +951,7 @@ static partial class Game
                             !spell && SkillsFor(conn).IsMelee(gem.Effect), player, skillStats);
                     if (!rageGranted) rageGranted = RageOnHitLocked(conn, attack: !spell,
                         melee: !spell && SkillsFor(conn).IsMelee(gem.Effect), critical, skillStats);
+                    InflictMonsterBlind(conn, id, m, ResourceEffectsTime(conn), BlindInputs(player, skillStats));
                 }
             }
             if (applied is not { } hit) continue;

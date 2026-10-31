@@ -684,7 +684,17 @@ static partial class Game
         foreach (var (key, value) in AuraCatalog.ResistanceStats(auras, bonus.AuraEffectPct, SkillsFor(conn), Stats))
             resistanceSources[key] = resistanceSources.GetValueOrDefault(key) + value;
         bonus = ResistanceOvercap.Applied(bonus, resistanceSources, devStats, ResistancePenalty(conn), Stats);
-        var pools = CharacterStats.For(SkillsFor(conn).ClassFor(conn.ClassRow), level, bonus);
+        var classInfo = SkillsFor(conn).ClassFor(conn.ClassRow);
+        int perDexterity = PoolSource(ManaRecoveryRules.PerDexterity, EquipmentStat(ManaRecoveryRules.PerDexterity));
+        var finalAttributes = (bonus.Attributes with
+        {
+            StrengthPct = bonus.Attributes.StrengthPct + bonus.StrengthPct + (long)bonus.AllAttributesPct,
+            DexterityPct = bonus.Attributes.DexterityPct + bonus.DexterityPct + (long)bonus.AllAttributesPct,
+            IntelligencePct = bonus.Attributes.IntelligencePct + bonus.IntelligencePct + (long)bonus.AllAttributesPct,
+        }).Apply((long)classInfo.Strength + bonus.Strength, (long)classInfo.Dexterity + bonus.Dexterity,
+            (long)classInfo.Intelligence + bonus.Intelligence);
+        bonus = bonus with { AdditionalMana = (long)finalAttributes.Dexterity * perDexterity };
+        var pools = CharacterStats.For(classInfo, level, bonus);
         // The pure base critical stats (/set_stat too) sit outside the passive increases: the weapon override replaces
         // the armed main hand's base and the unarmed base replaces the empty one, before the global increases.
         pools = pools with

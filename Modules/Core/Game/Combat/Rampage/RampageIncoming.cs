@@ -69,8 +69,10 @@ static partial class Game
             if (!TargetCurrent() || Dist(attacker.Walk.Position(now), weapon.Walk.Position(now)) > attack.Range + 2)
                 return null;
             int accuracy = attacker.Mods.Effects.Accuracy(Monsters.BaseAccuracy(attacker.Level) ?? 0);
-            if (attacker.RampageBlindUntil > now) accuracy = accuracy * 4 / 5;
-            if (!RampageAttackHits(weapon, accuracy, now, Random.Shared)) return null;
+            var sources = conn.FlaskGrounds.Accuracy(id, 100) != 100 || conn.FlaskGrounds.Accuracy(targetId, 100) != 100
+                ? CharacterStatSources(conn).Stats : null;
+            accuracy = MonsterBlindRating(conn, id, attacker, accuracy, now, sources);
+            if (!RampageAttackHits(conn, targetId, weapon, accuracy, now, Random.Shared, sources)) return null;
             var packet = MonsterModHit(attacker, attack.Damage.Roll(Random.Shared), weapon.Life,
                 weapon.MaxLife, Random.Shared, out bool critical);
             var (damage, _) = MonsterDamage(weapon, packet, critical, true, default);

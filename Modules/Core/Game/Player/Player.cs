@@ -238,14 +238,18 @@ static partial class Game
     {
         var own = SupportedSkill(conn, skillId).Stats;
         int Own(string name) => Stats.Key(name) is uint key ? own.GetValueOrDefault(key) : 0;
-        cost = (uint)Math.Max(0, Own("mana_cost"));
         lock (conn.Monsters)
         {
+            if (!CurrentGameRules || conn.Closed || conn.LeavingArea || conn.RageRetired || conn.PlayerLife == 0)
+            { cost = 0; return false; }
+            var player = SupportedStats(conn, skillId);
+            cost = (uint)Math.Max(0, player.GetValueOrDefault(Stats.Key("mana_cost") ?? 0));
             // Reap's Blood Charges: more cost per charge held (BloodCharges), rounded as the client rounds costs.
             if (cost > 0 && BloodCharges.Uses(Own))
                 cost = (uint)Math.Round(cost * BloodCharges.More(Own(BloodCharges.CostPerCharge), conn.BloodCharges));
             if (conn.PlayerMana < cost) return false;
             conn.PlayerMana -= cost;
+            ManaSpentLocked(conn, cost, player);
             return true;
         }
     }
@@ -390,6 +394,7 @@ static partial class Game
                 ailments = nextAilments;
                 await SendCharacterStats(remote, stream, ciphers, conn, "elemental ailments changed");
             }
+            await SendBlind(remote, stream, ciphers, conn);
             await SendAntiquarian(remote, stream, ciphers, conn);
             await SendRecentEnemyHits(remote, stream, ciphers, conn);
             await PushOutOfCollision(remote, stream, ciphers, conn);
@@ -459,10 +464,10 @@ static partial class Game
         Dictionary<uint, int> recoveryStats = [];
         int RecoveryStat(string name) => Stats.Key(name) is uint key ? recoveryStats.GetValueOrDefault(key) : 0;
         var cachedRf = conn.RighteousFire;
-        while (!conn.Closed && !conn.RageRetired)
+        while (CurrentGameRules && !conn.Closed && !conn.RageRetired)
         {
             await Task.Delay(RecoveryStepMs);
-            if (conn.Closed || conn.RageRetired) break;
+            if (!CurrentGameRules || conn.Closed || conn.RageRetired) break;
             await EndGracePeriod(remote, stream, ciphers, conn);
             var rf = conn.RighteousFire;
             uint lifeBefore, lifeAfter, manaBefore, manaAfter, manaCap;
@@ -474,7 +479,7 @@ static partial class Game
             {
                 // Commit earlier projectile hits before advancing leech/recovery to this resource boundary.
                 now = ProjectileWorldTime(conn);
-                if (conn.Closed || conn.RageRetired) break;
+                if (!CurrentGameRules || conn.Closed || conn.RageRetired) break;
                 if (conn.LeavingArea)
                 {
                     // A failed transfer can resume this connection. Do not catch up old cached rates through loading.
@@ -505,7 +510,7 @@ static partial class Game
                 }
                 double recoveryFrom = last;
                 double life, mana;
-                (life, mana, ended) = conn.FlaskEffects.Advance(last, now);
+                (life, mana, ended) = AdvanceFlaskRecovery(conn, last, now);
                 last = now;
                 lifeBefore = conn.PlayerLife;
                 manaBefore = conn.PlayerMana;
@@ -545,13 +550,20 @@ static partial class Game
                         life + (zealotsOath ? 0 : lifeRate * seconds) + (zealotsOath ? 0 : fortificationLife) + leeched.Life
                             + (zealotsOath ? 0 : antiquarianLife) + (zealotsOath ? 0 : enduringCryLife) - lifeBurn,
                         ref lifeCarry, minimum: 1);
-                    AdvancePlayerAilmentsLocked(conn, recoveryFrom, now, recoveryStats);
+                    bool survived = CompleteResourceRecoveryLocked(conn, recoveryFrom, now, recoveryStats,
+                        mana + manaRate * seconds + leeched.Mana, manaBefore, manaCap, ref manaCarry);
                     lifeAfter = conn.PlayerLife;
-                    if (lifeAfter == 0) ailmentDeathEpoch = conn.IncomingHitEpoch;
-                    conn.PlayerMana = manaAfter = RecoveryPool.Advance(manaBefore, manaCap,
-                        mana + manaRate * seconds + leeched.Mana, ref manaCarry);
-                    leech.ClearFull(now, lifeAfter >= conn.PlayerMaxLife, manaAfter >= manaCap,
-                        conn.EnergyShield.Current >= conn.EnergyShield.Maximum);
+                    if (!survived)
+                    {
+                        ailmentDeathEpoch = conn.IncomingHitEpoch; dead = true;
+                        lifeCarry = manaCarry = burnCarry = 0; manaAfter = manaBefore;
+                    }
+                    else
+                    {
+                        manaAfter = conn.PlayerMana;
+                        leech.ClearFull(now, lifeAfter >= conn.PlayerMaxLife, manaAfter >= manaCap,
+                            conn.EnergyShield.Current >= conn.EnergyShield.Maximum);
+                    }
                 }
             }
             if (ailmentDeathEpoch is int lethalEpoch)
@@ -581,6 +593,7 @@ static partial class Game
         FortificationOf(conn).TakeRecovery(now);
         conn.Antiquarian.TakeRecovery(now);
         conn.EnduringCryRecovery.Take(now);
+        DiscardResourceLoadingRecovery(conn, now);
     }
 
     // The ended flask effects' buffs come off the player (S→C 0x1c2).
@@ -788,6 +801,7 @@ static partial class Game
         // Keep the ticket's remaining Rage timers frozen while the destination loads (before 0x7d).
         RestoreRage(conn);
         RestoreRampage(conn);
+        RestoreResourceEffects(conn);
         RestoreVaalSouls(conn);
         RestoreAntiquarian(conn);
         conn.Ward.SetMaximum(conn.Pools.Ward);

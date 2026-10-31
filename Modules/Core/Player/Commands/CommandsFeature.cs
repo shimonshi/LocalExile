@@ -72,7 +72,8 @@ static class CommandsFeature
             string sourceName = Stats.Name(stat) ?? args[0];
             bool rebuildLife = LifeManaPoolSources.IsLifeInput(sourceName) || InherentAttributeBonuses.IsLifeInput(sourceName);
             bool rebuildMana = LifeManaPoolSources.IsManaInput(sourceName) || stat == Stats.Key(StrengthMana.PerFourStrength)
-                || InherentAttributeBonuses.IsManaInput(sourceName) || stat == Stats.Key(PowerOfPurpose.RawFlag);
+                || InherentAttributeBonuses.IsManaInput(sourceName) || stat == Stats.Key(PowerOfPurpose.RawFlag)
+                || stat == Stats.Key(ManaRecoveryRules.PerDexterity);
             bool rebuildDefences = AttributeDefenceSources.IsInput(sourceName) || InherentAttributeBonuses.IsInput(sourceName);
             bool rebuildEnergyShield = sourceName == AttributeDefenceSources.EnergyShieldPerTenStrength
                 || InherentAttributeBonuses.IsEnergyShieldInput(sourceName);
@@ -1052,6 +1053,7 @@ static class CommandsFeature
             }
             int dealt = hit.Damage; string mitigation = hit.Mitigation; uint life = hit.Life;
             await SendPlayerEnergyShield(remote, stream, ciphers, conn);
+            if (hit.Mana != hit.ManaBefore) await SendPlayerMana(remote, stream, ciphers, conn, "physical hit paid from Mana");
             if (life == 0)
                 await Send(remote, stream, ciphers, InstanceEntities.StatsUpdate(PlayerId, [(StatKeys.HideMiniLifeBar, 1)]),
                     "0x01b3 player hide_mini_life_bar = 1 (dev hit)");
@@ -1155,6 +1157,7 @@ static class CommandsFeature
             bool suppressed = hit.Suppressed;
             var (chance, effect, lucky, unlucky) = hit.Suppression;
             await SendPlayerEnergyShield(remote, stream, ciphers, conn);
+            if (hit.Mana != hit.ManaBefore) await SendPlayerMana(remote, stream, ciphers, conn, "physical hit paid from Mana");
             if (life == 0)
                 await Send(remote, stream, ciphers, InstanceEntities.StatsUpdate(PlayerId, [(StatKeys.HideMiniLifeBar, 1)]),
                     "0x01b3 player hide_mini_life_bar = 1 (dev spell hit)");

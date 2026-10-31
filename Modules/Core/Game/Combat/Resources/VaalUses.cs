@@ -43,7 +43,7 @@ static partial class Game
                 Get("cost_+%_final"), Sum("base_skill_cost_efficiency_+%", "base_attack_skill_cost_efficiency_+%"),
                 Get("base_rage_cost_efficiency_+%"), free));
         uint souls = conversion || free ? 0 : (uint)VaalSoulCost.Required(definition.BaseCost, Get);
-        uint mana = free ? 0 : (uint)Math.Max(0, gem.Stats.GetValueOrDefault(Stats.Key("mana_cost") ?? 0));
+        uint mana = free ? 0 : (uint)Math.Max(0, SupportedStats(conn, id).GetValueOrDefault(Stats.Key("mana_cost") ?? 0));
         double prevention = Get("vaal_skill_does_not_apply_soul_gain_prevention") != 0
             || Get("map_player_disable_soul_gain_prevention") != 0 ? 0
             : Math.Max(0, SkillsFor(conn).SoulGainPreventionMs(gem.Effect, gem.Level) / 1000.0
@@ -89,6 +89,7 @@ static partial class Game
                 throw new InvalidOperationException("Vaal soul reservation changed inside admission");
         }
         conn.PlayerMana -= plan.Mana;
+        ManaSpentLocked(conn, plan.Mana, stats);
         if (attackDeadline is double next) conn.NextAttackAt = next;
         conn.VaalPreventionUntil = Math.Max(conn.VaalPreventionUntil, now + plan.PreventionSeconds);
         conn.VaalUse = plan with { Action = conn.ActionCount, Epoch = conn.ProjectileEpoch,

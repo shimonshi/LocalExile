@@ -46,8 +46,12 @@ static partial class Game
     {
         double now = ProjectileWorldTime(conn);
         if (conn.PlayerLife == 0) LeechOf(conn).Clear(now);
-        else LeechOf(conn).ClearFull(now, conn.PlayerLife >= conn.PlayerMaxLife,
-            conn.PlayerMana >= UnreservedMana(conn), conn.EnergyShield.Current >= conn.EnergyShield.Maximum);
+        else
+        {
+            LeechOf(conn).ClearFull(now, conn.PlayerLife >= conn.PlayerMaxLife,
+                conn.PlayerMana >= UnreservedMana(conn), conn.EnergyShield.Current >= conn.EnergyShield.Maximum);
+            SettleFullManaLocked(conn, ResourceEffectsTime(conn));
+        }
     }
 
     internal static LeechSources HitLeechSources(IReadOnlyDictionary<uint, int> player, bool attack,
@@ -82,7 +86,6 @@ static partial class Game
         conn.EnergyShield.Gain(instant.EnergyShield);
         session.InstantLifeChanged |= life != conn.PlayerLife;
         session.InstantManaChanged |= mana != conn.PlayerMana;
-        session.ClearFull(now, conn.PlayerLife >= conn.PlayerMaxLife, conn.PlayerMana >= UnreservedMana(conn),
-            conn.EnergyShield.Current >= conn.EnergyShield.Maximum);
+        TrimLeechLocked(conn);
     }
 }

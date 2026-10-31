@@ -53,6 +53,7 @@ sealed class GameLogic : IGameLogic
         conn.Rage.Clear();
         conn.Rampage.Clear();
         conn.RetireOwnedCombat();
+        conn.RetireResourceEffects();
         conn.VaalPreventionUntil = 0;
     }
 

@@ -563,6 +563,7 @@ static partial class Game
                     if (!ServerLevels.IsSupported(conn.Layout.Id) && !CaptureTour.Active(CharacterName(conn)))
                         await conn.Commands!.Reply(ServerLevels.UnsupportedMessage);
                     await Program.ServerHooks.AreaGenerated(PlayerOf(conn));
+                    ActivateResourceEffects(conn, ProjectileWorldTime(conn));
                     _ = RunMonsterRegeneration(remote, stream, ciphers, conn);
                     _ = RunServerFrames(remote, stream, ciphers, conn);
                     _ = RunMonsterAi(remote, stream, ciphers, conn);
