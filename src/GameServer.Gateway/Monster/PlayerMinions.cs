@@ -48,6 +48,15 @@ sealed class PlayerMinions
         internal bool Started;
     }
     internal readonly Dictionary<uint, Attack> Attacks = [];
+    // Accepted gameplay finishes under Monsters; only neutral output/projection data crosses Game replacement.
+    internal enum OutputKind { Packet, Life, Experience, Flinch, Remove, Vaal }
+    internal sealed record Output(byte[] Packet, string? Log, uint? TargetId = null, SpawnedMonster? Target = null,
+        OutputKind Kind = OutputKind.Packet, double Until = 0, int Action = 0);
+    internal sealed record FlaskReward(MonsterRarity Rarity);
+    internal readonly List<Output> OutputQueue = [];
+    internal readonly List<FlaskReward> FlaskRewards = [];
+    internal readonly HashSet<SpawnedMonster> Rewarded = [];
+    internal long StatRevision, PresentedStatRevision, AccountRevision, PresentedAccountRevision;
     readonly Dictionary<uint, Minion> minions = [];
 
     public IReadOnlyCollection<Minion> All => minions.Values;
@@ -57,7 +66,7 @@ sealed class PlayerMinions
     public void Remove(uint id) { minions.Remove(id); Attacks.Remove(id); }
 
     /// <summary>Ended minions' bodies still in the area and when they go (Game.PlayerMinionsTick).</summary>
-    public readonly List<(uint Id, double At)> Bodies = [];
+    public readonly List<(uint Id, SpawnedMonster Monster, double At)> Bodies = [];
 
     /// <summary>Relic summons that triggers queued (Program.TriggerElementalRelicLocked); the next minion step makes them.</summary>
     public int PendingRelics;

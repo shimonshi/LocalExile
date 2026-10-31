@@ -37,6 +37,14 @@ with the host lifetime. The neutral minion roster stays on the connection; Game 
 Minions step before links at 100 ms. Spirit, totem and enemy-aura publication rejects retired rules before bookkeeping.
 Owned monster creation commits its roster callback with native create/wake at the current gate; pending summons
 are consumed only at admission. Footsteps keep their animation progress and temporary-art deadlines on the connection.
+Relic expiry commits its death and explosion in the same synchronous transaction before network output.
+Accepted fighting-minion contacts commit XP, gem XP, quest flags, league kill hooks and loot before awaiting output.
+Owned kills retain `PlayerKill=false`, so player-only hooks and charge grants stay excluded.
+The current minion role drains neutral packets and deferred flask gains through the existing send/bar gates.
+Retired senders cannot consume those receipts; late completion cannot repeat rewards.
+Body-removal records retain the original monster identity, and native removal refuses a replacement actor.
+The two built-in quest-drop handlers commit into the atomic kill's packet sink; ordinary async kills retain their path.
+
 Send-gate generation checks reject queued old output; old full stat/skill refreshes cannot overwrite current Blind.
 Ordinary connections keep their area and resume recovery and Blind publication without a new character action.
 Retired monster contacts are refused before hit bookkeeping, and retired Rage publishers stop before stat construction.
@@ -118,12 +126,17 @@ This dispatch boundary does not promise that every mid-command file-watcher race
 
 ## Validation limits
 
-The current candidate merges frozen `57053948` with pinned main
-`bf1fd6d061b0a00da3456b70931ad71d2ff7619b` (#456). Both ancestries are retained.
-The combined source preserves the four newer optional descriptors and generic aura/granted-skill/minion APIs.
-The two existing Whisperer Facts add combined controls for totem/Ward/ES/Mana/Recoup, strongest aura Blind,
-distinct-assembly minion contact and minion/link handover, linked-flask Onslaught scaling and stationary-ground linger.
-Solution build and bounded focused checks are local preparation; this combined head has no full-suite, native or
+The current candidate starts at `175721ead28fa220e714d4bf0e2aad4ea80bf352`, the clean reconciliation of
+`c2e4bd01` with main `d377bd256036242d2fb43f53eb7110b4897e1862` (a LICENSE-only main advance).
+It retains the `57053948` and `bf1fd6d0` ancestries, the four newer optional descriptors and generic main APIs.
+Two current-source reload failures were reproduced before correction: an expired qualified relic lost its explosion,
+and an accepted lethal minion hit lost XP/drop/league hooks after its blocked hit output.
+No-reload controls dealt 5,316 damage and awarded 37 controlled XP with one kill/XP/drop hook each.
+The correction completes accepted gameplay before awaits and hands only neutral publication data to current Game.
+The same two Whisperer Facts cover distinct assemblies, real Paladin/Spirit triggers, held sends, one native projection,
+late completion, paid source refund, source stop, actor identity and the real Mercy Medicine Chest drop.
+The earlier combined resource, Blind, minion/link, Onslaught, ground, command and flask controls remain.
+Solution build and bounded focused checks are local preparation; this corrected head has no full-suite, native or
 independent-review acceptance yet. Exact current-head results belong to the PR's revision-specific receipts.
 
 The evidence below is historical and keeps its tested source/base scope.

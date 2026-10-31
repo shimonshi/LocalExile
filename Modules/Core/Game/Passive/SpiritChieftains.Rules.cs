@@ -122,7 +122,7 @@ static partial class Game
             bool alive = conn.PlayerLife > 0;
             summon = alive ? conn.SpiritChieftains.Pending : null;
             if (!alive) conn.SpiritChieftains.Pending = null;
-            RemoveMinionBodiesLocked(conn, now, bytes);
+            RemoveMinionBodiesLocked(conn, now);
             // The buff ends with the player's death (SpiritChieftains.End), so its minion does too.
             double until = alive ? conn.SpiritChieftains.Active(now)?.Until ?? now : now;
             foreach (var minion in conn.Minions.All.Where(m => m.Fights).ToArray())
@@ -133,7 +133,7 @@ static partial class Game
                 conn.Minions.Remove(minion.Id);
                 if (!current) continue;
                 m.Aggro = false; m.Dead = true; m.Life = 0;
-                conn.Minions.Bodies.Add((minion.Id, now + 1));
+                conn.Minions.Bodies.Add((minion.Id, m, now + 1));
                 bytes.AddRange(InstanceEntities.StatsUpdate(minion.Id, [(StatKeys.HideMiniLifeBar, 1)]));
                 bytes.AddRange(InstanceProtocol.LifeUpdate(minion.Id, 0));
                 Console.WriteLine($"[gateway] {CharacterName(conn)}: chieftain 0x{minion.Id:x} ({m.Label}) ends");

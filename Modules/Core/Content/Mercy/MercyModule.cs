@@ -26,7 +26,8 @@ public sealed class MercyModule : IModule, IDisposable
         On(GameEvents.Kill, kill =>
         {
             var (remote, stream, ciphers) = kill.Conn.Wire;
-            kill.Later(() => DropQuestItems(remote, stream, ciphers, kill.Conn, kill.VarietyId, kill.At));
+            if (kill.CommittedOutput is { } output) output.AddRange(CommitQuestDrops(remote, kill.Conn, kill.VarietyId, kill.At));
+            else kill.Later(() => DropQuestItems(remote, stream, ciphers, kill.Conn, kill.VarietyId, kill.At));
         });
         On(GameEvents.GroundItemUse, (conn, id, ground, use, requestedAt) =>
         {

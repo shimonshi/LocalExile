@@ -17,23 +17,28 @@ static class MercyFeature
     // already, this character carries one or one lies on this instance's ground (MercyMission.HailrakeDrops).
     internal static async Task DropQuestItems(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn, string varietyId, (int X, int Y) at)
     {
-        if (!MercyMission.DropsChest(conn.Layout.Id, varietyId)) return;
+        foreach (var (packet, log) in CommitQuestDrops(remote, conn, varietyId, at))
+            await Send(remote, stream, ciphers, packet, log);
+    }
+
+    internal static List<(byte[] Packet, string? Log)> CommitQuestDrops(string remote, ClientState conn, string varietyId, (int X, int Y) at)
+    {
+        if (!MercyMission.DropsChest(conn.Layout.Id, varietyId)) return [];
         if (MedicineChestType() is not { } type)
         {
             Console.WriteLine($"[gateway] {remote} a1q5: {MercyMission.MedicineChest} is not in the item data");
-            return;
+            return [];
         }
         if (!MercyMission.HailrakeDrops(type.Hash, MercyDone(conn), ItemsOf(conn), conn.Instance.Ground))
         {
             Console.WriteLine($"[gateway] {remote} Hailrake: no {type.Name}, the character has one or Nessa has it");
-            return;
+            return [];
         }
         var (x, y) = conn.Layout.Walkable is { } walks && !walks(at.X, at.Y) ? conn.Layout.Near(at) : at;
         var ground = new WorldItemObject(x, y, ItemCatalog.Create(type));
         uint id = conn.Instance.Ground.Add(ground);
-        await Send(remote, stream, ciphers, InstanceEntities.CreateObject(id, InstanceEntities.ObjectTypeHash(WorldItemObject.MetadataPath), ground.Blob()),
-            $"0x02b9 {type.Name} 0x{id:x} dropped by Hailrake at ({x}, {y})");
-        await Send(remote, stream, ciphers, InstanceProtocol.EnterWakeZone(id), null);
+        return [(InstanceEntities.CreateObject(id, InstanceEntities.ObjectTypeHash(WorldItemObject.MetadataPath), ground.Blob()),
+            $"0x02b9 {type.Name} 0x{id:x} dropped by Hailrake at ({x}, {y})"), (InstanceProtocol.EnterWakeZone(id), null)];
     }
 
     // C→S 0x24 on a ground item. A Medicine Chest the character still needs is picked up as any item, then its flag follows.

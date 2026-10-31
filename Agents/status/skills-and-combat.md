@@ -630,6 +630,7 @@ Part of [Status](../Status.md); what to build next in this area is in
   including distinct-Game utility expiry/End payment and recovery-flask admission before blocked output.
   Historical `57053948` passed native 36 controls on `cc0f9c34`; the combined newer main needs fresh exact-head acceptance.
   Its current minion/link/footstep roles retain main's cadences and share generation ownership with the resource writer.
+  Accepted minion expiry/kill gameplay precedes awaits; neutral output survives replacement without duplicate rewards.
   See [Whisperer](../docs/game/whisperer.md).
 
 - Selected supported-spell panel: final linked-support damage replaces both spell and inherited hand ranges,

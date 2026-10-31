@@ -87,9 +87,10 @@ static partial class Game
     internal static async Task MinionSwing(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn,
         PlayerMinions.Attack attack)
     {
+        var rules = CombatLifetime;
         var (id, m, from, targetId, targetMonster, toAt, contactAt) = attack;
         var target = new MinionTarget(targetId, targetMonster, toAt, true, toAt);
-        bool Current() => CurrentGameWork && !conn.Closed && !conn.LeavingArea && conn.Minions.Fights(id)
+        bool Current() => CurrentGameWork && ReferenceEquals(CombatLifetime, rules) && !conn.Closed && !conn.LeavingArea && conn.Minions.Fights(id)
             && conn.Monsters.TryGetValue(id, out var held) && ReferenceEquals(held, m) && !m.Dead
             && conn.Minions.Attacks.TryGetValue(id, out var pending) && ReferenceEquals(pending, attack);
         lock (conn.Monsters) if (!Current()) return;
@@ -136,6 +137,13 @@ static partial class Game
                         CommitBossStage(remote, stream, ciphers, conn, target.Id, target.Monster, now);
                         landed = staged with { Hit = staged.Hit with { StageStarts = false } };
                     }
+                    if (landed is { } accepted)
+                    {
+                        conn.Minions.OutputQueue.Add(new(InstanceProtocol.ActionHit(id, 0xffff, target.Id, flags: 0x4601, kind: 0x02,
+                            u34: 450, angle: HitAngle(to.X - at.X, to.Y - at.Y)),
+                            $"0x01af minion 0x{id:x} hit on monster 0x{target.Id:x}", target.Id, target.Monster));
+                        CommitMinionHitLocked(conn, target.Id, target.Monster, accepted.Hit, accepted.Damage, now, $"minion 0x{id:x} ({m.Label})");
+                    }
                     break;
                 }
             }
@@ -146,13 +154,6 @@ static partial class Game
             Console.WriteLine($"[gateway] {remote} minion 0x{id:x} ({m.Label}) missed monster 0x{target.Id:x}");
             return;
         }
-        await Send(remote, stream, ciphers,
-            InstanceProtocol.ActionHit(id, 0xffff, target.Id, flags: 0x4601, kind: 0x02, u34: 450, angle: HitAngle(to.X - at.X, to.Y - at.Y)),
-            $"0x01af minion 0x{id:x} hit on monster 0x{target.Id:x}");
-        var deaths = new List<(uint Id, SpawnedMonster M)>();
-        await NotifyMonsterHit(remote, stream, ciphers, conn, target.Id, target.Monster, hit.Hit, hit.Damage, $"minion 0x{id:x} ({m.Label})",
-            deaths: deaths);
-        if (!CurrentGameWork) return;
-        foreach (var (dead, monster) in deaths) await MonsterKilled(remote, stream, ciphers, conn, dead, monster, byMinion: true);
+        await PublishMinionOutcomesFor(remote, stream, ciphers, conn, rules);
     }
 }
