@@ -287,7 +287,8 @@ The admission guard prevents a paid use from failing only later at release.
 The current publication code is `6598d3b15b428214b0501246a6c078e1b495c675`.
 It includes `0b997b37`'s non-recovery Headsman/Tailwind/Mark framing fix and independent row-flag/sentinel tests.
 The preceding `f58a5b9a` built without warnings and passed the complete serial Gateway suite: 4026, zero skips.
-Core 434 and Data 34 passed on production-equivalent `22223d9d`; the later changes were Gateway-test-only.
+For `f58a5b9a`, Core 434 and Data 34 passed on production-equivalent `22223d9d`.
+The changes between those two revisions were Gateway-test-only; `6598d3b1` then changes four presenters.
 Those passes precede the framing correction and cannot certify its native behavior or final publication readiness.
 Default-parallel attempts retain cadence, overleech and recent-hit timing failures under host contention.
 The final fixture corrections preserve captured projectile muzzle geometry and the actual ingress timestamp contract.
