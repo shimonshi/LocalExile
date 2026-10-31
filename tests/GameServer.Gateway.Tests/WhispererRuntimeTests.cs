@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Reflection;
 using System.Collections.Concurrent;
+using System.Threading.Channels;
 using League = GameServer.Core.Accounts.League;
 using GameServer.Core.Protocol.Instance;
 using GameServer.Core.Projectiles;
@@ -170,6 +171,11 @@ public sealed class WhispererRuntimeTests
         var definition = Assert.Single(new AscendancyCatalog().Definitions,
             d => d.Identity.Family == AscendancyFamily.Phrecia && d.Name == "Whisperer");
         using var h = new Harness(definition); var c = h.Conn; h.Build(B);
+        var (commands, replies) = h.CommandsFor(c);
+        Assert.Contains(commands.Usages, command => command.Name == "blind");
+        foreach (string invalid in new[] { "0", "61", "NaN" }) Assert.True(await commands.RunAsync("/blind " + invalid));
+        Assert.All(replies, reply => Assert.StartsWith("Usage: /blind", reply)); replies.Clear();
+        Assert.True(await commands.RunAsync("/blind")); Assert.Equal("Blind refused (immune or unavailable).", Assert.Single(replies));
         Assert.False(Game.InflictPlayerBlind(c, 4)); // Actual 5888 immunity.
         var target = new SpawnedMonster("Blind", new(105, 100, 0), 0, 0, 1000) { Level = 60, RampageBlindUntil = 6 };
         c.Monsters[42] = target;
@@ -329,16 +335,80 @@ public sealed class WhispererRuntimeTests
         h.Provider.Stop(ex => throw ex);
         Assert.False(ordinary.Closed); Assert.Same(normalState, ordinary.ResourceEffectsState);
         Assert.Equal(199, normalState.Mana.SpentRemainder); Assert.True(c.Closed);
+        // Actual admission/replacement dispatch starts the same two production loops with manual scheduling.
+        ordinary.PlayerStats[Key(ManaRecoveryRules.RagePer200)] = 10;
+        ordinary.PlayerStats[Key("base_life_regeneration_rate_per_minute")] = 600;
+        ordinary.PlayerStats[Key("base_mana_regeneration_rate_per_minute")] = 600;
+        ordinary.PlayerSent = true; ordinary.Wire = ("Whisperer", h.Wire, h.Ciphers);
+        ordinary.Pools = ordinary.Pools with { EnergyShield = 300 };
+        ordinary.EnergyShield.SetMaximum(300, false); ordinary.PlayerLife = 500; ordinary.PlayerMana = 0;
+        var runtime = new ManualRuntime(); ordinary.ProjectileRuntimeState = runtime;
+        var oldSchedule = new ManualUpdates(runtime); Game.PlayerUpdatesSchedule = oldSchedule;
+        var oldLogic = Program.Logic;
+        Program.ActivatePlayerUpdates(ordinary);
+        var oldUpdates = Assert.IsType<PlayerUpdatesState>(ordinary.PlayerUpdatesState);
+        oldSchedule.Completion = oldUpdates.Completion;
+        var oldFast = await oldSchedule.Next(Game.RecoveryStepMs);
+        await oldSchedule.Next(Game.PlayerTickMs);
+        Program.ActivatePlayerUpdates(ordinary);
+        Assert.Same(oldUpdates, ordinary.PlayerUpdatesState); Assert.Equal(1, oldSchedule.FastWaits);
+        // The old writer commits while current, but its output remains queued across replacement.
+        h.Wire.Drain(h.Receive); await gate.WaitAsync(); oldFast.Advance(1);
+        await oldFast.Observed.Task;
+        uint reloadLife, reloadMana, reloadEs;
+        lock (ordinary.Monsters)
+        {
+            reloadLife = ordinary.PlayerLife; reloadMana = ordinary.PlayerMana; reloadEs = ordinary.EnergyShield.Current;
+            Assert.True(reloadLife > 500); Assert.True(reloadMana > 0); Assert.True(reloadEs > 0);
+        }
         h.Rules.Stop(ex => throw ex); Assert.Null(ordinary.ResourceEffectsState);
         Assert.False(Game.ResourceEffectsCurrent(ordinary, normalState));
         var replacementRules = new ModuleLifetime("Game"); var replacementSource = new ModuleLifetime("PhreciaAscendancies");
+        var nextSchedule = new ManualUpdates(runtime) { At = 1 }; Game.PlayerUpdatesSchedule = nextSchedule;
         Game.CombatLifetime = replacementRules;
+        Program.SetGameLogic(new GameServer.Modules.Game.GameLogic(replacementRules));
+        var nextUpdates = Assert.IsType<PlayerUpdatesState>(ordinary.PlayerUpdatesState);
+        nextSchedule.Completion = nextUpdates.Completion;
+        var nextFast = await nextSchedule.Next(Game.RecoveryStepMs);
+        var nextSlow = await nextSchedule.Next(Game.PlayerTickMs);
+        oldLogic.ResumePlayerUpdates(ordinary); Program.ActivatePlayerUpdates(ordinary);
+        Assert.Same(nextUpdates, ordinary.PlayerUpdatesState); Assert.Equal(1, nextSchedule.FastWaits);
+        gate.Release(); await oldUpdates.Completion;
+        Assert.Empty(h.Wire.Drain(h.Receive)); Assert.False(ordinary.Closed);
+        Assert.Equal(reloadLife, ordinary.PlayerLife); Assert.Equal(reloadMana, ordinary.PlayerMana);
+        Assert.Equal(reloadEs, ordinary.EnergyShield.Current);
+        ordinary.PlayerUpdatesWorker.Complete(h.Rules, null, oldUpdates, oldUpdates.Generation);
+        Assert.True(Game.PlayerUpdatesCurrent(ordinary, nextUpdates));
+        Assert.False(ordinary.PlayerUpdatesWorker.TryStart(ordinary, replacementRules, null, nextUpdates, out _));
         using (var replacement = AscendancyPolicies.Register(replacementSource, h.Policy))
         {
             var currentState = Game.ResourceEffectsOf(ordinary); currentState.Mana.Spent(7, 10);
             ordinary.ResourceEffectsLease.Complete(h.Rules, null, normalState, normalState.Generation);
             h.Rules.Stop(ex => throw ex);
             Assert.True(Game.ResourceEffectsCurrent(ordinary, currentState)); Assert.Equal(7, currentState.Mana.SpentRemainder);
+            var ordinaryItems = Game.ItemsOf(ordinary);
+            foreach (var old in ordinaryItems.Items(PlayerInventories.Flask).Where(i => i.X == 0).ToArray()) ordinaryItems.Remove(PlayerInventories.Flask, old.Id);
+            ordinaryItems.Add(PlayerInventories.Flask, 0, 0, ItemCatalog.Create(Program.Items.Find("Small Mana Flask")!) with { Charges = 24 });
+            await Game.UseFlask("Whisperer", h.Wire, h.Ciphers, ordinary, 0);
+            var accepted = Assert.Single(ordinary.FlaskEffects.End(_ => true));
+            accepted = accepted with { Started = 1, Ends = 1 + accepted.Ends - accepted.Started };
+            Game.StartRecoveryEffectsLocked(ordinary, currentState, [accepted], copy: false);
+            currentState.Mana.Hit(1, 1000, 20);
+            double lifeRate = Game.LifeRegenPerSecond(ordinary), manaRate = Game.ManaRegenPerSecond(ordinary);
+            var (normalCommands, normalReplies) = h.CommandsFor(ordinary);
+            Assert.True(await normalCommands.RunAsync("/blind 4")); Assert.Equal("Blind applied.", Assert.Single(normalReplies));
+            ushort activeBlind = currentState.PlayerBlind.Buff;
+            Has(h.Wire.Drain(h.Receive), BlindStats(Program.PlayerId, 20));
+            nextFast.Advance(2); nextFast = await nextSchedule.Next(Game.RecoveryStepMs);
+            Assert.Equal(reloadLife + (uint)lifeRate, ordinary.PlayerLife);
+            Assert.Equal(reloadMana + (uint)(manaRate + accepted.ManaPerSecond + 50), ordinary.PlayerMana);
+            Assert.True(ordinary.EnergyShield.Current > reloadEs); // The actual replacement writer recharges ES too.
+            nextSlow.Advance(2); nextSlow = await nextSchedule.Next(Game.PlayerTickMs);
+            h.Wire.Drain(h.Receive);
+            nextSlow.Advance(6); await nextSchedule.Next(Game.PlayerTickMs);
+            var expired = h.Wire.Drain(h.Receive);
+            Has(expired, InstanceEntities.RemoveBuff(Program.PlayerId, activeBlind)); Has(expired, BlindStats(Program.PlayerId, 0));
+            Assert.True(Game.PlayerUpdatesCurrent(ordinary, nextUpdates));
             var reentered = h.NewConnection("replacement"); var nextState = Game.ResourceEffectsOf(reentered);
             Assert.Same(replacementSource, nextState.Source);
             Assert.False(Game.ResourceEffectsCurrent(reentered, effects));
@@ -357,6 +427,7 @@ public sealed class WhispererRuntimeTests
             Assert.Empty(reentered.FlaskEffects.End(_ => true)); Assert.Empty(FlaskSignals(reentered));
         }
         replacementRules.Stop(ex => throw ex); Assert.Null(ordinary.ResourceEffectsState);
+        await nextUpdates.Completion; Assert.Null(ordinary.PlayerUpdatesState);
         Assert.Equal(definition.Identity, CharacterSaves.Load(c.Character!)!.MainAscendancy!.Selection);
     }
 
@@ -366,6 +437,37 @@ public sealed class WhispererRuntimeTests
     {
         public double At; public bool Active { get; private set; } = true;
         public double NowTicks => At * 120000; public void Invalidate() => Active = false;
+    }
+    sealed class ManualUpdates(ManualRuntime runtime) : IPlayerUpdateSchedule
+    {
+        readonly Channel<Frame> fast = Channel.CreateUnbounded<Frame>(), slow = Channel.CreateUnbounded<Frame>();
+        readonly ManualRuntime runtime = runtime;
+        internal Task? Completion;
+        internal double At; internal int FastWaits;
+        Frame? observing;
+        internal sealed class Frame(ManualUpdates schedule)
+        {
+            readonly TaskCompletionSource release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            internal readonly TaskCompletionSource Observed = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            internal Task Wait(CancellationToken stop) => release.Task.WaitAsync(stop);
+            internal void Advance(double at)
+            { schedule.At = at; schedule.runtime.At = at; schedule.observing = this; release.SetResult(); }
+        }
+        public double Now(ClientState conn) { observing?.Observed.TrySetResult(); return At; }
+        public Task Wait(int milliseconds, CancellationToken stopping)
+        {
+            var frame = new Frame(this);
+            if (milliseconds == Game.RecoveryStepMs) { FastWaits++; fast.Writer.TryWrite(frame); }
+            else { Assert.Equal(Game.PlayerTickMs, milliseconds); slow.Writer.TryWrite(frame); }
+            return frame.Wait(stopping);
+        }
+        internal async Task<Frame> Next(int milliseconds)
+        {
+            var read = (milliseconds == Game.RecoveryStepMs ? fast : slow).Reader.ReadAsync().AsTask();
+            if (Completion is not null && await Task.WhenAny(read, Completion) == Completion)
+            { await Completion; throw new InvalidOperationException("Player updates stopped before their next scheduled boundary"); }
+            return await read;
+        }
     }
     sealed class CaptureStream : NetworkStream
     {
@@ -390,6 +492,7 @@ public sealed class WhispererRuntimeTests
         readonly string path = Path.Combine(Path.GetTempPath(), "whisperer-" + Guid.NewGuid().ToString("N") + ".db");
         readonly IGameLogic? oldLogic = Program.GameLogicOrNull;
         readonly IModuleLifetime? oldRules = Game.CombatLifetime;
+        readonly IPlayerUpdateSchedule oldSchedule = Game.PlayerUpdatesSchedule;
         readonly IDisposable registration;
         readonly List<ClientState> connections = [];
         internal readonly ModuleLifetime Rules = new("Game"), Provider = new("PhreciaAscendancies");
@@ -417,6 +520,15 @@ public sealed class WhispererRuntimeTests
             Conn.PlayerStats[Key("no_inherent_rage_loss")] = 1;
         }
         internal void OptIn(bool enabled) => Environment.SetEnvironmentVariable(Flag, enabled ? "1" : "0");
+        internal (ChatCommands Commands, List<string> Replies) CommandsFor(ClientState connection)
+        {
+            List<string> replies = [];
+            var commands = new ChatCommands { Send = (_, _) => Task.CompletedTask, Reply = text => { replies.Add(text); return Task.CompletedTask; } };
+            connection.Commands = commands;
+            typeof(GameServer.Modules.M_commands.CommandsModule).Assembly.GetType("CommandsFeature")!
+                .GetMethod("Register", BindingFlags.Static | BindingFlags.NonPublic)!.Invoke(null, [commands, "Whisperer", Wire, Ciphers, connection]);
+            return (commands, replies);
+        }
         internal static ClientState Connection(string name, bool optional = false, uint ticket = 1) =>
             new(new(1, "Whisperer", 300, 300, 100, 100, null, []), ticket, 1)
             {
@@ -443,9 +555,10 @@ public sealed class WhispererRuntimeTests
         internal int SkillRecordCost(ushort skill) => Game.PlayerSkills(Conn).Single(s => s.Id == skill).Stats!.Single(s => s.Key == Key("mana_cost")).Value;
         public void Dispose()
         {
-            foreach (var c in connections) { c.Closed = true; c.RetireResourceEffects(); c.RetireOwnedCombat(); PlayerInventories.Forget(c.Character!); }
+            foreach (var c in connections) { c.Closed = true; c.RetirePlayerUpdates(); c.RetireResourceEffects(); c.RetireOwnedCombat(); PlayerInventories.Forget(c.Character!); }
             registration.Dispose(); Provider.Stop(_ => { }); Rules.Stop(_ => { }); Wire.Dispose();
-            Game.CombatLifetime = oldRules; Program.SetGameLogic(oldLogic!); Environment.SetEnvironmentVariable(Flag, oldFlag);
+            Game.CombatLifetime = oldRules; Game.PlayerUpdatesSchedule = oldSchedule;
+            Program.SetGameLogic(oldLogic!); Environment.SetEnvironmentVariable(Flag, oldFlag);
             Saves.Db.Dispose(); foreach (string suffix in new[] { "", "-wal", "-shm" }) File.Delete(path + suffix);
         }
     }

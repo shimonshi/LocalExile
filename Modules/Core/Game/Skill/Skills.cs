@@ -1067,10 +1067,11 @@ static partial class Game
     // Actor 0x20 update (PlayerSkillsChange): the 0x40 list neither removes skills nor tells the character panel.
     internal static async Task SendSkills(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn)
     {
+        if (!CurrentGameRules) return;
         RefreshVaalSouls(conn);
         lock (conn.Monsters)
         {
-            if (conn.Closed || conn.LeavingArea || conn.RageRetired) return;
+            if (!CurrentGameRules || conn.Closed || conn.LeavingArea || conn.RageRetired) return;
             RefreshVaalSouls(conn);
             RefreshSingleUseCooldowns(conn);
             EnsureAntiquarianPools(conn);
@@ -1102,6 +1103,7 @@ static partial class Game
             conn.ClientSkillIds = [.. skills.Select(s => s.Id)];
             return PlayerSkillsWithVaalSouls(conn, skills, gone);
         }, "0x02ba player Actor: current skill stats");
+        if (!CurrentGameRules) return;
         await SendNativeCooldownRefresh(remote, stream, ciphers, conn);
         if (gone.Count > 0) await EndSkillEffects(remote, stream, ciphers, conn, gone);
 

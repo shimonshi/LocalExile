@@ -61,6 +61,7 @@ sealed class ConnectionWorker(string key)
             {
                 if (worker.generation != started) return;
                 if (ReferenceEquals(worker, conn.ResourceEffectsLease)) conn.RetireResourceEffects();
+                else if (ReferenceEquals(worker, conn.PlayerUpdatesWorker)) conn.RetirePlayerUpdates();
                 else
                 {
                     conn.Rampage.Clear();

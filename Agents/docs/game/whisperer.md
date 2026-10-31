@@ -25,6 +25,11 @@ Death, close and retirement clear transient state synchronously; current-generat
 Only primitive buff-removal receipts survive cleanup.
 An ordinary connection's resources do not depend on the optional provider's lifetime.
 Current module reload policy closes affected optional areas; durable class progress remains available on re-entry.
+Already active areas register a Gateway identity for current Game replacement to resume player updates.
+A separate Game lifetime lease claims one recovery loop and one slower player loop, independently of Rampage and resources.
+Retirement cancels the old pair, and completion cannot release a replacement's claim.
+Send-gate generation checks reject queued old output; old full stat/skill refreshes cannot overwrite current Blind.
+Ordinary connections keep their area and resume recovery and Blind publication without a new character action.
 
 | Notable | Consumer |
 |---|---|
@@ -77,6 +82,8 @@ Publication captures sources once per pass; target count does not multiply full 
 Selected and off-hand Accuracy retain their own/local scope before Blind.
 Released projectiles retain independent Blind and Ignite snapshots; spell prediction keeps main's spell-only rule.
 Send gates refresh current sources and lifetime checks after awaits and paid refunds.
+The generic `/blind [seconds]` development control uses normal immunity/liveness and current Blind publication.
+Its default is four seconds and accepted explicit durations are finite values in `(0, 60]`.
 
 ## Validation limits
 
@@ -88,6 +95,10 @@ Two new deterministic Gateway Facts exercise the actual policy/catalog, legal no
 resources, shared Blind, transfer and retirement through production helpers without real-time waits.
 Combined assertions retain actual-Life SavageHit and accepted recovery-trigger behavior from the current main.
 The existing Behemoth admission Fact adds a positive captured-payment/once-only spending control.
-Build and focused-test receipts belong to the exact candidate in ignored `logs/` and its handoff.
-Parent verification still owns the complete Core/Data/Gateway suites, fresh review and real-client acceptance.
-No native checks or full-suite readiness are claimed by this implementation handoff.
+The replacement regression drives the actual admitted-area loops and Game-replacement bridge with manual scheduling.
+It checks one replacement writer, Life/Mana/ES/flask/new Recoup progress, current Blind expiry and late old output/completion.
+Exact-head build, suite, review and native results are recorded in PR #333 and ignored validation receipts.
+At `a8cb0ee6`, the recorded full suites passed Core 436, Data 45 and Gateway 15.
+Fourteen partial native controls covered legal A/B nodes and resource/outgoing-Blind behavior, then stopped at missing `/blind`.
+Incoming immunity/refund, reload and build C were not accepted by that run.
+The reload fix and restored command require their own current-head acceptance; older passes do not establish it.

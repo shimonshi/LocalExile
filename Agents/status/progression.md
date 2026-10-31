@@ -202,7 +202,8 @@ Part of [Status](../Status.md); what to build next in this area is in
 - Whisperer: the optional module supplies the actual Deadeye/Ranger descriptor and allocated node sources.
   Generic Mana, spending, Recoup and shared Blind consumers run in Game with independent lifetime-owned state.
   Two deterministic Gateway Facts cover actual admission, legal builds, paid refunds and resource/lifecycle composition.
-  Current-head full-suite, review and native acceptance remain parent verification work.
+  Exact-head full-suite, review and native results are recorded in PR #333.
+  Partial A/B native evidence has explicit limits.
   Docs: [Whisperer consumers, legal builds and validation limits](../docs/game/whisperer.md).
 - Aristocrat: every node in its installed graph has a server consumer (gem levels and quality, attribute requirements,
   conditional ailment immunity, lowest-attribute damage, granted passive points), with Gateway coverage of legal builds,

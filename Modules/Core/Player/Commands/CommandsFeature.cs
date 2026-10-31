@@ -63,6 +63,14 @@ static class CommandsFeature
             await Send(remote, stream, ciphers, InstanceEntities.StatsUpdate(PlayerId, [(StatKeys.MovementVelocityPct, totalPct)]),
                 $"0x01b3 stats: movement_velocity_+% (key {StatKeys.MovementVelocityPct}) = {totalPct} ({conn.Pools.MovementVelocityPct} passive + {percent - 100} dev)");
         })
+        .Add("blind", "/blind [seconds] (dev: incoming Blind through normal immunity)", async args =>
+        {
+            double seconds = args.Length == 0 ? 4 : double.Parse(args[0], System.Globalization.CultureInfo.InvariantCulture);
+            if (!double.IsFinite(seconds) || seconds <= 0 || seconds > 60) throw new ArgumentException("seconds in (0, 60]");
+            bool accepted = Game.InflictPlayerBlind(conn, seconds);
+            await Game.SendBlind(remote, stream, ciphers, conn);
+            await conn.Commands!.Reply(accepted ? "Blind applied." : "Blind refused (immune or unavailable).");
+        })
         .Add("set_stat", "/set_stat <stat name or client key> <value|off> (off removes the dev replacement)", async args =>
         {
             uint stat = Stats.Key(args[0]) ?? throw new ArgumentException($"unknown stat {args[0]}");

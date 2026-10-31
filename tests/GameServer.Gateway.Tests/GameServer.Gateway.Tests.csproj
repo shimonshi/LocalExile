@@ -20,6 +20,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\GameServer.Gateway\GameServer.Gateway.csproj" />
     <ProjectReference Include="..\..\Modules\Core\Game\Game.csproj" />
+    <ProjectReference Include="..\..\Modules\Core\Player\Commands\Commands.csproj" />
     <ProjectReference Include="..\..\Modules\PhreciaAscendancies\PhreciaAscendancies.csproj" />
   </ItemGroup>
 </Project>

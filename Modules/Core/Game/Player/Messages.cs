@@ -569,8 +569,7 @@ static partial class Game
                     _ = RunMonsterAi(remote, stream, ciphers, conn);
                     _ = ContinueTour(remote, stream, ciphers, conn);
                     _ = RunLivingCollisions(remote, stream, ciphers, conn);
-                    _ = RunPlayerTick(remote, stream, ciphers, conn);
-                    _ = RunResourceRecovery(remote, stream, ciphers, conn);
+                    Program.ActivatePlayerUpdates(conn);
                     _ = RunCharges(remote, stream, ciphers, conn);
                     _ = RunFortification(remote, stream, ciphers, conn);
                     _ = RunRage(remote, stream, ciphers, conn);

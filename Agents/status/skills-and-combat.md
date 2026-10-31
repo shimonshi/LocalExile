@@ -627,7 +627,7 @@ Part of [Status](../Status.md); what to build next in this area is in
   share the existing resource writer, with synchronous lethal-Ignite cleanup before Mana recovery.
   Timed/smoke/Rampage Blind use one strongest value across ordinary and owned contacts and presentation.
   Two deterministic Gateway Facts cover resource, paid-refund, send-gate, transfer and retirement composition.
-  Full-suite and native acceptance of this modular port remain pending; historical raw-input checks retain their scope.
+  Current-head results are recorded in PR #333; partial A/B native checks do not cover reload or whole-class acceptance.
   See [Whisperer](../docs/game/whisperer.md).
 
 - Selected supported-spell panel: final linked-support damage replaces both spell and inherited hand ranges,
