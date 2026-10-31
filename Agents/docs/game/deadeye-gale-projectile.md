@@ -1,10 +1,10 @@
-# Deadeye Gale, Avidity and projectile execution candidate
+# Deadeye Gale, Avidity and projectile execution
 
 Issue #392 remains owned by the coordinator.
 This worker owns isolated engines, new adapters/tests and Core projectile continuation changes.
 The coordinator owns common Gateway wiring, native verification, general documentation and PR publication.
-No existing Gateway source/test file is changed by this candidate.
-An adapter test is not evidence that an unapplied common hook already executes in production.
+The coordinator integrated the common hooks described below after the isolated engine handoff.
+The original candidate revisions remain provenance; current connected behavior is summarized in `deadeye.md`.
 
 ## Revisions and prerequisite ownership
 
@@ -155,7 +155,7 @@ It replaces sources and removes lost grants using its own buff number.
 A different lease or recipient generation forgets the old object instead of removing a new object's buff.
 Native recipient stats and action timing must be rebuilt beside the buff when source/effect context changes.
 
-## Unapplied common hook contract
+## Common hook ordering
 
 `logs/deadeye-gale/common-hooks.patch` is an exact baseline-context proposal, not installed production wiring.
 Its SHA-256 is `EC2E0DF77E5B73E2B969A27846958EC7B8028317228D6A856B8E63EB7DCBB7C2`.
@@ -163,7 +163,12 @@ Its SHA-256 is `EC2E0DF77E5B73E2B969A27846958EC7B8028317228D6A856B8E63EB7DCBB7C2
 It was generated only from copies under this worktree's ignored logs directory.
 It covers source assembly, accuracy, incoming loss, death, transfer, ticker and release-profile hooks.
 Parent integration must preserve Slayer's changed blocks instead of applying one side wholesale.
-Admission and action timing below remain separate single-writer integration requirements.
+The coordinator applied admission and action timing sequentially, preserving the shared contract.
+The native client exposed a missed empty-ground default melee admission, now covered by real message-dispatch tests.
+In-reach or forced melee swings share the ordinary ranged admission helper: one pace reservation and one Gale grant.
+Unforced distant approach and Move actions grant nothing; early, paused, dead or retired inputs reserve nothing.
+Ground ordinary attack timing includes the current action factor once, matching targeted ordinary attacks.
+In the #339 composition, its weapon calculation already applies raw action speed; the outer divisor is ailments only.
 
 1. Wrap the completed `CharacterStatSources` runtime layer with `WithDeadeyeGale` after `WithCharges`.
    Do not feed derived Tailwind/Gale stats back into equipment, saved sources or a subsequent raw build.

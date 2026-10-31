@@ -32,7 +32,7 @@ partial class Program
         return profile.Chance(evasion, target.Rarity == MonsterRarity.Unique, close);
     }
 
-    // A ground ranged shot reserves pacing, its action token and stationary walk together with the input-time gate.
+    // A ground ordinary attack reserves pacing, its action token and stationary walk together with the input-time gate.
     internal static bool TryBeginRangedAttack(ClientState conn, double requestedAt, double duration,
         ushort skill, ushort sequence, out (int Action, int X, int Y, SkillCriticalRoll CriticalRoll) started)
     {
