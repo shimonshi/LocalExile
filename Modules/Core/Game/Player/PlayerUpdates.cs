@@ -71,6 +71,7 @@ static partial class Game
                 Drive(() => RunFortification(remote, stream, ciphers, conn, state)),
                 Drive(() => RunRage(remote, stream, ciphers, conn, state)),
                 Drive(() => RunFlaskChargeRegen(remote, stream, ciphers, conn, state)),
+                Drive(() => RunFlaskGrounds(remote, stream, ciphers, conn, state)),
                 Drive(() => ResumeBossStages(remote, stream, ciphers, conn, state)),
                 Drive(() => ContinueTour(remote, stream, ciphers, conn)));
         }

@@ -331,7 +331,8 @@ remaining native checks are recorded in [the port record](../docs/dev/issue75-po
   Normal Crown and mastery lifecycle have automated coverage; their native acceptance remains pending.
   Earlier Whisperer raw-stat native checks do not establish this expanded composition's native behavior.
   Whisperer's modular port adds generic typed-hit Recoup, actual spending and shared strongest Blind consumers.
-  Deterministic production-state controls cover the combined resource/transfer/retirement boundaries.
+  Deterministic production-state controls cover the combined resource/transfer/retirement boundaries and reload-safe
+  utility End automation; exact-head native reuse/charge acceptance remains part of the validation boundary.
   **Next:** complete exact-head full suites and native resource/Blind acceptance; see [Whisperer](../docs/game/whisperer.md).
   Iron Will/Strength provenance and missing upstream conditional spell producers require separate work.
   Unsupported skill/variant execution and unrelated Crown leech remain separate; see

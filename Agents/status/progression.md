@@ -201,7 +201,8 @@ Part of [Status](../Status.md); what to build next in this area is in
   Docs: [Behemoth consumers, legal builds and validation limits](../docs/game/behemoth.md).
 - Whisperer: the optional module supplies the actual Deadeye/Ranger descriptor and allocated node sources.
   Generic Mana, spending, Recoup and shared Blind consumers run in Game with independent lifetime-owned state.
-  Two deterministic Gateway Facts cover actual admission, legal builds, paid refunds and resource/lifecycle composition.
+  Two deterministic Gateway Facts cover actual admission, legal builds, paid refunds and resource/lifecycle composition,
+  including current-Game utility expiry and End automation across replacement.
   Exact-head full-suite, review and native results are recorded in PR #333.
   Partial A/B native evidence has explicit limits.
   Docs: [Whisperer consumers, legal builds and validation limits](../docs/game/whisperer.md).

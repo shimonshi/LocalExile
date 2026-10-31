@@ -49,7 +49,7 @@ static partial class Game
     // A use's charges taken from the flask (still in its cell, with enough charges: checked again under the gate, as a
     // gain or another use may have run meanwhile) and sent (S→C 0xbf): the spent flask, or null when there were too few.
     internal static async Task<InventoryItem?> SpendFlask(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn,
-        InventoryItem flask, Flasks.Flask charges, uint slot, Func<bool>? still = null)
+        InventoryItem flask, Flasks.Flask charges, uint slot, Func<bool>? still = null, Action<InventoryItem>? accepted = null)
     {
         InventoryItem? spent = null;
         await ChangeFlaskBar(remote, stream, ciphers, conn, items =>
@@ -64,6 +64,7 @@ static partial class Game
             });
             if (!enough || done is null) return null;
             spent = done;
+            accepted?.Invoke(done);
             return ([done.Id], [done]);
         }, changed => $"0x00bf flask {slot}: {changed[0].Item.Charges}/{charges.MaxCharges} charges");
         if (spent is not null) await EndGracePeriod(remote, stream, ciphers, conn, action: true);

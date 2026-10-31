@@ -1,5 +1,5 @@
 // Named roles share one generation claim, while retaining each loop's existing cadence.
-enum PlayerUpdateRole { Recovery, Player, MonsterAi, MonsterRegeneration, LivingCollisions, Charges, Fortification, Rage, FlaskCharges, MonsterAction, Tour }
+enum PlayerUpdateRole { Recovery, Player, MonsterAi, MonsterRegeneration, LivingCollisions, Charges, Fortification, Rage, FlaskCharges, FlaskGrounds, MonsterAction, Tour }
 interface IPlayerUpdateSchedule
 {
     double Now(ClientState conn);

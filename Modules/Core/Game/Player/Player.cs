@@ -493,6 +493,9 @@ static partial class Game
         {
             await updates.Schedule.Wait(PlayerUpdateRole.Recovery, RecoveryStepMs, updates.Stop.Token);
             if (!PlayerUpdatesCurrent(conn, updates)) break;
+            AdvanceUtilityFlasks(conn, updates);
+            await PublishFlaskChanges(remote, stream, ciphers, conn);
+            if (!PlayerUpdatesCurrent(conn, updates)) return;
             await EndGracePeriod(remote, stream, ciphers, conn);
             if (!PlayerUpdatesCurrent(conn, updates)) return;
             var rf = conn.RighteousFire;

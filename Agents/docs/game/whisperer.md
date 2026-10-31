@@ -73,6 +73,11 @@ Instant and at-end Mana do not copy; the original Mana queue and duration remain
 Accepted recovery uses retain main's Adjacent/LifeFlask triggers after the charge spend and current-owner check.
 The flask-bar gate rechecks that owner before spending, so a queued use cannot charge after source retirement.
 Life copying from a Mana flask does not turn that use into a LifeFlask trigger.
+Utility-flask payment installs the accepted stat snapshot, pause-clock deadline and output receipts in one transaction.
+The current resource writer owns expiry; pending End edges and presentation data survive Game replacement.
+End reuse checks the accepted activation, original item/cell and current enchant again at payment, so old expiry,
+manual refresh, moved/replaced items and removed enchants cannot remove or reuse a newer effect.
+Smoke, consecrated ground and taunt updates share the current area claim and keep pending output across replacement.
 SavageHit uses actual Life lost after Ward, ES and defensive Mana; Block and ailment-transition triggers are retained.
 
 Successful travel uses the checkpoint captured at `TryBeginAreaChange`, before the Auth await.
@@ -111,4 +116,11 @@ Fourteen partial native controls covered legal A/B nodes and resource/outgoing-B
 Incoming immunity/refund, reload and build C were not accepted by that run.
 The reload fix and restored command require their own current-head acceptance; older passes do not establish it.
 The `8c8898e9` full suites also passed, but its native harness did not execute and review found the retained AI/Rage bugs.
-The current area-ownership correction has deterministic coverage; exact-head full suites, native checks and review remain separate.
+At `106ac5a0`, full suites passed Core 436, Data 45 and Gateway 15; R3 review resolved the earlier findings but found
+that active utility expiry still lost End automation on reload. Its partial native V3 checks did not include an enchanted
+utility fixture and cannot certify that behavior. The utility correction extends the same Fact with distinct Game
+assemblies, actual accepted catalog effects, a held send gate, reload-gap expiry and the real current drainer/payment.
+It checks remaining duration, pause, exact End/removal identity, once-only reuse and charge spending, stale item/cell/enchant
+rejection, current smoke/consecration expiry and late old completion. Removing the expiry ownership guard makes it fail.
+Current full-suite, independent-review and native utility-reuse acceptance require their own exact-head PR receipts;
+these deterministic/build checks and historical full/native passes do not establish whole-class readiness.
