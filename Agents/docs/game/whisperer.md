@@ -98,6 +98,10 @@ Released projectiles retain independent Blind and Ignite snapshots; spell predic
 Send gates refresh current sources and lifetime checks after awaits and paid refunds.
 The generic `/blind [seconds]` development control uses normal immunity/liveness and current Blind publication.
 Its default is four seconds and accepted explicit durations are finite values in `(0, 60]`.
+Slash dispatch rebuilds the current league's command table through the existing Gateway factory before execution.
+A completed Game/Commands reload therefore affects the next command in the same inbox batch as well as later packets.
+Gateway Send/Reply sinks and dynamic mod fallback remain in that factory; retired Game publication guards stay active.
+This dispatch boundary does not promise that every mid-command file-watcher race is safe beyond the existing guards.
 
 ## Validation limits
 
@@ -132,6 +136,11 @@ The recovery correction extends the same Fact with distinct Game assemblies and 
 50-Mana recovery, copied Life, instant Life/Mana, at-end/Enduring Mana and independent hybrid durations.
 It drives current production recovery, verifies one payment/Adjacent classification and native sound/buff output,
 and checks full-Mana leech/Recoup settlement plus retained pre-payment source-stop refusal.
-The `b26a1aec` native V4 run was partial; a separate ordinary Game-reload command dispatch failure is under investigation.
+The `b26a1aec` native V4 run was partial (29 checks); source triage confirmed stale cached Commands closures after
+ordinary Game reload. The dispatch correction extends the same Fact with distinct actual Game and Commands assemblies
+and their actual builders. A manually scheduled isolated dependency wave drives production slash dispatch in one batch,
+then a later packet, requiring current strength publication while the old cached closure remains unable to send.
+It also checks unchanged area/connection, current league filtering and Gateway sinks/mod-fallback wiring.
+This deterministic control does not replace the unchanged native same-area reload acceptance flow.
 Current full-suite, independent-review and native acceptance require their own exact-head PR receipts;
 these deterministic/build checks and historical full/native passes do not establish whole-class readiness.

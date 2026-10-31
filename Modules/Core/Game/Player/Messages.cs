@@ -473,7 +473,13 @@ static partial class Game
             {
                 var chat = InstanceChat.ReadChat(bytes);
                 Console.WriteLine($"[gateway] {remote} <= 0x0015 chat \"{chat.Text}\" (u8 {chat.U8})");
-                if (chat.IsCommand) await conn.Commands!.RunAsync(chat.Text);
+                if (chat.IsCommand)
+                {
+                    // A preceding slash command can finish a Game + Commands reload in this same batch.
+                    // Resolve the current league's builders after that wave, retaining Gateway sinks/mod fallback.
+                    conn.Commands = Program.Commands(remote, stream, ciphers, conn);
+                    await conn.Commands.RunAsync(chat.Text);
+                }
                 else await EchoChat(remote, stream, ciphers, conn, chat.Text);
             }
             else if (id == InstanceChat.JoinChannelId)

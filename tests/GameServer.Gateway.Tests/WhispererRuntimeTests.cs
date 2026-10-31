@@ -435,6 +435,7 @@ public sealed class WhispererRuntimeTests
         await AcrossGameAssemblies(h);
         await UtilityAcrossGameAssemblies(h);
         await RecoveryAcrossGameAssemblies(h);
+        await CommandsAcrossGameAssemblies(h);
         Assert.Equal(definition.Identity, CharacterSaves.Load(c.Character!)!.MainAscendancy!.Selection);
     }
 
@@ -820,6 +821,91 @@ public sealed class WhispererRuntimeTests
                 if (use is not null) await use; if (oldState is not null) await oldState.Completion; if (currentCompletion is not null) await currentCompletion;
                 Game.CombatLifetime = previousRules; Game.PlayerUpdatesSchedule = previousSchedule; Program.SetGameLogic(previousLogic); context.Unload();
             }
+        }
+    }
+
+    // Actual Commands builders bind different Game assemblies; only the loader wave is manually scheduled.
+    static async Task CommandsAcrossGameAssemblies(Harness h)
+    {
+        const BindingFlags flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance;
+        var previousLogic = Program.Logic; var previousRules = Game.CombatLifetime;
+        var oldOwner = new ModuleLifetime("Game"); var owner = new ModuleLifetime("Game");
+        var context = new AssemblyLoadContext("Whisperer current slash registration", isCollectible: true);
+        context.Resolving += (_, name) => AssemblyLoadContext.Default.Assemblies.FirstOrDefault(a => a.GetName().Name == name.Name);
+        var assembly = context.LoadFromAssemblyPath(typeof(Game).Assembly.Location);
+        var commandsAssembly = context.LoadFromAssemblyPath(typeof(GameServer.Modules.M_commands.CommandsModule).Assembly.Location);
+        Assert.NotSame(typeof(Game).Assembly, assembly);
+        Assert.NotSame(typeof(GameServer.Modules.M_commands.CommandsModule).Assembly, commandsAssembly);
+        var oldModule = new GameServer.Modules.M_commands.CommandsModule();
+        var currentModule = (IModule)Activator.CreateInstance(commandsAssembly.GetType("GameServer.Modules.M_commands.CommandsModule")!)!;
+        var c = h.NewConnection("commands" + Guid.NewGuid().ToString("N"), optional: false); c.MainAscendancy = new();
+        c.LeagueModule = new(new League("WhispererTest", "Standard", false, false), new HashSet<string> { "Game", "Commands" });
+        c.PlayerSent = true; c.Wire = ("Whisperer", h.Wire, h.Ciphers); c.ProjectileRuntimeState = new ManualRuntime();
+        var area = c.Layout; var instance = c.Instance; uint ticket = c.Ticket; int waves = 0;
+        Assembly HandlerAssembly(ChatCommands commands)
+        {
+            var entries = (Dictionary<string, (string, Func<string[], Task>, string[])>)typeof(ChatCommands).GetField("_commands", flags)!.GetValue(commands)!;
+            return entries["set_stat"].Item2.Method.Module.Assembly;
+        }
+        static (ushort Id, byte[] Bytes) Chat(string text) => (InstanceChat.ChatId,
+            new LoginWriter().U16(InstanceChat.ChatId).WStr(text).U8(0).ToArray());
+        async Task Dispatch(IGameLogic logic, params string[] text) =>
+            await logic.OnClientMessages("Whisperer", h.Wire, h.Ciphers, text.Select(Chat).ToArray(), [], c, 0);
+        try
+        {
+            Game.CombatLifetime = oldOwner; Program.SetGameLogic(new GameServer.Modules.Game.GameLogic(oldOwner));
+            oldModule.Load(null!); // The actual module's builder, not a substitute set_stat handler.
+            // Route this one test reload to its isolated assemblies rather than the process-wide production host.
+            // Replacement Game is installed before Commands registers, exactly as the real dependency wave.
+            using var wave = GameEvents.CommandsBuilding.Add("Commands", (commands, _, _, _, target) =>
+                commands.Add("module_reload", "/module_reload [id]", async args =>
+                {
+                    Assert.Equal("Game", Assert.Single(args)); waves++;
+                    var executing = target.Commands;
+                    oldModule.Dispose(); oldOwner.Stop(ex => throw ex);
+                    assembly.GetType("Game")!.GetField("CombatLifetime", flags)!.SetValue(null, owner);
+                    Program.SetGameLogic((IGameLogic)Activator.CreateInstance(assembly.GetType("GameServer.Modules.Game.GameLogic")!, flags, null, [owner], null)!);
+                    Assert.Same(executing, target.Commands); // SetGameLogic is too early to rebuild dependent commands.
+                    currentModule.Load(null!);
+                    await target.Commands!.Reply("Module Game reloaded (/module for the list).");
+                }));
+            c.Commands = Program.Commands("Whisperer", h.Wire, h.Ciphers, c);
+            Assert.Same(typeof(GameServer.Modules.M_commands.CommandsModule).Assembly, HandlerAssembly(c.Commands));
+            await Dispatch(Program.Logic, "/set_stat strength 777");
+            Assert.Contains((Key("strength"), 777), PlayerStatRows(h.Wire.Drain(h.Receive)));
+            var cached = c.Commands!;
+            var batchLogic = Program.Logic;
+            await Dispatch(batchLogic, "/module_reload Game", "/set_stat strength 778");
+            var sameBatch = h.Wire.Drain(h.Receive);
+            Has(sameBatch, InstanceChat.ChatLine("Module Game reloaded (/module for the list)."));
+            Assert.Equal(1, waves); Assert.NotSame(batchLogic, Program.Logic);
+            Assert.Equal(778, c.PlayerStats[Key("strength")]);
+            Assert.Contains((Key("strength"), 778), PlayerStatRows(sameBatch));
+            Assert.NotSame(cached, c.Commands); Assert.Same(commandsAssembly, HandlerAssembly(c.Commands!));
+            // A retained old closure still cannot publish: refreshing never weakens old Game's guards.
+            Assert.True(await cached.RunAsync("/set_stat strength 779"));
+            Assert.Equal(779, c.PlayerStats[Key("strength")]); Assert.Empty(h.Wire.Drain(h.Receive));
+            await Dispatch(Program.Logic, "/set_stat strength 780");
+            Assert.Contains((Key("strength"), 780), PlayerStatRows(h.Wire.Drain(h.Receive)));
+            Assert.Same(commandsAssembly, HandlerAssembly(c.Commands!));
+            Assert.NotNull(c.Commands!.ModCommand); Assert.NotNull(c.Commands.ModUsages);
+            // Same ordinary connection, now a league without Commands: current factory must apply the live filter.
+            c.LeagueModule = new(new League("WhispererTest", "Standard", false, false), new HashSet<string> { "Game" });
+            await Dispatch(Program.Logic, "/set_stat strength 781");
+            Has(h.Wire.Drain(h.Receive), InstanceChat.ChatLine("Unknown command /set_stat. Type /commands (or /com) for the list."));
+            Assert.Equal(780, c.PlayerStats[Key("strength")]); Assert.DoesNotContain(c.Commands!.Usages, u => u.Name == "set_stat");
+            Assert.Contains(c.Commands.Usages, u => u.Name == "module_reload");
+            Assert.NotNull(c.Commands.ModCommand); Assert.NotNull(c.Commands.ModUsages);
+            await c.Commands.Send(InstanceChat.MessageBox("Gateway send sink"), "command sink control");
+            Has(h.Wire.Drain(h.Receive), InstanceChat.MessageBox("Gateway send sink"));
+            Assert.False(c.Closed); Assert.False(c.LeavingArea); Assert.True(c.PlayerSent);
+            Assert.Same(area, c.Layout); Assert.Same(instance, c.Instance); Assert.Equal(ticket, c.Ticket);
+        }
+        finally
+        {
+            c.Closed = true; oldModule.Dispose(); ((IDisposable)currentModule).Dispose();
+            oldOwner.Stop(_ => { }); owner.Stop(_ => { });
+            Game.CombatLifetime = previousRules; Program.SetGameLogic(previousLogic); context.Unload();
         }
     }
 
