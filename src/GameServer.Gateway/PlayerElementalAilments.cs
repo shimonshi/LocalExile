@@ -8,7 +8,7 @@ sealed class PlayerElementalAilments
     // Character.ot's +50 belongs to player ailments, not this incoming monster consumer.
     internal const double MonsterCriticalAilmentMultiplier = 1.3;
     internal enum Kind { Ignite, Chill, Freeze, Shock }
-    sealed record Effect(Kind Kind, double From, EffectClock Clock, double Magnitude)
+    sealed record Effect(Kind Kind, double From, EffectClock Clock, double Magnitude, Func<double>? SourceTaken = null)
     { public double Until => Clock.Deadline; }
     readonly List<Effect> effects = [];
     double carry;
@@ -28,7 +28,7 @@ sealed class PlayerElementalAilments
     }
     public double ActionFactor(double now) => Math.Max(actionFloor,
         1 - Math.Max(Magnitude(Kind.Freeze, now) * freezeEffect, Magnitude(Kind.Chill, now)) / 100);
-    public double DamageTakenFactor(double now) => 1 + Magnitude(Kind.Shock, now) / 100;
+    public double DamageTakenFactor(double now, int increased = 0) => Math.Max(0, 1 + (Magnitude(Kind.Shock, now) + increased) / 100);
 
     static double ExpiryRate(Func<string, int> get) => EffectClock.RecipientRate(2, get);
     static string Name(Kind kind) => kind.ToString().ToLowerInvariant();
@@ -52,7 +52,7 @@ sealed class PlayerElementalAilments
     // Damaging ailments use the pre-critical base, not damage taken. Non-damaging ailments use damage dealt
     // against the ordinary player's maximum-Life threshold. No enemy chance-to-ailment modifiers are invented.
     public void Apply(DamagePacket baseHit, DamagePacket taken, bool critical, uint maxLife, double now,
-        Func<string, int> get, Random random)
+        Func<string, int> get, Random random, Func<double>? sourceDamageTaken = null)
     {
         lock (effects)
         {
@@ -62,7 +62,8 @@ sealed class PlayerElementalAilments
                 seconds *= Math.Max(0, 1 - get($"self_{Name(kind)}_duration_-%") / 100.0);
                 if (magnitude <= 0 || seconds <= 0 || kind == Kind.Freeze && seconds < .3 || Immune(kind, get)
                     || RandomRolls.Chance(get($"avoid_{Name(kind)}_%"), 100, random)) return;
-                effects.Add(new(kind, now, new EffectClock(seconds, now, ExpiryRate(get)), magnitude));
+                effects.Add(new(kind, now, new EffectClock(seconds, now, ExpiryRate(get)), magnitude,
+                    kind == Kind.Ignite ? sourceDamageTaken : null));
             }
             if (critical) Add(Kind.Ignite, baseHit[DamageType.Fire].Min * .9 * MonsterCriticalAilmentMultiplier, 4);
             if (maxLife == 0) return;
@@ -82,7 +83,7 @@ sealed class PlayerElementalAilments
     // Integrate strongest ignite through every start/end boundary: a weaker, longer ignite can resume.
     // Resistance/immunity are live; hit luck, block, suppression and the 90% hit override never enter this pass.
     public int Advance(double from, double until, Func<string, int> get, int fireResistance, int maxFireResistance,
-        bool fireImmune)
+        bool fireImmune, double damageTakenMore = 1)
     {
         lock (effects)
         {
@@ -94,8 +95,10 @@ sealed class PlayerElementalAilments
             for (int i = 1; i < boundaries.Length; i++)
             {
                 double at = (boundaries[i - 1] + boundaries[i]) / 2;
-                if (!fireImmune) damage += DamageModel.Mitigate(Magnitude(Kind.Ignite, at), fireResistance, maxFireResistance)
-                    * DamageTakenFactor(at)
+                double strongest = effects.Where(e => e.Kind == Kind.Ignite && e.From <= at && at < e.Until)
+                    .Select(e => e.Magnitude * Math.Max(0, e.SourceTaken?.Invoke() ?? 1)).DefaultIfEmpty().Max();
+                if (!fireImmune) damage += DamageModel.Mitigate(strongest, fireResistance, maxFireResistance)
+                    * DamageTakenFactor(at, get("base_damage_taken_+%")) * Math.Max(0, damageTakenMore)
                     * Math.Max(0, 1 + get("harbinger_channel_buff_damage_taken_+%_final") / 100.0)
                     * (boundaries[i] - boundaries[i - 1]);
             }

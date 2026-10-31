@@ -22,7 +22,9 @@ partial class Program
                 throw new InvalidOperationException("no supported projectile damage plan");
             var resolved = MergeSkillStats(CharacterPlayerStats(conn), SupportedSkill(conn, skillId).Stats);
             int Get(string name) => Stats.Key(name) is uint key ? resolved.GetValueOrDefault(key) : 0;
-            _ = definition.Parameters.Resolve(Get, 1);
+            var profile = definition.Parameters.Resolve(Get, 1);
+            _ = DeadeyeRicochetProfile.Barrage(profile, SkillsFor(conn).EffectId(effect) ?? "",
+                SkillsFor(conn).IsAttack(effect), Get, 1);
             var at = conn.Walk.Position(conn.Clock.Elapsed.TotalSeconds);
             if (definition.RequiresTerrain && ProjectileGrid.Blocks(conn.Layout.Id, conn.Seed, at.X, at.Y) is null)
                 throw new InvalidOperationException("Projectile recipe requires a projectile terrain mask");
@@ -103,7 +105,9 @@ partial class Program
         {
             // Child stages and release specialization can introduce areas after this root is resolved.
             AreaHit = SupportedProjectileHit(conn, skillId, area: true),
-            Effect = gem.Effect, Level = gem.Level, Quality = gem.Quality,
+            Effect = gem.Effect, Level = gem.Level, Quality = gem.Quality, SourceSkill = skillId,
+            MarkDirectBasis = CaptureDeadeyeMarkHitSource(conn, skillId, false),
+            MarkAreaBasis = CaptureDeadeyeMarkHitSource(conn, skillId, true),
             SkillStats = new Dictionary<uint, int>(own),
             Penetration = Penetration.Of(player, Stats, !spell, own, local), ResistanceMods = HitResistMods(player, own),
             ImpaleSettings = ImpaleStats.From(player, Stats, !spell, own, local),
@@ -117,6 +121,7 @@ partial class Program
             AccuracyMoreUnique = conn.Pools.AccuracyMoreVsUniquePct,
             AccuracyMoreClose = conn.Pools.AccuracyMoreInCloseRangePct,
             AlwaysHits = Get("global_always_hit") != 0, FarShot = Get("player_far_shot") != 0,
+            DistanceDamage = DeadeyeProjectileDamage.Capture(Get),
             ReturnMultiplier = ProjectileReturn.DamageMore(Get),
             // A spell's action spawns its projectiles itself, every one of a volley, from where it stands (Frida
             // 2026-10-29, 0x141ebdf30 from the action at 0x141e938c0): a server object for them was a second fireball.
@@ -129,7 +134,18 @@ partial class Program
         var use = new ProjectileUse(profile, new(PlayerId, conn.ProjectileEpoch), new(PlayerId, conn.ProjectileEpoch), 1, origin, target)
             { Payload = shot, ReturnAnchor = new(PlayerId, conn.ProjectileEpoch) };
         var context = new ProjectileReleaseContext(conn, session, skillId, gem, variation, Get, Player, Own);
-        return definition.SpecializeRelease?.Invoke(context, use) ?? use;
+        use = definition.SpecializeRelease?.Invoke(context, use) ?? use;
+        var finalProfile = DeadeyeRicochetProfile.Terrain(use.Profile, Get);
+        // SupportedAttackSeconds reserves the total supported Barrage time after timing integration.
+        // Convert that total to the ordinary basis expected by the release recipe, exactly once.
+        if (DeadeyeRicochetProfile.IsBarrage(SkillsFor(conn).EffectId(gem.Effect) ?? "", !spell, Get))
+        {
+            double total = SupportedAttackSeconds(conn, skillId);
+            double ratio = DeadeyeRicochetProfile.AttackSeconds(1, finalProfile with { Barrage = true }, Get);
+            finalProfile = DeadeyeRicochetProfile.Barrage(finalProfile, SkillsFor(conn).EffectId(gem.Effect) ?? "",
+                !spell, Get, total / ratio);
+        }
+        return use with { Profile = finalProfile };
     }
 
 }

@@ -70,12 +70,24 @@ partial class Program
                 // The ordinary ranged attack fires at the ground point; it is neither a melee hit nor a Move action.
                 // Both bows and wands create their native Projectiles.dat object at the weapon's attack contact.
                 string? ordinaryProjectile = OrdinaryRangedAttack.ProjectileId(WeaponProfileFor(conn, activeSet: true));
-                if (use.SkillId == SkillCatalog.FirstSkillId && ordinaryProjectile is not null)
+                bool groundMeleeSwing = use.SkillId == SkillCatalog.FirstSkillId && ordinaryProjectile is null
+                    && WeaponProfileFor(conn).Melee && ((use.Flags & 1) != 0
+                        || !GroundAttackWalks(conn.Walk.Position(at), (use.X, use.Y),
+                            SlayerMeleeRange(conn, WeaponFor(conn).Range)));
+                if (use.SkillId == SkillCatalog.FirstSkillId && (ordinaryProjectile is not null || groundMeleeSwing))
                 {
-                    double duration = WeaponFor(conn).AttackSeconds(CharacterPlayerStats(conn));
+                    double duration = WeaponFor(conn).AttackSeconds(CharacterPlayerStats(conn)) / PlayerAilmentActionFactor(conn);
                     if (!TryBeginRangedAttack(conn, at, duration, use.SkillId, use.Slot, out var shot)) continue;
                     int projectileEpoch;
                     lock (conn.Monsters) projectileEpoch = conn.ProjectileEpoch;
+                    if (ordinaryProjectile is null)
+                    {
+                        await Send(remote, stream, ciphers,
+                            InstanceProtocol.ActionStarted(PlayerId, shot.X, shot.Y, use.X, use.Y, use.SkillId, use.Slot, use.Flags),
+                            $"0x01ab default melee swing at ({use.X}, {use.Y}) from ({shot.X}, {shot.Y})",
+                            still: () => conn.ProjectileEpoch == projectileEpoch && PlayerActionCurrent(conn, shot.Action));
+                        continue;
+                    }
                     // Release work must not block serial input dispatch: resume/move can invalidate a queued echo.
                     _ = ConfirmAndLaunchOrdinaryRanged(remote, stream, ciphers, conn,
                         InstanceProtocol.ActionStarted(PlayerId, shot.X, shot.Y, use.X, use.Y, use.SkillId, use.Slot, use.Flags),
@@ -97,7 +109,7 @@ partial class Program
                     && !SkillsFor(conn).IsProjectile(gem.Effect) && WeaponProfileFor(conn).Melee)
                 {
                     var here = conn.Walk.Position(at);
-                    if (GroundAttackWalks(here, (use.X, use.Y), WeaponFor(conn).Range))
+                    if (GroundAttackWalks(here, (use.X, use.Y), SlayerMeleeRange(conn, WeaponFor(conn).Range)))
                     {
                         int walkAction = 0;
                         if (!TryBeginSkillCooldownUse(conn, use.SkillId, gem.Effect,
@@ -690,6 +702,8 @@ partial class Program
                     _ = RunLivingCollisions(remote, stream, ciphers, conn);
                     _ = RunPlayerTick(remote, stream, ciphers, conn);
                     _ = RunResourceRecovery(remote, stream, ciphers, conn);
+                    DeadeyeGaleReceive(conn, conn.Ticket);
+                    _ = RunDeadeyeGale(remote, stream, ciphers, conn);
                     _ = RunCharges(remote, stream, ciphers, conn);
                     _ = RunFortification(remote, stream, ciphers, conn);
                     _ = RunRage(remote, stream, ciphers, conn);

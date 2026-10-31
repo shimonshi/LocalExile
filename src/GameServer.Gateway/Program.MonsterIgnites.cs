@@ -8,11 +8,13 @@ partial class Program
     /// <summary>BuffDefinitions row 0 <c>ignited</c> ("You're on fire", BuffVisuals 2: the burning flames).</summary>
     internal const ushort IgnitedBuffRow = 0;
 
-    static void ReconcileMonsterIgniteRate(ClientState conn, uint id, SpawnedMonster target, double now)
+    static void ReconcileMonsterIgniteRate(ClientState conn, uint id, SpawnedMonster target, double now,
+        double? damageFactor = null)
     {
         var curse = ActiveMonsterTemporalChains(conn, id, now);
         target.Ignites.ChangeRate(now, curse is null ? 1 : Math.Max(.25, 1 + curse.OtherEffects / 100.0),
-            curse?.Clock.Deadline ?? double.PositiveInfinity, MonsterDotFactor(target, DamageType.Fire));
+            curse?.Clock.Deadline ?? double.PositiveInfinity, damageFactor ?? MonsterDotFactor(target, DamageType.Fire)
+                * SlayerTargetMore(conn, target, CharacterPlayerStats(conn)));
     }
 
     // Called under the combat lock at an accepted projectile hit that dealt fire damage and left the monster alive: the
@@ -55,6 +57,7 @@ partial class Program
         using (ProjectileMutation(conn))
         {
             double now = ProjectileWorldTime(conn);
+            var ownerStats = CharacterPlayerStats(conn);
             foreach (var (id, m) in conn.Monsters)
             {
                 if (!m.Ignites.Burning && !m.Ignites.HasPendingDamage && m.Ignites.Buff is null) continue;
@@ -62,12 +65,13 @@ partial class Program
                 if (m.Dead || m.Life == 0) m.Ignites.Clear();
                 else
                 {
-                    ReconcileMonsterIgniteRate(conn, id, m, now);
-                    damage = m.Ignites.Advance(now, MonsterDotFactor(m, DamageType.Fire));
+                    double factor = MonsterDotFactor(m, DamageType.Fire) * SlayerTargetMore(conn, m, ownerStats);
+                    ReconcileMonsterIgniteRate(conn, id, m, now, factor);
+                    damage = m.Ignites.Advance(now, factor);
                 }
                 if (!m.Ignites.Burning && m.Ignites.Buff is ushort gone) { ended.Add((id, gone)); m.Ignites.Buff = null; }
                 if (damage == 0) continue;
-                (m.Life, bool stageStarts) = TakeDamageLocked(m, damage);
+                (m.Life, bool stageStarts) = TakeOwnerDamageLocked(conn, m, damage);
                 m.Aggro = m.Life > 0;
                 if (m.Life == 0)
                 {

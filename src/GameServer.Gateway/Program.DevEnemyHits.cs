@@ -55,6 +55,7 @@ partial class Program
             if (block) conn.PlayerMana = (uint)Math.Min((uint)UnreservedMana(conn), (long)conn.PlayerMana + gainedMana);
             TrimLeechLocked(conn);
             conn.RecentEnemyHits.Record(now);
+            DeadeyeGaleIncoming(conn, acceptedHit: true);
             if (block) ChargesWhenHit(conn, blocked, spell);
             if (conn.PlayerLife == 0) { conn.InvalidateIncomingHits(); ClearAntiquarianOnDeath(conn); }
             RecordHardcoreDeath(conn);

@@ -6,12 +6,12 @@
 /// <c>maximum_frenzy_power_endurance_charges</c> ("+1 to Maximum Endurance, Frenzy and Power Charges") to all three. Their Stats.dat
 /// Semantics 2 means OVERRIDE_VALUE; it does not establish that addition rule. The combined power/endurance and
 /// power/frenzy bonuses add to both rows; the former is reachable through the ordinary Warstaff base implicit.
-/// Conditional stats (while affected by ...) and the mechanics that replace the maximum with 0 are outside the standard
-/// contribution. The three explicitly sourced special-charge maximum mirrors are a separate, later projection
+/// Conditional stats (while affected by ...) are outside this contribution. Presence-aware replacements (including
+/// zero) and Masterful Form resolve here for both state and panel. Special-charge maximum mirrors project later
 /// (<see cref="MirroredMaximums"/>); the special counts come from the converted standard charges
 /// (<see cref="Charges.ConversionFlag"/>, <see cref="ChargeEffects.Display"/>). The charges themselves (current counts,
 /// gains, expiry, per-charge effects) are <see cref="Charges"/>, which takes its standard maxima from here. No Mods.dat
-/// row uses the max_*_charges_override stats today; if supported later, those must replace the sum rather than add to it.
+/// row uses max_*_charges_override today; explicit sources replace the sum rather than adding to it.
 /// </summary>
 static class ChargePanelStats
 {
@@ -21,20 +21,29 @@ static class ChargePanelStats
 
     /// <summary>The three panel rows, from the stats as the server holds them (<paramref name="get"/>: by Stats.dat Id,
     /// 0 when absent). Reductions that would take a maximum below zero show zero instead.</summary>
-    public static List<(string Stat, int Value)> Compute(Func<string, int> get)
+    public static List<(string Stat, int Value)> Compute(Func<string, int> get,
+        Func<string, int?>? replacement = null)
     {
         int powerAndEndurance = get("maximum_power_and_endurance_charges_+");
         int powerAndFrenzy = get("maximum_power_and_frenzy_charges_+");
         int all = get("maximum_frenzy_power_endurance_charges");
         static int Maximum(long value) => (int)Math.Clamp(value, 0, int.MaxValue);
+        int Complete(string type, long sum) => Maximum(replacement?.Invoke($"virtual_maximum_{type}_charges")
+            ?? replacement?.Invoke($"max_{type}_charges_override") ?? sum);
+        int frenzy = Complete("frenzy", (long)BaseMaximumCharges + get("max_frenzy_charges") + powerAndFrenzy + all);
+        int power = Complete("power", (long)BaseMaximumCharges + get("max_power_charges") + powerAndEndurance + powerAndFrenzy + all);
+        int endurance = SlayerRules.EnduranceMaximum(get,
+            Maximum((long)BaseMaximumCharges + get("max_endurance_charges") + powerAndEndurance + all), frenzy);
+        // Final replacements, including explicit zero, win after equality. Presence is separate from value.
+        endurance = Complete("endurance", endurance);
         return
         [
             ("virtual_maximum_endurance_charges",
-                Maximum((long)BaseMaximumCharges + get("max_endurance_charges") + powerAndEndurance + all)),
+                endurance),
             ("virtual_maximum_frenzy_charges",
-                Maximum((long)BaseMaximumCharges + get("max_frenzy_charges") + powerAndFrenzy + all)),
+                frenzy),
             ("virtual_maximum_power_charges",
-                Maximum((long)BaseMaximumCharges + get("max_power_charges") + powerAndEndurance + powerAndFrenzy + all)),
+                power),
         ];
     }
 

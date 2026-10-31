@@ -11,15 +11,30 @@ partial class Program
         lock (conn.Monsters)
         {
             TrimLeechLocked(conn);
-            if (conn.Closed || conn.LeavingArea || conn.PlayerLife == 0) return default;
+            if (conn.Closed || conn.LeavingArea || conn.RageRetired || conn.PlayerLife == 0) return default;
             var active = LeechOf(conn).Active(ProjectileWorldTime(conn));
             return (active.Life, active.Mana, active.EnergyShield, conn.EnergyShield.Full);
         }
     }
 
-    static void WithLeechConditions(ClientState conn, Dictionary<uint, int> stats)
+    static void WithLeechConditions(ClientState conn, Dictionary<uint, int> stats,
+        IReadOnlySet<uint> overrides)
     {
         var state = LeechContext(conn);
+        int Get(string name) => Stats.Key(name) is uint key ? stats.GetValueOrDefault(key) : 0;
+        var conditions = SlayerRules.WhileLeeching(Get, state.Life, state.Mana, state.EnergyShield);
+        if (conditions.AttackSpeedIncrease != 0)
+        {
+            var weapon = WeaponProfileFor(conn, activeSet: true);
+            // Same increased-speed bucket and inherent MORE as PoolsFor; never feed back into raw sources.
+            stats[StatKeys.MainHandAttackSpeedPct] += (int)Math.Round(conditions.AttackSpeedIncrease
+                * (weapon.DualWield || weapon.Unarmed ? 1.1 : 1), MidpointRounding.AwayFromZero);
+        }
+        if (conditions.CannotBeStunned && Stats.Key("cannot_be_stunned") is uint stun && !overrides.Contains(stun))
+            stats[stun] = 1;
+        if (Stats.Key("base_damage_taken_+%") is uint taken)
+            stats[taken] = (int)Math.Clamp((long)stats.GetValueOrDefault(taken) + conditions.DamageTakenIncrease,
+                int.MinValue, int.MaxValue);
         foreach (var (name, active) in new[] { ("is_life_leeching", state.Life), ("is_mana_leeching", state.Mana),
             ("is_es_leeching", state.EnergyShield), ("is_leeching", state.Life || state.Mana || state.EnergyShield),
             ("on_full_energy_shield", state.FullEnergyShield) })
@@ -58,12 +73,14 @@ partial class Program
         return LeechSources.From(Get, attack, name => local?.GetValueOrDefault(name) ?? 0);
     }
 
-    // Invoke only inside an accepted direct-hit transaction, after evasion/block and before impale reflection.
+    // Invoke only inside an accepted direct-hit transaction, after admission, before assigning post-hit target Life.
+    // The supplied direct inputs exclude separately triggered Impale and culling.
     internal static void LeechOnHitLocked(ClientState conn, SpawnedMonster target, DamagePacket taken,
-        int directDamage, LeechSources sources)
+        int directDamage, LeechSources sources, double overkillLife = 0)
     {
-        if (!target.Hostile || target.Dead || target.Life == 0 || conn.Closed || conn.LeavingArea || conn.Paused || conn.PlayerLife == 0) return;
+        if (!target.Hostile || target.Dead || target.Life == 0 || conn.Closed || conn.LeavingArea || conn.RageRetired || conn.Paused || conn.PlayerLife == 0) return;
         var amounts = sources.Amounts(taken, directDamage);
+        amounts.Life += overkillLife;
         var session = LeechOf(conn);
         if (target.Mods.Effects["cannot_have_life_leeched_from"] != 0) amounts.Life = 0;
         if (target.Mods.Effects["cannot_have_energy_shield_leeched_from"] != 0)

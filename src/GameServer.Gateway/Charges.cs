@@ -87,11 +87,12 @@ static class Charges
     /// Path of Building floors the result to whole seconds for its display; the game counts milliseconds, so this
     /// floors to milliseconds.
     /// </summary>
-    public static Limits LimitsOf(ChargeType type, Func<string, int> get, int held = 0)
+    public static Limits LimitsOf(ChargeType type, Func<string, int> get, int held = 0,
+        Func<string, int?>? replacement = null)
     {
         string name = Name(type);
-        int maximum = ChargePanelStats.Compute(get).First(r => r.Stat == $"virtual_maximum_{name}_charges").Value;
-        int minimum = Math.Clamp(get($"base_minimum_{name}_charges") + get("minimum_frenzy_power_endurance_charges"), 0, maximum);
+        int maximum = ChargePanelStats.Compute(get, replacement).First(r => r.Stat == $"virtual_maximum_{name}_charges").Value;
+        int minimum = (int)Math.Clamp((long)get($"base_minimum_{name}_charges") + get("minimum_frenzy_power_endurance_charges"), 0, maximum);
         int increased = get("charge_duration_+%") + get("base_charge_duration_+%") + type switch
         {
             ChargeType.Endurance => get("endurance_charge_duration_+%"),

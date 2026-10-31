@@ -24,6 +24,7 @@ sealed class ChargeSession
     readonly int[] applied = new int[3];
     readonly Shown[] shown = new Shown[3];
     Dictionary<string, int> observed = [];
+    Dictionary<string, int> replacements = [];
     double lastStep = double.NaN;
 
     static readonly Charges.Limits Default = new(ChargePanelStats.BaseMaximumCharges, 0, Charges.BaseDurationMs);
@@ -47,13 +48,17 @@ sealed class ChargeSession
     /// the stats the session reads between events (the periodic gains, the gain-to-maximum chances, the duration
     /// stats), kept until the next observation.
     /// </summary>
-    public void Observe(Func<string, int> get)
+    public void Observe(Func<string, int> get, Func<string, int?>? replacement = null)
     {
         var seen = new Dictionary<string, int>(StringComparer.Ordinal);
         int Record(string name) => seen[name] = get(name);
+        replacements = [];
+        foreach (var type in Charges.Types)
+            foreach (string name in new[] { $"virtual_maximum_{Charges.Name(type)}_charges", $"max_{Charges.Name(type)}_charges_override" })
+                if (replacement?.Invoke(name) is int value) replacements[name] = value;
         foreach (var type in Charges.Types)
         {
-            limits[(int)type] = Charges.LimitsOf(type, Record, State.Held(type));
+            limits[(int)type] = Charges.LimitsOf(type, Record, State.Held(type), Replacement);
             Record(ChargeGains.ToMaximumStat(type));
             Record(Charges.ConversionFlag(type));
             Record(Charges.MinimumConversionFlag(type));
@@ -66,6 +71,7 @@ sealed class ChargeSession
     public int GenericExpiryIncrease => Observed("buff_time_passed_+%");
 
     int Observed(string name) => observed.GetValueOrDefault(name);
+    int? Replacement(string name) => replacements.TryGetValue(name, out int value) ? value : null;
 
     /// <summary>Whether the type's charges are its special type's (Brutal, Affliction, Absorption) as last observed:
     /// the "gain … instead of" flag (<see cref="Charges.ConversionFlag"/>).</summary>
@@ -139,14 +145,14 @@ sealed class ChargeSession
         {
             // A per-second loss (Replica Fragility, Replica Pacifism, Replica Powerlessness).
             var (lost, left) = State.Lose(gain.Type, -gain.Count, current);
-            limits[(int)gain.Type] = Charges.LimitsOf(gain.Type, Observed, left);
+            limits[(int)gain.Type] = Charges.LimitsOf(gain.Type, Observed, left, Replacement);
             log.Add($"{gain.Source}: {Charges.Name(gain.Type)} charges {lost} -> {left}/{limits[(int)gain.Type].Maximum}");
             return;
         }
         int after = Math.Min(current.Maximum, State.Effective(gain.Type, current) + gain.Count);
         // The duration of charges counted per Frenzy Charge (frenzy_charge_duration_+%_per_frenzy_charge) uses the count
         // the gain leaves.
-        var l = Charges.LimitsOf(gain.Type, Observed, after);
+        var l = Charges.LimitsOf(gain.Type, Observed, after, Replacement);
         limits[(int)gain.Type] = l;
         bool toMaximum = ChargeGains.Rolls(Observed(ChargeGains.ToMaximumStat(gain.Type)), rng);
         var (before, now2) = State.Gain(gain.Type, gain.Count, now, l, toMaximum);

@@ -141,7 +141,12 @@ partial class Program
             : DualWieldPanel.OffHandSeconds(offHand, SkillCatalog.Unarmed.OffHandAttackSpeedPct(
                 stats.GetValueOrDefault(StatKeys.MainHandAttackSpeedPct), WeaponProfileFor(conn, activeSet: true).LocalAttackSpeedPct))
                 / Math.Max(.01, ActionSpeed.Multiplier(stats, Stats.Key));
-        return Math.Max(TickSeconds, seconds / more / PlayerActionFactor(conn));
+        double ordinary = Math.Max(TickSeconds, seconds / more / PlayerAilmentActionFactor(conn));
+        string effect = SkillsFor(conn).EffectId(gem.Effect) ?? "";
+        if (!DeadeyeRicochetProfile.IsBarrage(effect, SkillsFor(conn).IsAttack(gem.Effect), Get)) return ordinary;
+        var barrageProfile = ResolveProjectileDefinition(gem.Effect)?.Parameters.Resolve(Get, 1)
+            ?? throw new InvalidOperationException("Barrage requires a projectile profile.");
+        return DeadeyeRicochetProfile.AttackSeconds(ordinary, barrageProfile with { Barrage = true }, Get);
     }
 
     static GameServer.Core.World.DamagePacket SupportedHit(ClientState conn, ushort skillId)
@@ -217,7 +222,12 @@ partial class Program
         var own = SupportedSkill(conn, skillId).Stats;
         long Own(string name) => Stats.Key(name) is uint key ? own.GetValueOrDefault(key) : 0;
         return AttackAccuracyProfile.From(conn.Pools, CharacterPlayerStats(conn), Stats, own, MainHandLocalSources(conn))
-            with { Rating = AccuracyRating.Selected(conn.Pools, WeaponProfileFor(conn, activeSet: true), Own) };
+            with { Rating = DeadeyeAvidityAccuracy.Selected(conn.Pools, WeaponProfileFor(conn, activeSet: true), Own,
+                Program.Stats.Key(DeadeyeAvidityAccuracy.Stat) is uint coefficient
+                    ? CharacterPlayerStats(conn).GetValueOrDefault(coefficient) : 0,
+                DeadeyeAvidityAccuracy.StandardFrenzy(ChargesOf(conn)),
+                Stats.Key("main_hand_accuracy_rating") is uint final && conn.PlayerStats.TryGetValue(final, out int set)
+                    ? set : null) };
     }
 
     static int SupportedCriticalChance(ClientState conn, ushort skillId) => SupportedCriticalChanceFor(conn, skillId, false);

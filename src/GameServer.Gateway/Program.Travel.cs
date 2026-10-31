@@ -456,7 +456,9 @@ partial class Program
             Console.WriteLine($"[gateway] {remote} transfer failed: {r.Error}");
             return;
         }
+        DeadeyeGaleCarry(conn, r.Ticket);
         CarryCharges(conn, r.Ticket);
+        CarrySlayer(conn, r.Ticket);
         CarryFortification(conn, r.Ticket);
         CarryAntiquarian(conn, r.Ticket);
         CarryRage(conn, r.Ticket);

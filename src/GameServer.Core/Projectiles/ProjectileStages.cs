@@ -32,7 +32,7 @@ public sealed partial class ProjectileRuntime
                 foreach (var target in world.Actors(Now, Now).OrderBy(a => a.Key.Id))
                     if (target.Team != p.Use.Team && target.Key != p.Use.Owner
                         && (target.Position(Now) - p.Position).Length <= pulse.Radius + target.Radius)
-                        Damage(p, target, pulse.Stage, isArea: true);
+                        Damage(p, target, pulse.Stage, isArea: true, countsAsProjectileDamage: pulse.CountsAsProjectileDamage);
                 Schedule(Now + pulse.Interval, Pulse);
             }
             Pulse();
@@ -73,7 +73,7 @@ public sealed partial class ProjectileRuntime
         foreach (var target in world.Actors(Now, Now).Where(a => a.Team != p.Use.Team && a.Key != primary.Key
             && a.Key != p.Use.Owner && (a.Position(Now) - primary.Position(Now)).Length <= recipe.Radius)
             .OrderBy(a => (a.Position(Now) - primary.Position(Now)).Length).ThenBy(a => a.Key.Id).Take(recipe.Count))
-            Damage(p, target, recipe.Stage, hitEvent, new());
+            Damage(p, target, recipe.Stage, hitEvent, new(), countsAsProjectileDamage: recipe.CountsAsProjectileDamage);
     }
 
     void Area(ProjectileEntity p, ProjectileAreaRecipe recipe, ProjectileActorKey? victim = null)
@@ -122,11 +122,13 @@ public sealed partial class ProjectileRuntime
                 && (!recipe.ExcludeContactTarget || target.Key != victim)
                 && (target.Position(Now) - centre).Length <= recipe.Radius + target.Radius)
                 if (target.Key == victim)
-                    Damage(p, target, recipe.Stage, multiplier: recipe.Multiplier, admissionStage: "direct", isArea: true);
+                    Damage(p, target, recipe.Stage, multiplier: recipe.Multiplier, admissionStage: "direct", isArea: true,
+                        countsAsProjectileDamage: recipe.CountsAsProjectileDamage);
                 else Damage(p, target, recipe.Stage,
                     recipe.Scope == ProjectileHitScope.Emission ? p.EmissionId : areaId, new(), recipe.Multiplier,
                     admissionStage: recipe.Scope == ProjectileHitScope.Emission
-                        ? recipe.Stage + ":" + p.GroundBounces : recipe.Stage, isArea: true);
+                        ? recipe.Stage + ":" + p.GroundBounces : recipe.Stage, isArea: true,
+                    countsAsProjectileDamage: recipe.CountsAsProjectileDamage);
     }
 
     public bool TryConsume(long projectileId)

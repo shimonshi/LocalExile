@@ -63,3 +63,33 @@ Items keep the Roadmap's priority groups, and are in rough priority order within
   See [Aristocrat](../docs/game/aristocrat.md).
 - **Done when:** quest rewards persist and the native Altar can choose an ordinary ascendancy, with real-client checks.
   Implementing all 19 Phrecia classes' special gameplay is separate from this selection lifecycle.
+
+### Ordinary ascendancy gameplay
+
+- **Slayer (#391):** all pinned Default consumers are connected in source `762fbe43`.
+  Complete the [native combat matrix](../docs/game/slayer.md), including kill-window timing, nearby/proximity,
+  reflection, unaffected bleeding, shared leech/overkill/cull and one lethal reward commit.
+  Verify paid source removal, delayed publication, pause/death, failed/successful transfer, relog and restart.
+  Earlier native maxima/lifecycle evidence does not establish final-source combat acceptance.
+  The missing Headsman native presentation and non-recovery packet framing are fixed.
+  Actual reconciled-tip controls passed cull, timed buffs, Bane, Overwhelm, Impact, Masterful and retained leech.
+  Complete the remaining manual matrix without treating those representative controls as exhaustive parity.
+- **Deadeye (#392):** all 19 Default nodes have connected consumers, including marks/Mirage and Gale/projectiles.
+  Complete the [final native matrix](../docs/game/deadeye.md#related-integration-and-final-acceptance-work):
+  real hit/Ignite distance and in-flight refund, terrain/barrage, all marks and live incoming Focal DoT,
+  autonomous same-actor refresh/attribution, native Mirage visuals, Avidity and world-scoped Tailwind/Wind Ward.
+  Include paid refund, delayed sends, pause/death, transfer, relog and restart on legal connected builds.
+- **Combined acceptance:** final publication build and Core/Data/full serial Gateway evidence are recorded.
+  The local ordinary publication candidate uses explicit main `89b7aa90` plus #339 `13aeea19` snapshot `7476a054`.
+  #385 is already merged; keep unmerged #328/#333 class completions out of the ordinary publication diff.
+  Exact #328 `4c90a1f9` -> #333 `1aa9a177` -> #339 `13aeea19` private validation passes all 4185 Gateway tests.
+  Automatic representative native controls passed on actual publication tip `dcbe3afc` and its frozen build.
+  Whole-class acceptance remains false for that subset; finish the remaining manual and visual boundaries.
+  Final private all-related validation passed after runtime release and remains separate from the published diff.
+  Newer-main reconciliation remains a separate acceptance requirement after the tested base changes.
+  Keep both classes Partly working while the remaining exhaustive manual and visual boundaries are open.
+  The parent published [fork draft #2](https://github.com/shimonshi/LocalExile/pull/2) against that snapshot.
+  The upstream prerequisite merges are external dependencies; never merge into the active Harbinger owner branch.
+- **Ownership:** #391 and #392 are claimed; common hooks integrate in Slayer-then-Deadeye order with one writer.
+  Juggernaut #152, Inquisitor #363 and native selection #151 remain with their existing owners.
+  Read issue claims and related PR diffs before taking another class.

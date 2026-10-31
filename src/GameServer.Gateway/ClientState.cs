@@ -99,6 +99,8 @@ sealed class SpawnedMonster(string label, WalkEstimator walk, int aggroRange, in
     public HarbingerCompanionCatalog.Companion? Companion { get; init; }
     public MonsterAttack? Attack { get; init; }
     public bool Hostile { get; init; } = true;
+    public uint? OwnerId { get; init; }
+    public bool Daemon { get; init; }
     // What it is, for the experience and items its death gives (null for monsters made without a variety).
     public MonsterCatalog.Variety? Variety { get; init; }
     // Its known TakeHit clip lengths supply HitReaction's recovery duration. Native Actor TakeHit selects the actual
@@ -211,6 +213,11 @@ sealed partial class ClientState(AreaLayout layout, uint ticket, uint seed)
     public readonly RecentEnemyHits RecentEnemyHits = new();
     public readonly PlayerElementalAilments ElementalAilments = new();
     public double AilmentBypassCarry;
+    public readonly SlayerKillState SlayerKills = new();
+    public readonly PlayerBleeding Bleeding = new();
+    public double BleedBypassCarry;
+    public double? SlayerFrozenAt;
+    public bool ReflectionDirty;
     public Random IncomingHitRandom = Random.Shared;
     // The player's ignite rolls on monsters (MonsterIgnites), apart from the hit's own streams.
     public Random IgniteRandom = Random.Shared;
@@ -238,6 +245,7 @@ sealed partial class ClientState(AreaLayout layout, uint ticket, uint seed)
                 RecentEnemyHits.Clear(); ElementalAilments.Clear(); AilmentBypassCarry = 0;
                 HarbingerChannel = null;
             }
+            if (PlayerLife == 0) { SlayerKills.Clear(); Bleeding.Clear(); Program.DeadeyeGaleClear(this); }
         }
     }
     public int ProjectileEpoch;
@@ -256,6 +264,7 @@ sealed partial class ClientState(AreaLayout layout, uint ticket, uint seed)
             projectiles = [];
             if (Closed || PendingTransfer is not null || LeavingArea) return false;
             PendingTransfer = transfer;
+            SlayerFrozenAt = Program.ProjectileWorldTime(this);
             LeavingArea = true;
             InvalidateIncomingHits(clear: false);
             ProjectileEpoch++;
@@ -266,10 +275,18 @@ sealed partial class ClientState(AreaLayout layout, uint ticket, uint seed)
         }
     }
 
-    public void ResumeAfterFailedTransfer() { lock (Monsters) LeavingArea = false; }
+    public void ResumeAfterFailedTransfer()
+    {
+        lock (Monsters)
+        {
+            if (SlayerFrozenAt is double at) SlayerKills.Restore(SlayerKills.Carry(at), Program.ProjectileWorldTime(this));
+            SlayerFrozenAt = null;
+            LeavingArea = false;
+        }
+    }
 
     // Successful transfers retire all source-area workers independently of any particular carried mechanic.
-    public void Retire() { lock (Monsters) RageRetired = true; }
+    public void Retire() { lock (Monsters) { RageRetired = true; SlayerKills.Clear(); Bleeding.Clear(); Program.DeadeyeGaleClear(this, retire: true); } }
 
     /// <summary>The <see cref="Clock"/> time of a Stopwatch timestamp in the past (a socket read); now when 0 or paused.</summary>
     public double ClockAt(long timestamp)
@@ -338,7 +355,7 @@ sealed partial class ClientState(AreaLayout layout, uint ticket, uint seed)
 
     /// <summary>Applies the passive movement speed to the server's walk estimate; /set_speed is a dev override.</summary>
     public void ApplyMovementSpeed() =>
-        Walk.SetSpeed(Math.Max(1, Program.PlayerMovementSpeed(this) * ElementalAilments.ActionFactor(Clock.Elapsed.TotalSeconds)), Clock.Elapsed.TotalSeconds);
+        Walk.SetSpeed(Math.Max(1, Program.WalkSpeed * Program.PlayerMovementFactor(this)), Clock.Elapsed.TotalSeconds);
 
     /// <summary>Replaces an area transition of this connection's layout (dev changes; the walk estimate keeps going).</summary>
     public void ReplaceAreaTransition(uint id, AreaTransitionObject transition) =>
@@ -518,7 +535,7 @@ sealed partial class ClientState(AreaLayout layout, uint ticket, uint seed)
             lock (Monsters)
             {
                 // Resource loss belongs to the actual death transition, never a delayed death notification.
-                if (playerLife > 0 && value == 0) VaalSouls.ClearBalance();
+                if (playerLife > 0 && value == 0) { VaalSouls.ClearBalance(); SlayerKills.Clear(); Bleeding.Clear(); }
                 playerLife = value;
             }
         }

@@ -27,6 +27,8 @@ public enum ProjectileEventKind { Spawn, Redirect, End, Area, Hit }
 public sealed record ProjectileAreaRecipe(string Stage, double Radius, int Count = 1, double Offset = 0,
     double Multiplier = 1, ProjectileHitScope Scope = ProjectileHitScope.Projectile)
 {
+    /// <summary>Explicit recipe provenance, independent of area snapshot selection or carrier art.</summary>
+    public bool CountsAsProjectileDamage { get; init; }
     public bool ExcludeContactTarget { get; init; }
     /// <summary>Lower placement radius; offset is the upper radius.</summary>
     public double MinimumOffset { get; init; }
@@ -39,13 +41,19 @@ public sealed record ProjectileAreaRecipe(string Stage, double Radius, int Count
     /// <summary>Simulation quanta between generated areas; terrain-skipped centres consume no time.</summary>
     public long Interval { get; init; }
 }
-public sealed record ProjectilePulseRecipe(string Stage, double Radius, long Interval);
+public sealed record ProjectilePulseRecipe(string Stage, double Radius, long Interval)
+{
+    public bool CountsAsProjectileDamage { get; init; }
+}
 public sealed record ProjectileEmissionRecipe(ProjectileProfile Child, bool Radial = false, long Interval = 0,
     bool RandomDirections = false);
 public sealed record ProjectileFormRecipe(double Distance, double SpeedMultiplier, int Pierce,
     double DamageMultiplier = 1);
 public sealed record ProjectileSplitFormRecipe(double SpeedMultiplier, int Pierce);
-public sealed record ProjectileTargetedRecipe(string Stage, int Count, double Radius);
+public sealed record ProjectileTargetedRecipe(string Stage, int Count, double Radius)
+{
+    public bool CountsAsProjectileDamage { get; init; }
+}
 
 /// <summary>Resolved stage parameters. Counts and restrictions are resolved before a use is released.</summary>
 public sealed record ProjectileProfile(string Id)
@@ -64,7 +72,11 @@ public sealed record ProjectileProfile(string Id)
     public double Radius { get; init; } = 4;
     public long Lifetime { get; init; } = 1200000;
     public long SequentialDelay { get; init; }
+    /// <summary>Explicit sequential barrage recipe; ordinary fans never acquire this classification from quantity.</summary>
+    public bool Barrage { get; init; }
     public bool DirectDamage { get; init; } = true;
+    /// <summary>Provenance of direct contacts only. Secondary recipes and emission children grant their own.</summary>
+    public bool CountsAsProjectileDamage { get; init; }
     public int Pierce { get; init; }
     public int Fork { get; init; }
     public int Chain { get; init; }
@@ -93,6 +105,8 @@ public sealed record ProjectileProfile(string Id)
     public bool CannotSplit { get; init; }
     public bool CannotReturn { get; init; }
     public int TerrainBounces { get; init; }
+    /// <summary>Chance per eligible terrain collision to spend one remaining chain on a visible enemy.</summary>
+    public int TerrainChainChancePercent { get; init; }
     public ProjectileHitRule HitRule { get; init; } = new();
     /// <summary>Optional direct-hit admission during return. Null inherits HitRule.</summary>
     public ProjectileHitRule? ReturnHitRule { get; init; }
@@ -146,6 +160,7 @@ public sealed class ProjectileEntity
         RandomSource = new(seed ^ 0x2d53a1b7);
         RewardRandomSource = new(seed ^ 0x5e418ac3);
         ReactionRandomSource = new(seed ^ 0x1a736d49);
+        TerrainRandom = new(seed ^ 0x6a19f375);
         Speed = use.Profile.Speed;
         ExpiresAt = at + use.Profile.Lifetime;
     }
@@ -174,6 +189,7 @@ public sealed class ProjectileEntity
     internal long ChildEmission;
     internal int EmissionNumber;
     internal readonly Random Random;
+    internal readonly Random TerrainRandom;
     public Random RandomSource { get; }
     public Random RewardRandomSource { get; }
     public Random ReactionRandomSource { get; }
@@ -190,6 +206,8 @@ public sealed record ProjectileDamage(ProjectileEntity Projectile, ProjectileAct
     public int Phase { get; } = Projectile.Phase;
     /// <summary>Selects the host's area offensive snapshot without changing direct-hit admission.</summary>
     public bool IsArea { get; init; }
+    /// <summary>The dispatching recipe's explicit grant; neither IsArea nor Stage implies provenance.</summary>
+    public bool CountsAsProjectileDamage { get; init; }
 }
 
 public sealed record ProjectileEvent(ProjectileEventKind Kind, ProjectileEntity Projectile, long At,
@@ -205,5 +223,7 @@ public interface IProjectileWorld
     /// height (a shot aimed at higher ground) overrides it; area placement and target selection keep the plain trace.</summary>
     TerrainContact? TraceFlight(ProjectileEntity projectile, ProjectileVector from, ProjectileVector to) => TraceTerrain(from, to);
     ProjectileHitResult Hit(ProjectileDamage damage);
+    /// <summary>Pure target-sourced split query before terminal-area selection. A blocked/missed contact discards it.</summary>
+    int TargetSplitCount(ProjectileEntity projectile, ProjectileActor target) => 0;
     void Publish(ProjectileEvent value);
 }

@@ -512,7 +512,10 @@ partial class Program
                     if (!MonsterPresent(conn, id, m) || conn.Paused) return null;
                     checkedAtGate = true;
                     double now = conn.Clock.Elapsed.TotalSeconds;
-                    if (HitReaction.TryFlinch(m, damage, now, Random.Shared) is not { } clip) return null;
+                    var flinch = conn.ProjectileRuntime is { } session
+                        ? DeadeyeMarkFlinch(session, id, m, damage, now, Random.Shared)
+                        : HitReaction.TryFlinch(m, damage, now, Random.Shared);
+                    if (flinch is not { } clip) return null;
                     float seconds = (float)(m.FlinchUntil - now);
                     if (log) Console.WriteLine($"[gateway] {remote} => 0x01d1 monster 0x{id:x} TakeHit recovery {seconds:0.000} s " +
                         $"(clip profile {clip.Index}), action {m.ActionGeneration}, recovery until {m.FlinchUntil:0.000}");
@@ -633,7 +636,8 @@ partial class Program
         int rawDamage = (int)Math.Round(rolled[DamageType.Physical].Min);
         int damage = 0, chaosDamage = 0;
         var ailmentTaken = DamagePacket.Empty;
-        double shockFactor = conn.ElementalAilments.DamageTakenFactor(now);
+        double shockFactor = PlayerDamageTakenFactor(conn, now, stats)
+            * (conn.ProjectileRuntime is { } markedSession ? DeadeyeMarkIncoming(markedSession, id, m) : 1);
         foreach (var (type, range) in mitigated.Components)
         {
             int value = immune.Contains(type) ? 0 : (int)Math.Round(range.Min);
@@ -656,10 +660,12 @@ partial class Program
         conn.PlayerLife = (uint)Math.Min(conn.PlayerMaxLife, Math.Max(0, (long)conn.PlayerLife - DamagePlayerHit(conn, damage - chaosDamage, chaosDamage, now, stats) + gainedLife));
         conn.PlayerMana = (uint)Math.Min((uint)UnreservedMana(conn), (long)conn.PlayerMana + gainedMana);
         TrimLeechLocked(conn);
+        BleedOnMonsterHitLocked(conn, m, a, monsterCritical, blocked, now, stats, sourceId: id);
         ApplyPlayerAilmentsLocked(conn, a.Damage, ailmentTaken.Select((_, r) =>
             new(FortificationDamageTaken(conn, (int)r.Min), FortificationDamageTaken(conn, (int)r.Max))),
-            monsterCritical, blocked, now, stats);
+            monsterCritical, blocked, now, stats, sourceId: id, source: m);
         conn.RecentEnemyHits.Record(now);
+        DeadeyeGaleIncoming(conn, acceptedHit: true);
         ChargesWhenHit(conn, blocked);
         if (conn.PlayerLife == 0) { conn.InvalidateIncomingHits(); ClearAntiquarianOnDeath(conn); }
         RecordHardcoreDeath(conn);

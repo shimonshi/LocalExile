@@ -11,6 +11,9 @@ The server can list the 21 ordinary and 19 Phrecia definitions from the exact 3.
 Each choice is identified by family, stable table Id and revision; two families can share a class number and start node.
 Only one main ascendancy is selected at a time, and it must belong to the character's base class.
 
+[Slayer](slayer.md) and [Deadeye](deadeye.md) track connected ordinary node models separately from selection.
+Final native combat and exact related-head acceptance remain pending; neither class is yet accepted as complete.
+
 **Phrecia play is explicitly gated by default.**
 Gambler has an explicit read-only installed-graph opt-in; see [its checklist and scope](gambler.md).
 Aristocrat has the same check behind `Game_VERIFIED_ARISTOCRAT=1`; see [its checklist](aristocrat.md).

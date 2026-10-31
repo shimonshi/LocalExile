@@ -32,7 +32,7 @@ partial class Program
         return profile.Chance(evasion, target.Rarity == MonsterRarity.Unique, close);
     }
 
-    // A ground ranged shot reserves pacing, its action token and stationary walk together with the input-time gate.
+    // A ground ordinary attack reserves pacing, its action token and stationary walk together with the input-time gate.
     internal static bool TryBeginRangedAttack(ClientState conn, double requestedAt, double duration,
         ushort skill, ushort sequence, out (int Action, int X, int Y, SkillCriticalRoll CriticalRoll) started)
     {
@@ -51,6 +51,7 @@ partial class Program
             conn.ChannelSkill = skill;
             conn.ChannelSkillSequence = sequence;
             started = (action, x, y, CaptureSkillCriticalRoll(conn, skill));
+            DeadeyeGaleAdmitUse(conn, true);
             return true;
         }
     }
@@ -59,7 +60,7 @@ partial class Program
     // the use is no more than a quarter of an attack early (the client's jitter). Does not reserve the timer: an attack used
     // on a monster waits for the walk into reach, and CastGemSkill reserves it when the swing starts.
     static double SkillAttackSeconds(ClientState conn, int effect, int level) =>
-        SkillAttackTiming.ForSkill(SkillsFor(conn), effect, level, WeaponFor(conn), CharacterPlayerStats(conn)) / PlayerActionFactor(conn);
+        SkillAttackTiming.ForSkill(SkillsFor(conn), effect, level, WeaponFor(conn), CharacterPlayerStats(conn)) / PlayerAilmentActionFactor(conn);
 
     static bool AttackReady(ClientState conn, int effect, int level, out double seconds)
     {
@@ -134,7 +135,7 @@ partial class Program
         string? ordinaryProjectile = OrdinaryRangedAttack.ProjectileId(WeaponProfileFor(conn, activeSet: true));
         bool ranged = ordinaryProjectile is not null;
         double now = conn.Clock.Elapsed.TotalSeconds, duration;
-        lock (conn.Monsters) duration = weapon.AttackSeconds(CharacterPlayerStats(conn)) / PlayerActionFactor(conn);
+        lock (conn.Monsters) duration = weapon.AttackSeconds(CharacterPlayerStats(conn)) / PlayerAilmentActionFactor(conn);
         // The client sends one 0x24 per swing while the button is held; jitter makes the next one arrive a little before a
         // full attack time, so accept it up to a quarter of an attack early.
         lock (conn.Monsters)
@@ -155,7 +156,7 @@ partial class Program
                 || PlayerActionBlocked(conn, requestedAt, now)) return;
             action = Interlocked.Increment(ref conn.ActionCount);
             target = m.Walk.Position(now);
-            (here, stop, arrive) = conn.Walk.Approach(target.X, target.Y, weapon.Range, now, tolerance: m.StopRange - 2);
+            (here, stop, arrive) = conn.Walk.Approach(target.X, target.Y, SlayerMeleeRange(conn, weapon.Range), now, tolerance: m.StopRange - 2);
         }
         Console.WriteLine($"[gateway] {remote} <= 0x0024 skill 0x{use.SkillId:x4} seq 0x{use.Sequence:x4} on 0x{use.TargetId:x}: player ({here.X}, {here.Y}), " +
             $"monster ({target.X}, {target.Y}), distance {Dist(here, target):0.0}; swing from ({stop.X}, {stop.Y}) in {arrive - now:0.00} s");
@@ -173,11 +174,12 @@ partial class Program
             conn.NextAttackAt = AttackTiming.After(now, conn.NextAttackAt, duration);
             criticalRoll = CaptureSkillCriticalRoll(conn, SkillCatalog.FirstSkillId);
         }
-        if (Dist(stop, target) > weapon.Range + 2)
+        if (Dist(stop, target) > SlayerMeleeRange(conn, weapon.Range) + 2)
         {
             Console.WriteLine($"[gateway] {remote} attack on 0x{use.TargetId:x} out of reach: {Dist(stop, target):0.0} > {weapon.Range}");
             return;
         }
+        DeadeyeGaleAdmitUse(conn, true);
         var actionBytes = InstanceProtocol.ActionStarted(PlayerId, stop.X, stop.Y, target.X, target.Y, use.SkillId, use.Sequence, use.Flags, targetObjectId: use.TargetId);
         string actionLog = $"0x01ab player skill 0x{use.SkillId:x4} on monster 0x{use.TargetId:x} ({m.Label}, life {m.Life}/{m.MaxLife}), attack time {duration:0.000} s";
         if (ordinaryProjectile is { } projectileId)
@@ -233,30 +235,42 @@ partial class Program
             var resistanceMods = HitResistMods(player, ownPenetration);
             var hit = AttackHitConverted(weapon, player, WeaponProfileFor(conn, activeSet: true).Melee,
                 ConversionFor(conn, attackEffect, 1, attack: true));
+            var markSession = conn.ProjectileRuntime;
+            if (markSession is not null) hit = DeadeyeMarkedPacket(markSession, use.TargetId, m, hit, true, false,
+                CaptureDeadeyeOrdinaryMarkHitSource(conn, WeaponProfileFor(conn, activeSet: true).Melee));
             var gambler = GamblerFor(player);
-            var ownRolled = WithDamageVsRarity(player, m, (gambler with { DamageMorePct = 0 }).RollOutgoingHit(hit, Random.Shared));
-            critical = RollCriticalStrike(conn, conn.Pools.AttackCriticalStrikeChance, ownPenetration, skillRoll: criticalRoll)
+            var ownRolled = WithDamageVsRarity(player, m, (gambler with { DamageMorePct = 0 }).RollOutgoingHit(hit.Scale(
+                SlayerTargetMore(conn, m, player, WeaponProfileFor(conn, activeSet: true).Melee)), Random.Shared));
+            var markedCritical = markSession is null ? (Chance: conn.Pools.AttackCriticalStrikeChance,
+                Multiplier: AttackCriticalMultiplier(conn, player)) : DeadeyeMarkedCritical(markSession, use.TargetId, m,
+                    conn.Pools.AttackCriticalStrikeChance, AttackCriticalMultiplier(conn, player));
+            critical = RollCriticalStrike(conn, markedCritical.Chance, ownPenetration, skillRoll: criticalRoll)
                 && GameServer.Core.World.EvasionEntropy.ConfirmsCritical(hitChance, conn.AttackAccuracyRandom);
-            int sourceCriticalMultiplier = AttackCriticalMultiplier(conn, player);
+            int sourceCriticalMultiplier = SlayerCriticalMultiplier(conn, markedCritical.Multiplier, player);
             int criticalMultiplier = CriticalMultiplierOn(m, sourceCriticalMultiplier);
-            (damage, resistance) = MonsterDamage(m, ownRolled, critical, attack: true, resistanceMods, pen, out var taken, gambler.InvertsResistance(Random.Shared));
+            var targetModifiers = markSession is null ? default : DeadeyeMarkTargetModifiers(markSession, use.TargetId, m, false);
+            (damage, resistance) = MonsterDamage(m, ownRolled, critical, attack: true, resistanceMods, pen,
+                out var taken, gambler.InvertsResistance(Random.Shared), targetModifiers.Increased, targetModifiers.Physical);
             if (critical) damage = DamageModel.CriticalDamage(damage, criticalMultiplier);
-            LeechOnHitLocked(conn, m, taken, damage, HitLeechSources(player, true, ownPenetration, weapon.LocalSources));
+            var leech = HitLeechSources(player, true, ownPenetration, weapon.LocalSources);
+            if (markSession is not null) leech = DeadeyeMarkedLeech(markSession, use.TargetId, m, leech, true);
+            var ownerHit = new OwnerSkillHit(damage, taken, leech, player)
+                { Melee = WeaponProfileFor(conn, activeSet: true).Melee, Attack = true };
             (damage, stored, impaled) = WithImpaleHitLocked(conn, m, damage, ownRolled, critical, sourceCriticalMultiplier,
                 ImpaleStats.From(player, Stats, attack: true, ownPenetration, weapon.LocalSources, critical));
             impaleStacks = m.Impale.Stacks;
             impaleStored = m.Impale.Bonus;
             FortificationOnHitLocked(conn, m, RawFortificationDamage(ownRolled, critical, criticalMultiplier),
                 WeaponProfileFor(conn, activeSet: true).Melee, player, ownPenetration);
-            (m.Life, stageStarts) = TakeDamageLocked(m, damage);
+            if (markSession is not null) DeadeyeMarkHit(markSession, use.TargetId, m, true, random: Random.Shared);
+            var applied = ApplyMonsterHitLocked(conn, m, damage, ownerHit)!.Value;
+            stageStarts = applied.StageStarts;
             if (stageStarts)
             {
                 CommitBossStage(remote, stream, ciphers, conn, use.TargetId, m, ProjectileWorldTime(conn));
                 stageStarts = false;
             }
             life = m.Life;
-            conn.LastEnemyHitAt = conn.Clock.Elapsed.TotalSeconds;
-            if (life == 0) { m.Aggro = false; m.Dead = true; CollectVaalSoulAtDeathLocked(conn, m); }
             RageOnHitLocked(conn, attack: true, melee: WeaponProfileFor(conn, activeSet: true).Melee, critical);
         }
         ChargesOnHit(conn, m, critical, spell: false);
@@ -297,6 +311,14 @@ partial class Program
     {
         if (m.Companion is not null) return;
         var gem = GemSkillEffects(conn).FirstOrDefault(g => g.Id == use.SkillId);
+        if (gem.Name is not null && DeadeyeMarks.Find(gem.Effect) is not null)
+        {
+            await EndGracePeriod(remote, stream, ciphers, conn, action: true);
+            var markSession = ProjectilesFor(remote, stream, ciphers, conn);
+            markSession.Advance();
+            TryDeadeyeMarkCast(markSession, use.SkillId, use.TargetId);
+            return;
+        }
         if (gem.Name is not null && !ProjectilePathAvailable(remote, conn, use.SkillId, gem.Effect)) return;
         // A movement attack (Flicker Strike, Leap Slam) closes the distance itself, and an attack used with "always attack
         // without moving" (Flags bit 0) swings from where the player stands: both keep the immediate cast.
@@ -319,7 +341,7 @@ partial class Program
                     now = ProjectileWorldTime(conn);
                     action = Interlocked.Increment(ref conn.ActionCount);
                     target = m.Walk.Position(now);
-                    (here, stop, arrive) = conn.Walk.Approach(target.X, target.Y, weapon.Range, now, tolerance: m.StopRange - 2);
+                    (here, stop, arrive) = conn.Walk.Approach(target.X, target.Y, SlayerMeleeRange(conn, weapon.Range), now, tolerance: m.StopRange - 2);
                 }, out var approachTicket, reserve: false, requestedAt: requestedAt)) return;
             Console.WriteLine($"[gateway] {remote} <= 0x0024 skill 0x{use.SkillId:x4} {gem.Name} on 0x{use.TargetId:x}: player ({here.X}, {here.Y}), " +
                 $"monster ({target.X}, {target.Y}), distance {Dist(here, target):0.0}; swing from ({stop.X}, {stop.Y}) in {arrive - now:0.00} s (t={now:0.000})");
@@ -331,7 +353,7 @@ partial class Program
             }
             now = conn.Clock.Elapsed.TotalSeconds;
             lock (conn.Monsters) target = m.Walk.Position(now);
-            if (Dist(stop, target) > weapon.Range + 2)
+            if (Dist(stop, target) > SlayerMeleeRange(conn, weapon.Range) + 2)
             {
                 Console.WriteLine($"[gateway] {remote} skill 0x{use.SkillId:x4} {gem.Name} on 0x{use.TargetId:x} out of reach: {Dist(stop, target):0.0} > {weapon.Range}");
                 return;
@@ -394,6 +416,13 @@ partial class Program
         if (InTown(conn) || conn.PlayerLife == 0) return false;
         await EndGracePeriod(remote, stream, ciphers, conn, action: true);
         var gem = GemSkillEffects(conn).FirstOrDefault(g => g.Id == skillId);
+        if (gem.Name is not null && DeadeyeMarks.Find(gem.Effect) is not null)
+        {
+            if (targetId == 0) return false;
+            var markSession = ProjectilesFor(remote, stream, ciphers, conn);
+            markSession.Advance();
+            return TryDeadeyeMarkCast(markSession, skillId, targetId);
+        }
         bool Current() => (cooldownUse?.Current(conn) ?? (actionToken is null || PlayerActionCurrent(conn, action)))
             && (channelGeneration is not int generation || ChannelCurrent(conn, skillId, action, generation));
         if (!Current()) return false;
@@ -476,8 +505,10 @@ partial class Program
         if (gem.Name is not null && SupportedReservation(conn, skillId) is { } reservation)
         {
             if (!Current()) return false;
-            return await ToggleAura(remote, stream, ciphers, conn, skillId, gem.Effect, gem.Name, reservation,
+            bool toggled = await ToggleAura(remote, stream, ciphers, conn, skillId, gem.Effect, gem.Name, reservation,
                 SupportedSkill(conn, skillId).Level, SupportedSkill(conn, skillId).Quality);
+            if (toggled) DeadeyeGaleAdmitUse(conn, true);
+            return toggled;
         }
         SkillCriticalRoll? criticalRoll = null;
         if (gem.Name is not null)
@@ -488,7 +519,11 @@ partial class Program
             {
                 if (!Current()) return false;
                 paid = PayMana(conn, skillId, out cost);
-                if (paid) criticalRoll = CaptureSkillCriticalRoll(conn, skillId);
+                if (paid)
+                {
+                    criticalRoll = CaptureSkillCriticalRoll(conn, skillId);
+                    DeadeyeGaleAdmitUse(conn, true);
+                }
                 if (paid && Supports.Of(gem.Effect)?.Types.Contains(47) == true)
                 {
                     channelGeneration = ++conn.ChannelGeneration;
@@ -837,7 +872,7 @@ partial class Program
             : AttackContactDelay(conn, SupportedAttackSeconds(conn, skillId), approach: false);
         int radius = SkillRadius(conn, skillStats, spell, gem.Effect);
         // A melee skill aimed far away still lands in front of the player.
-        var centre = !spell && Dist(from, to) > radius + weapon.Range ? from : to;
+        var centre = !spell && Dist(from, to) > radius + SlayerMeleeRange(conn, weapon.Range) ? from : to;
         int action = actionToken ?? cooldownUse?.ActionToken ?? conn.ActionCount;
         if (cooldownUse?.Instant != true && conn.ActionCount != action) return;
         // A channel's hits (Cyclone, C→S 0x197) land at once, where the player is.
@@ -872,6 +907,7 @@ partial class Program
         Penetration.PerType pen = default;
         HitResistances.Mods mods = default;
         DamagePacket sweepHit = default!;
+        DeadeyeMarkHitSource? markBasis = null;
         int sweepMultiplier = 0;
         AttackAccuracyProfile accuracy = default;
         LeechSources? leech = null;
@@ -888,7 +924,7 @@ partial class Program
             {
                 // Catch up earlier projectile contacts before reading Rage or any other live offensive input.
                 if (conn.Closed || conn.LeavingArea || conn.RageRetired || conn.PlayerLife == 0 || conn.Paused
-                    || !Current() || cooldownUse is null && !PlayerActionCurrent(conn, action)) return;
+                    || !Current() || cooldownUse is null && !PlayerActionCurrent(conn, action)) break;
                 if (m.Dead || m.Life == 0 || !conn.Monsters.TryGetValue(id, out var current) || !ReferenceEquals(current, m)) continue;
                 if (player is null)
                 {
@@ -896,7 +932,8 @@ partial class Program
                     var local = spell ? null : MainHandLocalSources(conn);
                     pen = Penetration.Of(player, Stats, attack: !spell, skillStats, local);
                     mods = HitResistMods(player, skillStats);
-                    sweepHit = SupportedHit(conn, skillId);
+                    sweepHit = SupportedHitFor(conn, skillId, suppress: false);
+                    markBasis = CaptureDeadeyeMarkHitSource(conn, skillId, area: true);
                     sweepMultiplier = SupportedCriticalMultiplier(conn, skillId);
                     if (!spell) accuracy = SupportedAccuracy(conn, skillId);
                     leech = HitLeechSources(player, !spell, skillStats, local);
@@ -907,18 +944,30 @@ partial class Program
                 if (!spell && !accuracy.CannotBeEvaded && !m.AttackEvasion.Hits(hitChance, ProjectileWorldTime(conn), conn.AttackAccuracyRandom)) continue;
                 if (MonsterBlocks(m, Random.Shared, spell)) continue;
                 var gambler = GamblerFor(player);
-                var rolled = WithDamageVsRarity(player, m, (gambler with { DamageMorePct = 0 }).RollOutgoingHit(sweepHit, Random.Shared));
-                critical = RollCriticalStrike(conn, SupportedCriticalChance(conn, skillId), skillStats, attack: !spell, skillRoll: criticalRoll)
+                var markSession = conn.ProjectileRuntime;
+                var basis = markSession is null ? sweepHit : DeadeyeMarkedPacket(markSession, id, m, sweepHit, !spell, false, markBasis);
+                var contactHit = new SkillDamageContext(spell ? SkillHitKind.Spell : SkillHitKind.Attack, player).Hit(basis);
+                var rolled = WithDamageVsRarity(player, m, (gambler with { DamageMorePct = 0 }).RollOutgoingHit(contactHit.Scale(
+                    SlayerTargetMore(conn, m, player, !spell && SkillsFor(conn).IsMelee(gem.Effect))), Random.Shared));
+                var markedCritical = markSession is null ? (Chance: SupportedCriticalChance(conn, skillId), Multiplier: sweepMultiplier)
+                    : DeadeyeMarkedCritical(markSession, id, m, SupportedCriticalChance(conn, skillId), sweepMultiplier);
+                critical = RollCriticalStrike(conn, markedCritical.Chance, skillStats, attack: !spell, skillRoll: criticalRoll)
                     && (spell || GameServer.Core.World.EvasionEntropy.ConfirmsCritical(hitChance, conn.AttackAccuracyRandom));
-                int multiplier = CriticalMultiplierOn(m, sweepMultiplier);
-                (damage, resistance) = MonsterDamage(m, rolled, critical, attack: !spell, mods, pen, out var taken, gambler.InvertsResistance(Random.Shared));
+                int sourceMultiplier = SlayerCriticalMultiplier(conn, markedCritical.Multiplier, player);
+                int multiplier = CriticalMultiplierOn(m, sourceMultiplier);
+                var targetModifiers = markSession is null ? default : DeadeyeMarkTargetModifiers(markSession, id, m, false);
+                (damage, resistance) = MonsterDamage(m, rolled, critical, attack: !spell, mods, pen, out var taken,
+                    gambler.InvertsResistance(Random.Shared), targetModifiers.Increased, targetModifiers.Physical);
                 if (critical) damage = DamageModel.CriticalDamage(damage, multiplier);
                 double more = damageMore * bloodMore;
                 if (more != 1) damage = (int)Math.Floor(damage * Math.Max(0, more));
-                LeechOnHitLocked(conn, m, taken, damage, leech!);
-                damage = WithImpaleHitLocked(conn, m, damage, rolled, critical, sweepMultiplier,
+                var ownerHit = new OwnerSkillHit(damage, taken,
+                    markSession is null ? leech! : DeadeyeMarkedLeech(markSession, id, m, leech!, !spell), player)
+                    { Melee = !spell && SkillsFor(conn).IsMelee(gem.Effect), Attack = !spell };
+                damage = WithImpaleHitLocked(conn, m, damage, rolled, critical, sourceMultiplier,
                     critical ? criticalImpale : impale, more).Damage;
-                applied = ApplyMonsterHitLocked(conn, m, damage);
+                if (markSession is not null) DeadeyeMarkHit(markSession, id, m, !spell, random: Random.Shared);
+                applied = ApplyMonsterHitLocked(conn, m, damage, ownerHit);
                 if (applied is not null) landed++;
                 if (applied is { StageStarts: true } staged)
                 {
@@ -1003,7 +1052,8 @@ partial class Program
         => MonsterDamage(m, rolled, critical, attack, mods, pen, out _, invertElemental);
 
     internal static (int Damage, string? Resistance) MonsterDamage(SpawnedMonster m, DamagePacket rolled,
-        bool critical, bool attack, HitResistances.Mods mods, Penetration.PerType pen, out DamagePacket taken, bool invertElemental = false)
+        bool critical, bool attack, HitResistances.Mods mods, Penetration.PerType pen, out DamagePacket taken,
+        bool invertElemental = false, int increasedTaken = 0, double additionalPhysicalReduction = 0)
     {
         var described = new List<string>();
         var strike = new HitResistances.Strike(Critical: critical, Attack: attack);
@@ -1014,8 +1064,8 @@ partial class Program
             double effective = HitResistances.FinalValue(type, value, strike, mods, invertElemental);
             return range.Scale(Math.Max(0, 1 - effective / 100));
         });
-        taken = MonsterTakenComponents(m, mitigated, spell: !attack);
-        return (MonsterTakesMitigated(m, mitigated, spell: !attack),
+        taken = MonsterTakenComponents(m, mitigated, spell: !attack, increasedTaken, additionalPhysicalReduction);
+        return (MonsterTakesMitigated(m, mitigated, spell: !attack, increasedTaken, additionalPhysicalReduction),
             described.Count > 0 ? string.Join(", ", described) : null);
     }
 
@@ -1030,12 +1080,13 @@ partial class Program
     }
 
     // The short state mutation is shared with projectile impact; no awaits under Monsters.
-    static MonsterHit? ApplyMonsterHitLocked(ClientState conn, SpawnedMonster m, int damage)
+    static MonsterHit? ApplyMonsterHitLocked(ClientState conn, SpawnedMonster m, int damage, OwnerSkillHit? ownerHit = null)
     {
         if (m.Dead || m.Life == 0 || m.Companion is not null) return null;
-        (m.Life, bool starts) = TakeDamageLocked(m, damage);
+        (m.Life, bool starts) = TakeOwnerDamageLocked(conn, m, damage, ownerHit);
         conn.LastEnemyHitAt = ProjectileWorldTime(conn);
         if (m.Life == 0) { m.Aggro = false; m.Dead = true; CollectVaalSoulAtDeathLocked(conn, m); }
+        if (ownerHit is not null) ReflectOwnerHitLocked(conn, m, ownerHit);
         return new(m.Life, starts);
     }
 

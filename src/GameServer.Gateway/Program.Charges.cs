@@ -87,7 +87,10 @@ partial class Program
         {
             // The session's limits, periodic stats and conversion flags follow every change of the character's stats
             // from here, so the ticker never polls them.
-            session.Observe(Get);
+            session.Observe(Get, name => Stats.Key(name) is uint key
+                ? dev.TryGetValue(key, out int value) ? value
+                    : !name.StartsWith("virtual_", StringComparison.Ordinal) && sources.TryGetValue(key, out int source) ? source : null
+                : null);
             session.State.SetExpiryRate(conn.Clock.Elapsed.TotalSeconds, RecipientEffectRate(conn, sources, 3));
             foreach (var type in Charges.Types)
             {
@@ -142,7 +145,7 @@ partial class Program
         int resisted = type == DamageType.Physical ? amount : DamageModel.Mitigate(amount, resistance, maxResistance);
         return FortificationDamageTaken(conn, (int)Math.Round(PlayerHitMitigation.AfterResistance(conn.Pools, type, resisted,
             reduction.Physical, reduction.Elemental, effectiveArmour)
-            * conn.ElementalAilments.DamageTakenFactor(conn.Clock.Elapsed.TotalSeconds)));
+            * PlayerDamageTakenFactor(conn, conn.Clock.Elapsed.TotalSeconds, stats)));
     }
 
     // What MitigateTaken applied, for the dev commands' replies: armour or resistance, and the additional reduction.

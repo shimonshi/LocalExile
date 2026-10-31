@@ -57,6 +57,7 @@ static class GatewayProjectileModifiers
         }
         ProjectileProfile ReturnControls(ProjectileProfile target) => target with
         {
+            TerrainChainChancePercent = Math.Clamp(get(DeadeyeRicochetProfile.TerrainChance), 0, 100),
             ReturnChancePercent = Math.Max(target.ReturnChancePercent, Math.Clamp(get("projectile_return_%_chance"), 0, 100)),
             PierceAllOnReturn = target.PierceAllOnReturn || get("returning_projectiles_always_pierce") != 0,
             ReturnSpeedMultiplier = target.ReturnSpeedMultiplier * Math.Max(.01, 1 + get("returned_projectile_speed_+%") / 100d)

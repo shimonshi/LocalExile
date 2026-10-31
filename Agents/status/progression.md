@@ -206,6 +206,31 @@ Part of [Status](../Status.md); what to build next in this area is in
 
 ## Partly working
 
+- Ordinary Slayer: all pinned Default node consumers are connected in source `762fbe43`.
+  Charge maxima, cull/direct overkill, leech conditions, kill windows, Bane hit/DoT damage, nearby critical multiplier,
+  melee reach/proximity, kill-based area, reflection and incoming unaffected bleeding have automated coverage.
+  Shared owner/proxy attribution, lethal reward draining and lifecycle/publication paths retain their model boundaries.
+  The final local publication build is warning-free; Core 434, Data 34 and full serial Gateway 4037 pass.
+  Actual publication-head native controls cover cull/refund, timed Headsman, Bane, Overwhelm, Impact,
+  Masterful Form and retained full-Life leech/caps/removal.
+  The publication candidate integrates the presentation fix and tick hook.
+  Its non-recovery native packet framing now follows table flags rather than sending unused stat words.
+  The separate local publication candidate reconciles ordinary features onto an explicit main/#339 snapshot.
+  These controls passed again on reconciled publication head `dcbe3afc`; remaining manual boundaries stay explicit.
+  Docs: [Slayer model and combat matrix](../docs/game/slayer.md),
+  [combined-source evidence and acceptance boundaries](../docs/game/deadeye.md).
+- Ordinary Deadeye: all 19 pinned Default nodes have connected consumers in source `762fbe43`.
+  Projectile quantity/distance/continuations, terrain chaining, classified Barrage, Avidity, marks/Focal Point,
+  linked Mirage actors and Gale/Tailwind/Wind Ward have production-path automated coverage.
+  Review controls cover same-actor Mirage refresh, Poacher frozen Ignite inputs, incoming Focal Ignite/Bleed,
+  explicit final action-speed overrides and unsupported Barrage rejection before payment.
+  The publication suite results above apply; actual publication-head controls observe Far Shot/count/Focal contacts,
+  Gale/Wind Ward, autonomous Mirage damage, moving Frenzy/accuracy and legal allocation/refund/relog.
+  `WholeClassAccepted=false` remains explicit for the representative subset and remaining manual/visual boundaries.
+  The final exact related-head private sequence passes all 4185 serial Gateway tests without failures/skips.
+  Ground ordinary melee swings now share paced Gale admission; distant approach and Move grant nothing.
+  The #339 composition retains ailment-only wrapping around its raw-action-scaled weapon timing.
+  Docs: [node audit, connected model and acceptance matrix](../docs/game/deadeye.md).
 - Aristocrat: every node in its installed graph has a server consumer (gem levels and quality, attribute requirements,
   conditional ailment immunity, lowest-attribute damage, granted passive points), with Gateway coverage of legal builds,
   paid refunds and reload. Not yet checked with the real client: that needs the reviewed combined graph installed.

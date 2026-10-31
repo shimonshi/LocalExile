@@ -13,7 +13,7 @@ partial class Program
 
     // Called synchronously under XP -> combat lock. The outbox contains notifications of committed results.
     static void CommitProjectileHit(ProjectileSession session, ProjectileDamage contact, SpawnedMonster target,
-        MonsterHit hit, int damage, ProjectileOffense shot, bool critical)
+        MonsterHit hit, int damage, ProjectileOffense shot, bool critical, SkillDamageAttribution attribution)
     {
         var conn = session.Conn;
         double now = contact.At / (double)ProjectileRuntime.QuantaPerSecond;
@@ -24,7 +24,7 @@ partial class Program
             session.Packet(InstanceEntities.StatsUpdate(id, [(StatKeys.HideMiniLifeBar, 1)]));
         // Native Actor TakeHit recovery (0x1d1), as the melee path sends: a rig-only clip (0x1b2) leaves the client
         // monster walking while the server's estimate has stopped (11-skills.md "Hit reaction").
-        if (HitReaction.TryFlinch(target, damage, now, random) is not null)
+        if (DeadeyeMarkFlinch(session, id, target, damage, now, random, attribution.GrantOwnerOnHit) is not null)
             session.Packet(InstanceProtocol.ActorAnimation(id, (float)(target.FlinchUntil - now), PlayerHitRecovery.TakeHitAnimation));
         if (shot.HitPacket)
         {
@@ -42,7 +42,7 @@ partial class Program
             $"projectile {shot.Label} {contact.Stage} t={now:0.000000} use={contact.Projectile.UseId} entity={contact.Projectile.Id}"
             + $" phase={contact.Phase} form={contact.Projectile.Form} at={contact.Position}"
             + $" target=0x{id:x} damage={damage} life={hit.Life}/{target.MaxLife}");
-        if (critical) CommitProjectileCritFlasks(session, now, random);
+        if (critical && attribution.GrantOwnerOnHit) CommitProjectileCritFlasks(session, now, random);
         if (hit.Life == 0) CommitProjectileKill(session, id, target, contact.At, contact.Projectile.RewardRandomSource);
         if (hit.StageStarts) CommitProjectileBossStage(session, id, target, contact.At);
         // Charges affect the next chronological hit/use, rather than waiting for the presentation ticker.

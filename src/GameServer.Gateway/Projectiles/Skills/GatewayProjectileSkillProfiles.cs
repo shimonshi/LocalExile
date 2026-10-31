@@ -26,6 +26,7 @@ static class GatewayProjectileSkillProfiles
     {
         var p = GatewayProjectileDefaults.Create(metadata, get, speed) with
         {
+            CountsAsProjectileDamage = true,
             CannotReturn = CannotReturn.Contains(effect), ReturnOnDistance = effect != "FreezingPulse"
         };
         if (IsKineticBlast(effect))
@@ -41,14 +42,16 @@ static class GatewayProjectileSkillProfiles
                 CannotSplit = clustering,
                 CountConsumer = clustering ? ProjectileCountConsumer.ContactAreas : ProjectileCountConsumer.Primary,
                 ContactArea = new("kinetic-blast", 0, count, Multiplier: Math.Max(0, multiplier))
-                    { SectorPlacement = true, RespectTerrain = true, ExcludeContactTarget = true,
+                    { CountsAsProjectileDamage = true,
+                        SectorPlacement = true, RespectTerrain = true, ExcludeContactTarget = true,
                         Delay = ProjectileRuntime.Time(ClusterDelaySeconds),
                         Interval = ProjectileRuntime.Time(ClusterIntervalSeconds) },
                 EndAreaReasons = NonContactStops, EndAreaOnReturnTurnaround = true
             };
         }
         else if (IsFireball(metadata))
-            p = p with { EndArea = new("fireball-explosion", 0), EndAreaReasons = TerminalStops };
+            p = p with { EndArea = new("fireball-explosion", 0) { CountsAsProjectileDamage = true },
+                EndAreaReasons = TerminalStops };
 
         p = GatewayProjectileModifiers.Resolve(p, get, attack);
         // The endpoint cluster uses the same already-resolved quantity as each contact cluster.

@@ -599,7 +599,7 @@ public sealed partial class AscendancyGatewayIntegrationTests
         Assert.False(actor.Hostile);
         Assert.Null(actor.Attack);
         Assert.Empty(SavedMonster.Save([actor], 0));
-        Assert.Null(ProgramValue<object?>("ApplyMonsterHitLocked", game.State, actor, 1000));
+        Assert.Null(ProgramValue<object?>("ApplyMonsterHitLocked", game.State, actor, 1000, null));
         Assert.Equal(1u, actor.Life);
         Assert.Null((await game.Change([(ushort)node], false, refundPoints: true)).Error);
         Assert.Empty(game.State.Monsters);
