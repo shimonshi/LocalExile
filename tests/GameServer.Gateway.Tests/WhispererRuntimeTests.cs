@@ -530,6 +530,7 @@ public sealed class WhispererRuntimeTests
                 using var xp = context.ModifyExperience(e => { if (e.Player.Character == c.Character) { xpHooks++; e.Experience = 37; } });
                 using var drops = context.ModifyDrops(d => { if (d.Player.Character == c.Character) { dropHooks++; d.Cancel = true; d.Items.Add("Portal Scroll"); } });
                 using var playerKill = context.OnMonsterKilled(k => { if (k.Player.Character == c.Character) playerKillHooks++; return Task.CompletedTask; });
+                var originalOutput = Console.Out; using var output = new StringWriter(); Console.SetOut(TextWriter.Synchronized(output));
                 try
                 {
                     if (kind == "expiry")
@@ -647,6 +648,19 @@ public sealed class WhispererRuntimeTests
                     Assert.Equal(acceptedLife, victim.Life); Assert.Equal(acceptedXp, c.Experience);
                     Assert.Equal(kind == "kill" ? 1 : 0, killHooks); Assert.Equal(killHooks, xpHooks); Assert.Equal(killHooks, dropHooks);
                     Assert.Empty(c.Minions.OutputQueue); Assert.Empty(c.Minions.FlaskRewards);
+                    string acceptedLogs = output.ToString();
+                    if (kind == "kill")
+                    {
+                        Assert.Equal(1, acceptedLogs.Split($"0x02ba current player experience ({victim.Rarity} {victim.Label} 0x2a)").Length - 1);
+                        Assert.Contains($"0x01b1 monster 0x2a hit by minion 0x{minion.Id:x} ({minion.Monster.Label}) for ", acceptedLogs);
+                        Assert.Contains($"life 0/{victim.MaxLife} (dies)", acceptedLogs);
+                    }
+                    else if (!refund)
+                    {
+                        Assert.Contains($"{minion.Kind} Relic 0x{minion.Id:x} explodes for ", acceptedLogs);
+                        Assert.Equal(1, acceptedLogs.Split(" cells: 1 hit, 0 killed").Length - 1);
+                    }
+                    else Assert.DoesNotContain(" explodes for ", acceptedLogs);
                     if (kind == "kill") Assert.Equal(FlaskCharges.FullShortcut ? 24 : (int)Math.Floor(FlaskCharges.KillCharges(MonsterRarity.Normal, Program.Items.Mods)),
                         Game.ItemsOf(c).Items(PlayerInventories.Flask).Single().Item.Charges);
 
@@ -688,6 +702,7 @@ public sealed class WhispererRuntimeTests
                 }
                 finally
                 {
+                    Console.SetOut(originalOutput);
                     if (held) gate.Release(); c.Closed = true; c.RetirePlayerUpdates(); oldOwner.Stop(_ => { }); owner.Stop(_ => { });
                     if (oldState is not null) await oldState.Completion; if (currentCompletion is not null) await currentCompletion;
                     ((ModuleLifetime)context.Lifetime).Stop(_ => { }); alc.Unload();

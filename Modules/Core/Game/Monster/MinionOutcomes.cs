@@ -16,12 +16,12 @@ static partial class Game
         if (HitReaction.TryFlinch(monster, damage, now, Random.Shared) is not null)
             state.OutputQueue.Add(new([], $"0x01d1 monster 0x{id:x} TakeHit recovery", id, monster,
                 PlayerMinions.OutputKind.Flinch, monster.FlinchUntil, monster.ActionGeneration));
-        state.OutputQueue.Add(new([], $"0x01b1 monster 0x{id:x} hit by {by} for {damage}, life {hit.Life}/{monster.MaxLife}",
+        state.OutputQueue.Add(new([], $"0x01b1 monster 0x{id:x} hit by {by} for {damage}, life {hit.Life}/{monster.MaxLife}{(hit.Life == 0 ? " (dies)" : "")}",
             id, monster, PlayerMinions.OutputKind.Life));
-        if (hit.Life == 0) CommitMinionKillLocked(conn, monster, now);
+        if (hit.Life == 0) CommitMinionKillLocked(conn, id, monster, now);
     }
 
-    static void CommitMinionKillLocked(ClientState conn, SpawnedMonster monster, double now)
+    static void CommitMinionKillLocked(ClientState conn, uint victimId, SpawnedMonster monster, double now)
     {
         var state = conn.Minions;
         if (!state.OutputQueue.Any(o => o.Kind == PlayerMinions.OutputKind.Vaal))
@@ -62,7 +62,7 @@ static partial class Game
             xp = (uint)Math.Max(xp, Math.Max(0L, (long)CharacterStats.LevelStarts[required - 1] - conn.Experience));
         if (xp > 0 && RecordExperienceGain(conn, xp) is { } change)
         {
-            state.OutputQueue.Add(new([], "0x02ba current player experience (minion kill)", Kind: PlayerMinions.OutputKind.Experience));
+            state.OutputQueue.Add(new([], $"0x02ba current player experience ({monster.Rarity} {monster.Label} 0x{victimId:x})", Kind: PlayerMinions.OutputKind.Experience));
             int level = Progression.LevelFor(change.After, CharacterStats.LevelStarts);
             if (level != conn.Pools.Level)
             {

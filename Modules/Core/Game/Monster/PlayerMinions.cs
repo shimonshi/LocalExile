@@ -269,7 +269,7 @@ static partial class Game
                 CommitMinionHitLocked(conn, id, m, hit, damage, now, $"{minion.Kind} Relic explosion");
             }
         }
-        Console.WriteLine($"[gateway] {remote} {minion.Kind} Relic 0x{minion.Id:x} explodes for {amount} {blast.Type} within {blast.Radius} cells: {hits.Count} hit");
+        Console.WriteLine($"[gateway] {remote} {minion.Kind} Relic 0x{minion.Id:x} explodes for {amount} {blast.Type} within {blast.Radius} cells: {hits.Count} hit, {hits.Count(h => h.Hit.Life == 0)} killed");
     }
 
     // A cell 3 cells from the server's estimate of the player, walkable if the walk map says so.
