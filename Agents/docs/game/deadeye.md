@@ -302,7 +302,14 @@ The shared weapon calculator already applies raw action speed, so ground dispatc
 The solution builds without warnings; 16 focused ground/Harbinger cases pass, including two new real-dispatch
 raw-action-plus-Chill controls and all seven coordinator ground admission cases.
 Logs are `logs/publication-ground-build.log` and `logs/publication-ground-focus.log`.
-The complete post-fix suites wait for native-window release; this worker accessed no runtime.
+Final local validation pins publication head `94d9d5bf82873df5901f78b5ebaf78b267d3c041` against snapshot `7476a054`.
+The solution builds with zero warnings/errors; Core 434, Data 34 and complete Gateway 4037 pass with zero skips.
+Gateway uses `logs/publication-final-authorized-serial.runsettings`: collections off and one thread.
+The run has no filter, test selection, missing-data bypass or timeout extension.
+Final logs are `logs/publication-final-authorized-build.log`, `-core.log`, `-data.log` and `-gateway-serial.log`.
+TRX files retain every result; public data and compiled artifact hashes are in `logs/publication-*-sha256.txt`.
+Any following documentation-only descendant must keep identical `src/` and `tests/` trees to that tested head.
+This worker accessed no runtime and created no push, PR or comment.
 
 The parent's recorded full-source checkpoint `a2c054c39438813741e235af89f4b11b6539be4e` has a solution build
 with zero warnings/errors and Core 423, Data 34 and default-parallel Gateway 3757 passing.
@@ -346,6 +353,30 @@ The parent used one client through `scripts/dev/live.ps1`, hot reload disabled a
 The reviewed #388 login JS was external test tooling, not copied production code.
 The agreed runtime was restored and released after that initial smoke.
 New native combat evidence belongs to the parent after final-source acceptance.
+
+## Coordinator native subsets and their boundary
+
+These are parent-reported actual-client observations on coordinator `0b997b37` and `b3be9ba9`.
+They do not certify this reconciled main/#339 publication head; the parent owns a separate actual-tip native window.
+The detailed Slayer subset is recorded in [Slayer's evidence](slayer.md#coordinator-native-subset).
+
+Deadeye D1 run `031232` on `b3be9ba9` observed Far Shot damage 100/130 and paid-refund negative 100,
+three emitted projectiles, and actual Focal Point contact damage 117/110/117 through refund/reallocation.
+The Focal oracle measures real damage rather than an invalid native buff value-vector assumption.
+Non-recovery buff packets contain no extra stat words and passed the actual client after the framing correction.
+
+The D2/D3 run `032028` passed its complete automated subset with an intentional exit code 2.
+Its helper explicitly leaves `WholeClassAccepted=false`.
+It observed ten Gale stacks and native Gale buffs with one Tailwind buff, then incoming Chaos 100 -> 60
+and stack removal after the accepted hit.
+Burning Arrow dealt 280 owner damage: the raw DamageEffectiveness value 18000 is an offset, yielding 280%.
+Mirage then dealt autonomous 168 damage without another owner attack, with native Life updates.
+Moving Frenzy/accuracy, legal eight-point builds, paid refunds and relog controls also passed.
+
+These results do not establish every manual matrix row, whole-class or official visual parity.
+Mirage appearance, overhead/equipment/height presentation and untested interaction boundaries remain explicit.
+Failed fixtures, the malformed non-recovery packets and all earlier unsuccessful attempts remain retained evidence.
+The native windows were closed and the agreed runtime restored by the parent, never by this publication worker.
 
 ## Related integration and final acceptance work
 
@@ -392,7 +423,7 @@ Juggernaut #152, Inquisitor #363 and selection #151 retain their owners.
 
 The parent owns the following remaining acceptance, with exact source/DLL/data hashes and retained logs:
 
-1. Finish full Core/Data/Gateway suites on the final publication code and retain its exact revision and logs.
+1. Retain the final publication build/Core/Data/Gateway evidence above and repeat affected checks after source changes.
 2. Reserve the single-client window and launch only through `scripts/dev/live.ps1` using synthetic saves.
    Check all legal builds, source stats, separate budgets, paid/refused refunds, relog and coordinated restart.
    Projectile build: `5082 61627 56134 26067 28995 45313 53086 5443`.

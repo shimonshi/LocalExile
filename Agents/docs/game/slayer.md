@@ -14,7 +14,8 @@ The ordinary feature source is `762fbe43`; the local publication candidate uses 
 Its explicit snapshot, publication boundary and revalidation requirements are recorded in
 [the combined acceptance contract](deadeye.md#related-integration-and-final-acceptance-work).
 The parent's bounded native run on `762fbe43` found missing Headsman buff presentation despite derived stats.
-The adapter and tick hook are now integrated; final checks and native acceptance of reconciled code remain pending.
+The adapter and tick hook are integrated; final local automated checks are recorded in the combined acceptance doc.
+Native acceptance of the reconciled publication head remains a separate parent-owned step.
 The following revisions document earlier isolated implementation evidence.
 
 The original allocated branch `t3/ordinary-slayer-full` was clean at `864da152` and remains untouched.
@@ -96,7 +97,7 @@ await SendSlayerBuffs(remote, stream, ciphers, conn);
 
 It is immediately before `SendAntiquarian`, preserving earlier condition-send ordering and held-gate tests.
 The production tick invokes the adapter at this point; independent table-driven framing checks include a next packet.
-Native timer/UI acceptance requires the parent's rebuilt combined head and an actual client rerun.
+Parent `0b997b37` has actual timer/UI observations below; that source is distinct from this publication composition.
 
 ### Overwhelm 17315
 
@@ -308,6 +309,19 @@ Those green checks are retained history, not evidence of correct native framing.
 The publication candidate includes `0b997b37`'s independent table-flag reader and following-packet sentinel checks.
 That worker's following documentation-only commit did not alter tested code or install the common hook.
 The publication branch separately installs the hook and validates its full current-main composition.
+
+## Coordinator native subset
+
+The parent reports actual-client controls on coordinator `0b997b37`; these paths are unchanged by `b3be9ba9`.
+They cover cull boundaries and paid refunds; normal/rare Headsman grants show +10 for twenty seconds.
+Bane damage controls observed 120/132, Overwhelm 160/170 and Impact 115 versus refund 100 with area expiry.
+Masterful Form observed 4/0 maxima; actual retained full-Life leech, caps and source removal also passed.
+Legal connected builds, allocation/refund and relog are included in the parent's bounded checks.
+
+This is coordinator-source evidence, not native verification of this main/#339 publication head.
+The parent will own a separate bounded automatic subset on the actual handed-off code and frozen build.
+No whole-class, every-manual-row or official parity claim follows from the automated subset.
+Earlier failed presentation and fixture/protocol attempts remain retained, rather than being relabelled as passes.
 
 ## Offline native matrix for the parent
 

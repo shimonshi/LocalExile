@@ -78,11 +78,14 @@ Items keep the Roadmap's priority groups, and are in rough priority order within
   real hit/Ignite distance and in-flight refund, terrain/barrage, all marks and live incoming Focal DoT,
   autonomous same-actor refresh/attribution, native Mirage visuals, Avidity and world-scoped Tailwind/Wind Ward.
   Include paid refund, delayed sends, pause/death, transfer, relog and restart on legal connected builds.
-- **Combined acceptance:** finish final-source full suites and record exact source/DLL/data/log provenance.
+- **Combined acceptance:** final publication build and Core/Data/full serial Gateway evidence are recorded.
   The local ordinary publication candidate uses explicit main `89b7aa90` plus #339 `13aeea19` snapshot `7476a054`.
   #385 is already merged; keep unmerged #328/#333 class completions out of the ordinary publication diff.
   Validate #328 `4c90a1f9` -> #333 `1aa9a177` -> #339 `13aeea19` privately before downstream readiness.
-  Newer-main reconciliation and native verification of publication code remain separate acceptance requirements.
+  The parent owns automatic native validation of the actual reconciled publication tip and frozen build.
+  Coordinator subset passes leave whole-class acceptance false; finish the remaining manual and visual boundaries.
+  Final private all-related validation must wait for runtime release and remain separate from the published diff.
+  Newer-main reconciliation remains a separate acceptance requirement after the tested base changes.
   Keep both classes Partly working until native combat and exact related-head acceptance are recorded.
   Parent owns any contributor-fork draft against the new prerequisite snapshot and the later upstream PR.
   The upstream prerequisite merges are external dependencies; never merge into the active Harbinger owner branch.
