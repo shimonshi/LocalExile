@@ -284,7 +284,7 @@ The admission guard prevents a paid use from failing only later at release.
 
 ## Automated evidence and historical native qualification
 
-The current publication code is `6598d3b15b428214b0501246a6c078e1b495c675`.
+The framing publication checkpoint is `6598d3b15b428214b0501246a6c078e1b495c675`.
 It includes `0b997b37`'s non-recovery Headsman/Tailwind/Mark framing fix and independent row-flag/sentinel tests.
 The preceding `f58a5b9a` built without warnings and passed the complete serial Gateway suite: 4026, zero skips.
 For `f58a5b9a`, Core 434 and Data 34 passed on production-equivalent `22223d9d`.
@@ -296,7 +296,13 @@ No production timing, damage bounds, test selections, skips or timeout extension
 Post-framing docs descendant `bf45ce2f` has identical `src/` and `tests/` to `6598d3b1`.
 Its local solution build has zero warnings/errors; 45 focused framing and shared-seam cases pass without skips.
 Logs are `logs/publication-post-framing-build.log` and `logs/publication-post-framing-focus.log`.
-The complete post-framing Gateway suite waits for native-window release; this worker accessed no runtime.
+The subsequent ground-admission input is `b3be9ba99b8b811e8b89e7b5d6f066ed6a60dd1e`.
+Its #339 timing reconciliation is `cdcd472ff8656ee3b6985b612285f3191096b3d7`.
+The shared weapon calculator already applies raw action speed, so ground dispatch divides by ailments only.
+The solution builds without warnings; 16 focused ground/Harbinger cases pass, including two new real-dispatch
+raw-action-plus-Chill controls and all seven coordinator ground admission cases.
+Logs are `logs/publication-ground-build.log` and `logs/publication-ground-focus.log`.
+The complete post-fix suites wait for native-window release; this worker accessed no runtime.
 
 The parent's recorded full-source checkpoint `a2c054c39438813741e235af89f4b11b6539be4e` has a solution build
 with zero warnings/errors and Core 423, Data 34 and default-parallel Gateway 3757 passing.

@@ -214,6 +214,7 @@ Part of [Status](../Status.md); what to build next in this area is in
   Source `762fbe43` passed a warning-free build and Core 434, Data 34 and default-parallel Gateway 3799.
   Its bounded native cull/refund/relog run found missing Headsman buff UI.
   The local publication candidate integrates the presentation fix and tick hook, pending native revalidation.
+  Its non-recovery native packet framing now follows table flags rather than sending unused stat words.
   The separate local publication candidate reconciles ordinary features onto an explicit main/#339 snapshot.
   Its acceptance does not inherit native evidence from the source ancestor; see the combined evidence below.
   Docs: [Slayer model and combat matrix](../docs/game/slayer.md),
@@ -226,6 +227,8 @@ Part of [Status](../Status.md); what to build next in this area is in
   The earlier seven-check native smoke proves selection/source/refund/relog only, not the new engines or combat.
   The source-suite results above apply; reconciled publication checks, native combat/visual acceptance
   and the full exact related-head integration remain separately recorded requirements.
+  Ground ordinary melee swings now share paced Gale admission; distant approach and Move grant nothing.
+  The #339 composition retains ailment-only wrapping around its raw-action-scaled weapon timing.
   Docs: [node audit, connected model and acceptance matrix](../docs/game/deadeye.md).
 - Aristocrat: every node in its installed graph has a server consumer (gem levels and quality, attribute requirements,
   conditional ailment immunity, lowest-attribute damage, granted passive points), with Gateway coverage of legal builds,
