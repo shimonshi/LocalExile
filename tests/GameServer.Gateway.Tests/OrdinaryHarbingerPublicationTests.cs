@@ -4,6 +4,27 @@ namespace GameServer.Gateway.Tests;
 
 public partial class ConditionalCriticalGatewayTests
 {
+    [Theory]
+    [InlineData("Rusted Sword")] [InlineData("Crude Bow")]
+    public async Task OrdinaryHarbinger_ground_dispatch_combines_raw_action_and_ailment_clocks_once(string weapon)
+    {
+        using var f = new Contact(new Draws(), weaponName: weapon, classRow: 3);
+        GroundGale(f);
+        f.Set(ActionSpeed.Virtual, 0);
+        var weaponTiming = (SkillCatalog.Unarmed)Method("WeaponFor").Invoke(null, [f.Conn])!;
+        double baseline = weaponTiming.AttackSeconds(Program.CharacterPlayerStats(f.Conn));
+        f.Conn.PlayerStats.Remove(Program.Stats.Key(ActionSpeed.Virtual)!.Value);
+        f.Set(ActionSpeed.Reduction, -18); // Tailwind 8 plus the Harbinger raw 10 input.
+        f.Conn.ElementalAilments.Apply(DamagePacket.Empty, DamagePacket.Of(DamageType.Cold, 100, 100),
+            false, 100, f.Conn.Clock.Elapsed.TotalSeconds, _ => 0, new Random(1));
+        double expected = baseline / (1.18 * .7);
+        double before = f.Conn.Clock.Elapsed.TotalSeconds;
+        await f.GroundAdmission(0x102, 32, 32);
+        double after = f.Conn.Clock.Elapsed.TotalSeconds;
+        Assert.InRange(expected, f.Conn.NextAttackAt - after, f.Conn.NextAttackAt - before);
+        Assert.Equal(1, GroundGaleCount(f));
+    }
+
     [Fact]
     public void OrdinaryHarbinger_native_freeze_keeps_zero_action_instead_of_the_server_timer_floor()
     {

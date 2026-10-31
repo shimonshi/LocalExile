@@ -76,7 +76,7 @@ partial class Program
                             SlayerMeleeRange(conn, WeaponFor(conn).Range)));
                 if (use.SkillId == SkillCatalog.FirstSkillId && (ordinaryProjectile is not null || groundMeleeSwing))
                 {
-                    double duration = WeaponFor(conn).AttackSeconds(CharacterPlayerStats(conn)) / PlayerActionFactor(conn);
+                    double duration = WeaponFor(conn).AttackSeconds(CharacterPlayerStats(conn)) / PlayerAilmentActionFactor(conn);
                     if (!TryBeginRangedAttack(conn, at, duration, use.SkillId, use.Slot, out var shot)) continue;
                     int projectileEpoch;
                     lock (conn.Monsters) projectileEpoch = conn.ProjectileEpoch;
