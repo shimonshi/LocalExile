@@ -631,7 +631,7 @@ Part of [Status](../Status.md); what to build next in this area is in
   Historical `57053948` passed native 36 controls on `cc0f9c34`; the combined newer main needs fresh exact-head acceptance.
   Its current minion/link/footstep roles retain main's cadences and share generation ownership with the resource writer.
   Accepted minion expiry and player/owned-kill gameplay precede awaits; neutral output survives replacement.
-  Queued quest flags and transition visibility project current progress at the cipher gate, retaining newer updates.
+  Queued quest/tree/equipment projections retain newer progress; accepted charge events leave live periodic time intact.
   See [Whisperer](../docs/game/whisperer.md).
 
 - Selected supported-spell panel: final linked-support damage replaces both spell and inherited hand ranges,

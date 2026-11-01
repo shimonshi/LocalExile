@@ -289,7 +289,7 @@ static partial class Game
             // All accepted hit consequences and reflected ailments precede the sweep's attributed kills.
             if (reflected.Count > 0) ReflectAilmentsLocked(conn, reflected, ProjectileWorldTime(conn), player, Random.Shared);
             foreach (var (id, m) in deaths) CommitAcceptedKillLocked(conn, id, m, ProjectileWorldTime(conn), playerKill: true, charges);
-            if (charges.Count > 0) conn.Minions.OutputQueue.Add(new([], null, Kind: PlayerMinions.OutputKind.Charges, Charges: charges));
+            if (charges.Count > 0) CommitAcceptedChargeBatchLocked(conn, charges, player);
         }
         await PublishMinionOutcomesFor(remote, stream, ciphers, conn, rules);
     }

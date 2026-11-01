@@ -126,24 +126,26 @@ This dispatch boundary does not promise that every mid-command file-watcher race
 
 ## Validation limits
 
-The current correction starts at `f0d8b40a9c8aa56e085404e178e0ca858e157eee`, retaining reconciled main
+The current correction starts at `a57300ff7cb1601005a98fd10212e9b4cb0a0f3e`, retaining reconciled main
 `d377bd256036242d2fb43f53eb7110b4897e1862`, `57053948` and `bf1fd6d0` ancestry, the four newer descriptors and generic APIs.
-At exact `f0d8b40a`, the recorded build passed with no warnings/errors, Core 436, Data 45, Gateway 25 and unchanged
-native V4 all 36 controls. The prepared minion supplement stopped before authentication; it ran no minion trial.
-R7 on preceding `eebb2d77` nevertheless confirmed an accepted player footstep kill lost after blocked output/reload,
-and queued owned-kill flags overwrote newer client quest progress. R11 changed diagnostic provenance only.
-Both failures were reproduced against `f0d8b40a` before this correction, including normal setters queued on both sides.
-Accepted footstep hit/ailment/Blind/Rage/ignite and reflected-ailment work now commits before output awaits,
-then its kills use the shared accepted-outcome seam with explicit player attribution.
-Current Game claims neutral player-mod notifications, charge/critical-flask receipts and pending output exactly once;
-owned kills retain `PlayerKill=false`. Charge values, deadlines and shown buff identities are neutral connection state.
-Whole quest flags and transition visibility sample current progress at the cipher gate, without taking QuestGate there.
-The same two Facts retain the real Paladin expiry/Spirit/Mercy controls and add legal Polytheist grants, paid source
-refund, actual Hillock kills, distinct Game assemblies, held output, player/owned attribution, XP/drop/Vaal/flask/charge
-accounting, current full flags, cleared transition visibility, actor identity and late-old/current publication controls.
-The earlier combined resource, Blind, minion/link, Onslaught, ground, command and flask controls remain.
-Build and bounded focused checks are local preparation. This corrected head requires its own full-suite,
-independent-review and native acceptance; exact-head results belong to the PR's revision-specific receipts.
+Exact `a57300ff` passed the recorded build without warnings/errors, Core 436, Data 45, Gateway 25 and unchanged
+native V4 all 36 controls. Its minion supplement was partial (three controls); an immediate SQL XP assumption stopped
+it before acceptance, while the real kill and XP34 were confirmed after logout. No supplement pass is claimed.
+Independent R9 resolved the earlier lost-footstep-kill and stale-quest-flag objections, but found two further gaps:
+a queued level-up tree overwrote a later paid refund, and historical charge output rewound periodic integration.
+Both failures reproduced against exact `a57300ff` before this correction, without and with distinct Game assemblies.
+The same accepted-output audit found a queued gem-XP equipment row could replay an item moved to the cursor.
+Accepted level-up trees and gem rows now project current state at the cipher gate, alongside Life, XP and quest flags.
+Immutable accepted drop/event output retains its own data and identity guards.
+A charge batch resolves inside its admitted contact transaction at the original time; its queued marker only refreshes
+current expiry/limits and presents current buffs. It never steps periodic/moving timers, drains unrelated charge events,
+or changes the live integration origin. Original deadlines and the neutral connection values/shown identities remain.
+The same two Facts cover held real public hooks, level-up, paid refund5 with15 points left, whole decrypted tree frames,
+real item pickup after gem XP, periodic gain/loss and partial moving timers, expired charges, successive batches,
+old/current repeats and distinct Game assemblies, retaining the earlier real Paladin/Spirit/Mercy and resource controls.
+These are bounded deterministic source checks; no real-time, native or Auth/account-level synchronization acceptance is claimed.
+This corrected head requires its own full-suite, independent-review and native acceptance; exact-head results belong to
+revision-specific PR receipts. The unchanged native V4 and partial supplement results remain historical source evidence.
 
 The evidence below is historical and keeps its tested source/base scope.
 

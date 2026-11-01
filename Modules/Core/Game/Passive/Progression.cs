@@ -1323,7 +1323,8 @@ static partial class Game
         if (leveled) await SendSkills(remote, stream, ciphers, conn);
     }
 
-    internal static (List<byte[]> Packets, bool Leveled) CommitGemExperience(ClientState conn, uint gain)
+    internal static (List<byte[]> Packets, bool Leveled) CommitGemExperience(ClientState conn, uint gain,
+        List<(byte Row, uint[] Items)>? projectRows = null)
     {
         lock (conn.Monsters)
         {
@@ -1353,9 +1354,15 @@ static partial class Game
                     Console.WriteLine($"[gateway] {CharacterName(conn)}'s {ItemsFor(conn).GemName(after)} gains experience " +
                         $"+{after.GemExperience - before.GemExperience} ({after.GemExperience}, level {ItemsFor(conn).GemLevel(after)})");
             }
-            var packets = changed.GroupBy(c => c.Row).Select(row =>
-                InstanceItems.InventoryChange(PlayerInventories.InventoryId(row.Key), items.NextRevision(row.Key),
-                    [.. row.Select(c => c.Item.Id)], [.. row.Select(c => c.Item)])).ToList();
+            var packets = new List<byte[]>();
+            foreach (var row in changed.GroupBy(c => c.Row))
+            {
+                uint[] ids = [.. row.Select(c => c.Item.Id)];
+                // Accepted output may wait behind a hook/refund/item move. Keep ids for a current row projection.
+                if (projectRows is not null) projectRows.Add((row.Key, ids));
+                else packets.Add(InstanceItems.InventoryChange(PlayerInventories.InventoryId(row.Key), items.NextRevision(row.Key),
+                    ids, [.. row.Select(c => c.Item)]));
+            }
             return (packets, leveled);
         }
     }

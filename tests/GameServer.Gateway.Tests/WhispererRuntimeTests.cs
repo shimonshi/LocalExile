@@ -460,6 +460,7 @@ public sealed class WhispererRuntimeTests
         replacementRules.Stop(ex => throw ex); Assert.Null(ordinary.ResourceEffectsState);
         await nextUpdates.Completion; Assert.Null(ordinary.PlayerUpdatesState);
         ordinary.Closed = true;
+        await AcceptedLevelAndChargeClockAcrossGameAssemblies(h);
         await AcceptedFootstepAndQuestAcrossGameAssemblies(h);
         await MinionAcceptedWorkAcrossGameAssemblies(h);
         await AcrossGameAssemblies(h);
@@ -468,6 +469,186 @@ public sealed class WhispererRuntimeTests
         await CommandsAcrossGameAssemblies(h);
         await TriggerChainAcrossGameAssemblies(h);
         Assert.Equal(definition.Identity, CharacterSaves.Load(c.Character!)!.MainAscendancy!.Selection);
+    }
+
+    static async Task AcceptedLevelAndChargeClockAcrossGameAssemblies(Harness h)
+    {
+        const BindingFlags flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance;
+        var priorLogic = Program.Logic; var priorRules = Game.CombatLifetime; var priorSchedule = Game.PlayerUpdatesSchedule;
+        string[] optIns = ["Game_VERIFIED_POLYTHEIST", "Game_DROPS"]; var priorFlags = optIns.Select(Environment.GetEnvironmentVariable).ToArray();
+        foreach (string flag in optIns) Environment.SetEnvironmentVariable(flag, "1");
+        var provider = new ModuleLifetime("PhreciaAscendancies"); using var source = AscendancyPolicies.Register(provider, h.Policy);
+        var failures = new List<string>();
+        try
+        {
+            foreach (var scenario in new (bool Reload, double Delay, bool Another)[] { (false, 1.25, false), (true, 1.25, false),
+                (false, 11.25, false), (true, 11.25, false), (false, 1.25, true) })
+            {
+                using var wire = new CaptureStream(); var ciphers = new ConnectionCiphers(new byte[64], false);
+                var oldOwner = new ModuleLifetime("Game"); var owner = new ModuleLifetime("Game");
+                var alc = new AssemblyLoadContext("Accepted level/charge " + scenario, isCollectible: true);
+                alc.Resolving += (_, name) => AssemblyLoadContext.Default.Assemblies.FirstOrDefault(a => a.GetName().Name == name.Name);
+                var assembly = alc.LoadFromAssemblyPath(typeof(Game).Assembly.Location); Assert.NotSame(typeof(Game).Assembly, assembly);
+                var game = typeof(Game);
+                object? Call(string name, params object?[] args)
+                {
+                    var method = game.GetMethods(flags).Single(m => m.Name == name && m.GetParameters().Length >= args.Length
+                        && m.GetParameters().Skip(args.Length).All(p => p.HasDefaultValue));
+                    var values = method.GetParameters().Select(p => p.HasDefaultValue ? p.DefaultValue : null).ToArray();
+                    args.CopyTo(values, 0); return method.Invoke(null, values);
+                }
+                var runtime = new ManualRuntime { At = 99.5 }; var before = new ManualUpdates(runtime) { At = 99.5 }; var after = new ManualUpdates(runtime) { At = 99.5 };
+                Game.CombatLifetime = oldOwner; Game.PlayerUpdatesSchedule = before; Program.SetGameLogic(new GameServer.Modules.Game.GameLogic(oldOwner));
+                var definition = new AscendancyCatalog().Definitions.Single(d => d.Name == "Polytheist");
+                byte row = (byte)Enumerable.Range(0, 7).First(r => Program.Skills.ClassFor(r).IntegerId == definition.BaseClass);
+                var c = h.NewConnection("levelclock" + Guid.NewGuid().ToString("N"), optional: false, classRow: row);
+                c.LeagueModule = new(new League("WhispererTest", "Standard", false, false), new HashSet<string>(["Game", "PhreciaAscendancies"]));
+                c.MainAscendancy = new(definition.Identity, [27664, 22056, 26231, 32742, 21979, 61900, 59443], AscendancyRules.AwardKeys);
+                c.Passives = []; c.RefundPoints = 20;
+                CharacterSaves.SetMainAscendancy(c.Character!, c.MainAscendancy, [], new Dictionary<ushort, ushort>(), 20);
+                c.SavedPassiveProgress = new(c.MainAscendancy, [], new Dictionary<ushort, ushort>(), 20);
+                c.Experience = CharacterStats.ExperienceFor(69) - 1; CharacterSaves.SetExperience(c.Character!, c.Experience);
+                AscendancyPolicies.SelectionChanged(c); AscendancyPolicies.RequirePlayable(c, definition.Identity); Game.AscendancyRules.Validate(definition.BaseClass, c.MainAscendancy);
+                c.ProjectileRuntimeState = runtime; c.Wire = ("Whisperer", wire, ciphers); c.Walk.Teleport(100, 100, 0); c.AiEnabled = false;
+                c.Pools = Game.PoolsFor(c, 68); c.PlayerLife = c.PlayerMaxLife; c.PlayerMana = c.Pools.Mana;
+                c.PlayerStats[Key("virtual_strength_for_requirements")] = 1000;
+                c.PlayerStats[Key("gain_X_endurance_charges_per_second")] = 1;
+                c.PlayerStats[Key("gain_X_power_charges_per_second")] = scenario.Another ? 0 : -1;
+                bool movingControl = !scenario.Reload && scenario.Delay < 10 && !scenario.Another;
+                c.PlayerStats[Key("gain_a_frenzy_charge_every_X_seconds_while_moving")] = movingControl ? 2 : 0;
+                c.PlayerStats[Key("endurance_charge_on_kill_%")] = 100;
+                c.PlayerStats[Key("add_frenzy_charge_on_skill_hit_%")] = 100;
+                c.PlayerStats[Key("add_power_charge_on_kill_%_chance")] = 100;
+                var items = Game.ItemsOf(c); var gem = ItemCatalog.Create(Program.Items.Find("Metadata/Items/Gems/SkillGemVaalGroundSlam")!);
+                var weapon = items.Add(PlayerInventories.Weapon1, 0, 0, ItemCatalog.Create(Program.Items.Find("Driftwood Club")!) with { Sockets = [new(SocketColour.White, gem)], Links = [1] });
+                var variety = Game.Monsters.All.First(v => v.Supported && v.Id.Contains("Zombies/Zombie") && Game.Monsters.BaseExperience(v, 68) > 0);
+                var victim = new SpawnedMonster("accepted level victim", new(104, 100, 0), 0, 0, 1) { Variety = variety, Level = 68 }; c.Monsters[42] = victim;
+                var loadedType = typeof(ModHost).GetNestedType("LoadedMod", flags)!;
+                var loaded = Activator.CreateInstance(loadedType, flags, null, [ModHost.ReadManifest("level-clock-r13", "{}"), "logs", null], null)!;
+                var context = (IModuleContext)Activator.CreateInstance(typeof(ModHost).GetNestedType("Context", flags)!, flags, null, [Program.ServerMods, loaded], null)!;
+                var held = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously); var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                int kills = 0, notifications = 0, xpHooks = 0, drops = 0;
+                using var kill = GameEvents.Kill.Add("Game", k => { if (ReferenceEquals(k.Conn, c)) { kills++; Assert.True(k.PlayerKill); } });
+                using var notify = context.OnMonsterKilled(k => { if (k.Player.Character != c.Character) return Task.CompletedTask; notifications++; held.TrySetResult(); return notifications == 1 ? release.Task : Task.CompletedTask; });
+                using var xp = context.ModifyExperience(e => { if (e.Player.Character == c.Character) { xpHooks++; e.Experience = 37; } });
+                using var drop = context.ModifyDrops(d => { if (d.Player.Character == c.Character) { drops++; d.Cancel = true; d.Items.Add("Portal Scroll"); } });
+                var gate = Program.SendGates.GetValue(ciphers, _ => new(1, 1)); bool gateHeld = false;
+                PlayerUpdatesState? oldState = null; Task? completion = null, pending = null, later = null;
+                var projectiles = new Game.ProjectileSession("Whisperer", wire, ciphers, c); c.ProjectileRuntime = projectiles;
+                ProjectileRuntime clock = projectiles.Runtime; clock.AdvanceTo(ProjectileRuntime.Time(99.5)); Task? replacementOutput = null;
+                try
+                {
+                    var grant = Assert.Single(Game.FootstepSkills(c, 100)); Assert.Equal("RepeatingShockwave", grant.EffectId);
+                    c.PlayerSent = true; Program.ActivatePlayerUpdates(c); oldState = (PlayerUpdatesState)c.PlayerUpdatesState!; before.Completion = oldState.Completion;
+                    await before.Next(PlayerUpdateRole.Recovery); await before.Next(PlayerUpdateRole.Player); await before.OtherRoles();
+                    _ = Game.CharacterPlayerStats(c); var initialProfile = Game.WeaponProfileFor(c);
+                    Game.ChargesOf(c).Step(99.5, null, () => initialProfile, true, true, false, new FixedDraw(0));
+                    runtime.At = before.At = after.At = 100; clock.AdvanceTo(ProjectileRuntime.Time(100));
+                    uint start = c.Experience; pending = Game.TriggerFootstepSkill("Whisperer", wire, ciphers, c, grant);
+                    await held.Task; Assert.False(pending.IsCompleted); Assert.Equal(0u, victim.Life); Assert.Equal(69, c.Pools.Level);
+                    // Account/Auth is outside this isolated packet/timer test; gameplay and all native projections stay real.
+                    c.Minions.PresentedAccountRevision = c.Minions.AccountRevision;
+                    double acceptedAt = c.Minions.OutputQueue.Single(o => o.Kind == PlayerMinions.OutputKind.Charges).Charges!.Max(e => e.At);
+                    if (scenario.Reload)
+                    {
+                        oldOwner.Stop(ex => throw ex); game = assembly.GetType("Game")!;
+                        game.GetField("CombatLifetime", flags)!.SetValue(null, owner); game.GetField("PlayerUpdatesSchedule", flags)!.SetValue(null, after);
+                        var replacementProjectiles = Activator.CreateInstance(game.GetNestedType("ProjectileSession", flags)!, flags, null, ["Whisperer", wire, ciphers, c], null)!;
+                        clock = (ProjectileRuntime)replacementProjectiles.GetType().GetProperty("Runtime")!.GetValue(replacementProjectiles)!;
+                        clock.AdvanceTo(ProjectileRuntime.Time(acceptedAt)); c.ProjectileRuntimeState = (IProjectileRuntime)replacementProjectiles;
+                        replacementOutput = (Task)replacementProjectiles.GetType().GetProperty("OutputCompleted")!.GetValue(replacementProjectiles)!;
+                        Program.SetGameLogic((IGameLogic)Activator.CreateInstance(assembly.GetType("GameServer.Modules.Game.GameLogic")!, flags, null, [owner], null)!);
+                        var state = c.PlayerUpdatesState!; completion = (Task)state.GetType().GetField("Completion", flags)!.GetValue(state)!; after.Completion = completion;
+                        await after.Next(PlayerUpdateRole.Recovery); await after.Next(PlayerUpdateRole.Player); await after.OtherRoles();
+                    }
+                    await (Task)Call("SendPassives", "Whisperer", wire, ciphers, c)!;
+                    var beforePaid = new List<byte[]>(); while (wire.Plain.Reader.TryRead(out var p)) beforePaid.Add(p);
+                    var stale = ((byte[] Bytes, string Label))Call("PassivesMessage", c)!; Assert.Contains(beforePaid, p => p.SequenceEqual(stale.Bytes));
+                    await gate.WaitAsync(); gateHeld = true;
+                    var refund = (Task<string?>)Call("ChangePassives", "Whisperer", wire, ciphers, c, new ushort[] { 59443 }, false, "accepted level paid refund", null, false, true)!;
+                    Assert.False(refund.IsCompleted); Assert.Equal((ushort)15, c.RefundPoints); Assert.DoesNotContain((ushort)59443, c.MainAscendancy.Allocated);
+                    gate.Release(); gateHeld = false; Assert.Null(await refund);
+                    var fresh = ((byte[] Bytes, string Label))Call("PassivesMessage", c)!;
+                    var refundFrames = new List<byte[]>(); while (wire.Plain.Reader.TryRead(out var p)) refundFrames.Add(p);
+                    Assert.Contains(refundFrames, p => p.SequenceEqual(fresh.Bytes)); Assert.False(stale.Bytes.SequenceEqual(fresh.Bytes));
+                    Assert.True(items.Items(PlayerInventories.Weapon1).Single(i => i.Id == weapon.Id).Item.Sockets[0].Gem!.GemExperience > 0);
+                    await (Task)Call("PickUpItem", "Whisperer", wire, ciphers, c, new InstanceItems.PickUpItem(PlayerInventories.InventoryId(PlayerInventories.Weapon1), weapon.Id, 0, 0, 0))!;
+                    Assert.Empty(items.Items(PlayerInventories.Weapon1)); Assert.Equal(weapon.Id, Assert.Single(items.Items(PlayerInventories.Cursor)).Id);
+                    while (wire.Plain.Reader.TryRead(out _)) { }
+                    var session = Call("ChargesOf", c)!; _ = Call("CharacterPlayerStats", c);
+                    var step = session.GetType().GetMethod("Step")!; var profile = (WeaponProfile)Call("WeaponProfileFor", c)!;
+                    void Live(double at)
+                    {
+                        runtime.At = before.At = after.At = at; clock.AdvanceTo(ProjectileRuntime.Time(at));
+                        step.Invoke(session, [at, null, (Func<WeaponProfile>)(() => profile), true, true, false, new FixedDraw(0)]);
+                    }
+                    Live(acceptedAt); Live(acceptedAt + scenario.Delay);
+                    int beforeDrain = c.PlayerChargeState.Held(ChargeType.Endurance); double deadline = c.PlayerChargeState.ExpiresAt(ChargeType.Endurance);
+                    Live(acceptedAt + scenario.Delay); Assert.Equal(beforeDrain, c.PlayerChargeState.Held(ChargeType.Endurance));
+                    double liveOrigin = (double)session.GetType().GetField("lastStep", flags)!.GetValue(session)!;
+                    if (scenario.Another)
+                    {
+                        runtime.At = before.At = acceptedAt + 5; clock.AdvanceTo(ProjectileRuntime.Time(runtime.At));
+                        c.Monsters[43] = new("later accepted victim", new(104, 100, 0), 0, 0, 1) { Variety = variety, Level = 68 };
+                        wire.Hold = () => c.Monsters[43].Dead;
+                        later = (Task)Call("TriggerFootstepSkill", "Whisperer", wire, ciphers, c, grant)!;
+                        await wire.Held.Task; Assert.False(later.IsCompleted); Assert.Equal(0u, c.Monsters[43].Life);
+                        wire.Release.TrySetResult(); await later;
+                    }
+                    release.TrySetResult(); await pending;
+                    await (Task)Call("PlayerMinionsTick", "Whisperer", wire, ciphers, c, runtime.At)!;
+                    int afterDrain = c.PlayerChargeState.Held(ChargeType.Endurance), powerAfterDrain = c.PlayerChargeState.Held(ChargeType.Power);
+                    if ((double)session.GetType().GetField("lastStep", flags)!.GetValue(session)! != liveOrigin) failures.Add("output changed live integration origin: " + scenario);
+                    double currentAt = runtime.At; Live(currentAt); int afterRepeat = c.PlayerChargeState.Held(ChargeType.Endurance);
+                    if (!scenario.Another && c.PlayerChargeState.Held(ChargeType.Power) != powerAfterDrain) failures.Add("periodic loss replay: " + scenario);
+                    if (afterRepeat != afterDrain) failures.Add("periodic clock replay: " + scenario);
+                    if (!scenario.Another && c.PlayerChargeState.ExpiresAt(ChargeType.Endurance) != deadline) failures.Add("newer deadline overwritten: " + scenario);
+                    if (scenario.Delay > 10 && (c.PlayerChargeState.Held(ChargeType.Power) != 0 || c.PlayerChargeState.Presented[(int)ChargeType.Power].Count != 0))
+                        failures.Add("expired accepted charge resurrected/flashed: " + scenario);
+                    if (scenario.Another && c.PlayerChargeState.ExpiresAt(ChargeType.Power) != acceptedAt + 15)
+                        failures.Add("later accepted batch deadline lost");
+                    int repeatedAtSameClock = afterRepeat;
+                    if (movingControl)
+                    {
+                        int frenzy = c.PlayerChargeState.Held(ChargeType.Frenzy);
+                        currentAt = acceptedAt + 1.5; Live(currentAt);
+                        if (c.PlayerChargeState.Held(ChargeType.Frenzy) != frenzy + 1) failures.Add("partial moving timer reset by output");
+                        afterRepeat = c.PlayerChargeState.Held(ChargeType.Endurance);
+                        Console.WriteLine($"[r13] moving phase: Frenzy {frenzy}->{c.PlayerChargeState.Held(ChargeType.Frenzy)} at {currentAt:R}");
+                    }
+                    var frames = new List<byte[]>(); while (wire.Plain.Reader.TryRead(out var p)) frames.Add(p);
+                    var passiveFrames = frames.Where(p => p.Length >= 2 && p[0] == 0 && p[1] == 0x33).ToArray();
+                    if (passiveFrames.Length == 0 || passiveFrames.Any(p => !p.SequenceEqual(fresh.Bytes))) failures.Add("stale passive tree after paid refund: " + scenario);
+                    uint inventoryId = PlayerInventories.InventoryId(PlayerInventories.Weapon1);
+                    var rowFrames = frames.Where(p => p.Length >= 11 && p[0] == 0 && p[1] == 0xbf
+                        && System.Buffers.Binary.BinaryPrimitives.ReadUInt32BigEndian(p.AsSpan(3, 4)) == inventoryId).ToArray();
+                    var emptyRow = InstanceItems.InventoryChange(inventoryId, 0, [weapon.Id], []);
+                    if (rowFrames.Any(p => !p.AsSpan(11).SequenceEqual(emptyRow.AsSpan(11)))) failures.Add("queued gem XP replayed old equipment row: " + scenario);
+                    int expected = scenario.Another ? 2 : 1;
+                    Assert.Equal(start + (uint)(37 * expected), c.Experience); Assert.Equal(expected, kills); Assert.Equal(expected, notifications); Assert.Equal(expected, xpHooks); Assert.Equal(expected, drops);
+                    Assert.Equal((ushort)15, c.RefundPoints); Assert.DoesNotContain((ushort)59443, c.MainAscendancy.Allocated); Assert.False(c.Closed);
+                    Console.WriteLine($"[r13] {scenario}: level={c.Pools.Level} refunds={c.RefundPoints} nodes={c.MainAscendancy.Allocated.Count}; charges {beforeDrain}/{afterDrain}/{repeatedAtSameClock}, deadline {deadline:R}->{c.PlayerChargeState.ExpiresAt(ChargeType.Endurance):R}; passives=" + string.Join(",", passiveFrames.Select(Convert.ToHexString)));
+                    Console.WriteLine($"[r13] old-tree={Convert.ToHexString(stale.Bytes)} fresh-tree={Convert.ToHexString(fresh.Bytes)} equipment-frames={rowFrames.Length}");
+                    await Game.PublishMinionOutcomes("Whisperer", wire, ciphers, c); await (Task)Call("PublishMinionOutcomes", "Whisperer", wire, ciphers, c)!;
+                    Live(currentAt); Assert.Equal(afterRepeat, c.PlayerChargeState.Held(ChargeType.Endurance)); Assert.Equal(expected, notifications);
+                    Assert.Empty(c.Minions.OutputQueue); Assert.Empty(c.Minions.FlaskRewards);
+                }
+                finally
+                {
+                    if (gateHeld) gate.Release(); wire.Release.TrySetResult(); release.TrySetResult(); if (pending is not null) await pending; if (later is not null) await later;
+                    c.Closed = true; c.RetirePlayerUpdates(); oldOwner.Stop(_ => { }); owner.Stop(_ => { });
+                    if (oldState is not null) await oldState.Completion; if (completion is not null) await completion;
+                    await projectiles.OutputCompleted; if (replacementOutput is not null) await replacementOutput;
+                    ((ModuleLifetime)context.Lifetime).Stop(_ => { }); alc.Unload();
+                }
+            }
+            Assert.True(failures.Count == 0, string.Join("; ", failures));
+        }
+        finally
+        {
+            Game.CombatLifetime = priorRules; Game.PlayerUpdatesSchedule = priorSchedule; Program.SetGameLogic(priorLogic); provider.Stop(_ => { });
+            for (int i = 0; i < optIns.Length; i++) Environment.SetEnvironmentVariable(optIns[i], priorFlags[i]);
+        }
     }
 
     // Actual qualified relic expiry and accepted fighting-minion lethal contact, across the real cipher gate.

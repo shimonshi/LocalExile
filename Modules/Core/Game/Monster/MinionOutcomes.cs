@@ -38,7 +38,7 @@ static partial class Game
             state.OutputQueue.Add(new([], null, Kind: PlayerMinions.OutputKind.PlayerKill, Kill: modMonster));
             var charge = new PlayerMinions.AcceptedCharges(true, false, monster.Rarity, null, null, false, now);
             if (chargeBatch is not null) chargeBatch.Add(charge);
-            else state.OutputQueue.Add(new([], null, Kind: PlayerMinions.OutputKind.Charges, Charges: [charge]));
+            else CommitAcceptedChargeBatchLocked(conn, [charge], CharacterPlayerStats(conn));
         }
         var packets = new List<(byte[] Packet, string? Log)>();
         if (CommitQuestFlags(conn, Quests.OnMonsterKilled(conn.Layout.Id, variety.Id)) is { } quest)
@@ -61,8 +61,10 @@ static partial class Game
             && Monsters.BaseExperience(variety, monster.Level) is int baseXp)
             xp = Program.ServerHooks.Experience(killer, modMonster,
                 Progression.MonsterExperience(baseXp, variety.ExperienceMultiplier, monster.Rarity, conn.Pools.Level, monster.Level));
-        var (gemPackets, leveled) = CommitGemExperience(conn, xp);
-        foreach (var packet in gemPackets) state.OutputQueue.Add(new(packet, "gem experience"));
+        var gemRows = new List<(byte Row, uint[] Items)>();
+        var (_, leveled) = CommitGemExperience(conn, xp, gemRows);
+        foreach (var (row, ids) in gemRows)
+            state.OutputQueue.Add(new([], "gem experience (current)", Kind: PlayerMinions.OutputKind.GemInventory, InventoryRow: row, ItemIds: ids));
         if (leveled) state.StatRevision++;
         if (Quests.LevelAfterKill(conn.Layout.Id, variety.Id) is int required and > 1 && required <= CharacterStats.LevelStarts.Count)
             xp = (uint)Math.Max(xp, Math.Max(0L, (long)CharacterStats.LevelStarts[required - 1] - conn.Experience));
@@ -76,7 +78,7 @@ static partial class Game
                 conn.PlayerLife = conn.PlayerMaxLife; conn.PlayerMana = (uint)UnreservedMana(conn);
                 conn.EnergyShield.SetMaximum(conn.Pools.EnergyShield, true); TrimLeechLocked(conn);
                 state.StatRevision++; state.AccountRevision++;
-                state.OutputQueue.Add(new(PassivesMessage(conn).Bytes, "passives after minion kill level"));
+                state.OutputQueue.Add(new([], "0x0033 current passive skill tree (accepted level)", Kind: PlayerMinions.OutputKind.Passives));
             }
         }
         state.FlaskRewards.Add(new(monster.Rarity));
@@ -155,7 +157,14 @@ static partial class Game
                         return QuestTransitionPresentation(conn, output.TargetId!.Value, output.Transition!);
                     if (output.Kind == PlayerMinions.OutputKind.QuestRoomRemove)
                         return conn.QuestRoomObjects.ContainsKey(output.TargetId!.Value) ? null : InstanceProtocol.RemoveObject(output.TargetId.Value);
-                    if (output.Kind == PlayerMinions.OutputKind.Charges) return AcceptedChargePresentationLocked(conn, output.Charges!);
+                    if (output.Kind == PlayerMinions.OutputKind.Passives) return PassivesMessage(conn).Bytes;
+                    if (output.Kind == PlayerMinions.OutputKind.GemInventory)
+                    {
+                        var items = ItemsOf(conn); byte row = output.InventoryRow!.Value;
+                        return InstanceItems.InventoryChange(PlayerInventories.InventoryId(row), items.NextRevision(row), output.ItemIds!,
+                            [.. items.Items(row).Where(item => output.ItemIds!.Contains(item.Id))]);
+                    }
+                    if (output.Kind == PlayerMinions.OutputKind.Charges) return AcceptedChargePresentationLocked(conn);
                     if (output.TargetId is uint id && !ReferenceEquals(conn.Monsters.GetValueOrDefault(id), output.Target)) return null;
                     return output.Kind switch
                     {

@@ -2,29 +2,39 @@ using GameServer.Core.Protocol.Instance;
 
 static partial class Game
 {
-    // Accepted hit receipts contain only host values. The existing current area role drains one charge batch per sweep.
-    static byte[]? AcceptedChargePresentationLocked(ClientState conn, IReadOnlyList<PlayerMinions.AcceptedCharges> accepted)
+    // Resolve the batch once, before any output await. Only current-state presentation remains queued, so a delayed
+    // hook/send cannot replay historical events through the live ticker or resurrect their expired deadlines.
+    static void CommitAcceptedChargeBatchLocked(ClientState conn, IReadOnlyList<PlayerMinions.AcceptedCharges> accepted,
+        IReadOnlyDictionary<uint, int> player)
     {
-        if (conn.PlayerLife == 0) return null;
+        if (conn.PlayerLife == 0) return;
         var session = ChargesOf(conn);
-        foreach (var e in accepted)
-        {
-            if (e.KillEvent) session.Enqueue(new ChargeEvent.Kill(e.Rarity));
-            else session.Enqueue(new ChargeEvent.Hit(e.Critical, true, null, e.Rarity, e.Effect,
+        int Get(string name) => Stats.Key(name) is uint key ? player.GetValueOrDefault(key) : 0;
+        session.Observe(Get);
+        var events = accepted.Select(e => e.KillEvent ? (ChargeEvent)new ChargeEvent.Kill(e.Rarity)
+            : new ChargeEvent.Hit(e.Critical, true, null, e.Rarity, e.Effect,
                 name => Stats.Key(name) is uint key ? e.Skill!.GetValueOrDefault(key) : 0, e.Killed, e.Primary));
-        }
-        var final = CharacterPlayerStats(conn);
-        int Get(string name) => Stats.Key(name) is uint key ? final.GetValueOrDefault(key) : 0;
-        double at = accepted.Max(e => e.At);
-        var step = session.Step(at, Get, () => WeaponProfileFor(conn), conn.PlayerLife > 0,
-            at < conn.Walk.ArrivesAt, InTown(conn), Random.Shared);
-        foreach (string line in step.Log) Console.WriteLine($"[gateway] {conn.Wire.Remote} {line} (t={at:0.000})");
-        var packets = session.Presentation(ProjectileWorldTime(conn), () => conn.NextBuff++)
-            .SelectMany(b => ChargeBuffs.Packets(b, PlayerId).SelectMany(p => p.Packet)).ToArray();
+        var step = session.Admit(accepted.Max(e => e.At), events, Get, () => WeaponProfileFor(conn), conn.PlayerLife > 0, Random.Shared);
+        foreach (string line in step.Log) Console.WriteLine($"[gateway] {conn.Wire.Remote} {line} (accepted contact)");
         if (step.CountsChanged)
         {
             conn.Pools = PoolsFor(conn, conn.Pools.Level); conn.ApplyMovementSpeed(); conn.Minions.StatRevision++;
         }
+        conn.Minions.OutputQueue.Add(new([], null, Kind: PlayerMinions.OutputKind.Charges, Charges: accepted));
+    }
+
+    static byte[]? AcceptedChargePresentationLocked(ClientState conn)
+    {
+        if (conn.PlayerLife == 0) return null;
+        var session = ChargesOf(conn); _ = CharacterPlayerStats(conn);
+        double now = ProjectileWorldTime(conn);
+        var step = session.Refresh(now);
+        if (step.CountsChanged)
+        {
+            conn.Pools = PoolsFor(conn, conn.Pools.Level); conn.ApplyMovementSpeed(); conn.Minions.StatRevision++;
+        }
+        var packets = session.Presentation(now, () => conn.NextBuff++)
+            .SelectMany(b => ChargeBuffs.Packets(b, PlayerId).SelectMany(p => p.Packet)).ToArray();
         return packets.Length > 0 ? packets : null;
     }
 

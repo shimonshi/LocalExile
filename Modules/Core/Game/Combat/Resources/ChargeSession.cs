@@ -102,22 +102,42 @@ sealed class ChargeSession(Charges.State? state = null)
         }
         else
         {
-            while (stats is not null && events.TryDequeue(out var e))
-            {
-                if (e is ChargeEvent.WhenHit) LastHitAt = now;
-                if (e is ChargeEvent.Set set)
-                {
-                    foreach (var type in set.Type is { } only ? [only] : Charges.Types)
-                        State.Set(type, set.Count, now, limits[(int)type]);
-                    log.Add(set.Type is { } t ? $"{Charges.Name(t)} charges set to {set.Count}" : "charges cleared");
-                    continue;
-                }
-                foreach (var gain in ChargeGains.Roll(e, stats, weapon(), rng)) Apply(gain, now, rng, log);
-            }
+            while (stats is not null && events.TryDequeue(out var e)) ApplyEvent(e, now, stats, weapon, rng, log);
             if (!inTown)
                 foreach (var gain in timers.Advance(elapsed, Observed, now - LastHitAt <= RecentlySeconds, moving, rng))
                     Apply(gain, now, rng, log);
         }
+        return Finish(now, log);
+    }
+
+    // An admitted contact resolves only its own events at the original contact time. It never steps periodic/moving
+    // timers, drains unrelated queued events, or changes lastStep. Call in the same mutation transaction as the hit.
+    public StepResult Admit(double now, IEnumerable<ChargeEvent> accepted, Func<string, int> stats,
+        Func<WeaponProfile> weapon, bool alive, Random rng)
+    {
+        var log = new List<string>();
+        if (alive) foreach (var e in accepted) ApplyEvent(e, now, stats, weapon, rng, log);
+        return Finish(now, log);
+    }
+
+    // Current presentation can expire/clamp, but cannot integrate already processed time or reset a moving timer.
+    public StepResult Refresh(double now) => Finish(double.IsNaN(lastStep) ? now : Math.Max(now, lastStep), []);
+
+    void ApplyEvent(ChargeEvent e, double now, Func<string, int> stats, Func<WeaponProfile> weapon, Random rng, List<string> log)
+    {
+        if (e is ChargeEvent.WhenHit) LastHitAt = now;
+        if (e is ChargeEvent.Set set)
+        {
+            foreach (var type in set.Type is { } only ? [only] : Charges.Types)
+                State.Set(type, set.Count, now, limits[(int)type]);
+            log.Add(set.Type is { } t ? $"{Charges.Name(t)} charges set to {set.Count}" : "charges cleared");
+            return;
+        }
+        foreach (var gain in ChargeGains.Roll(e, stats, weapon(), rng)) Apply(gain, now, rng, log);
+    }
+
+    StepResult Finish(double now, List<string> log)
+    {
         foreach (var type in State.Expire(now)) log.Add($"{Charges.Name(type)} charges expired");
         foreach (var type in Charges.Types)
             if (State.Clamp(type, limits[(int)type])) log.Add($"{Charges.Name(type)} charges down to the maximum {limits[(int)type].Maximum}");
