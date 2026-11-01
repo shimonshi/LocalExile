@@ -460,6 +460,7 @@ public sealed class WhispererRuntimeTests
         replacementRules.Stop(ex => throw ex); Assert.Null(ordinary.ResourceEffectsState);
         await nextUpdates.Completion; Assert.Null(ordinary.PlayerUpdatesState);
         ordinary.Closed = true;
+        await ChargePublicationAcrossCurrentPublishers(h);
         await AcceptedLevelAndChargeClockAcrossGameAssemblies(h);
         await AcceptedFootstepAndQuestAcrossGameAssemblies(h);
         await MinionAcceptedWorkAcrossGameAssemblies(h);
@@ -469,6 +470,119 @@ public sealed class WhispererRuntimeTests
         await CommandsAcrossGameAssemblies(h);
         await TriggerChainAcrossGameAssemblies(h);
         Assert.Equal(definition.Identity, CharacterSaves.Load(c.Character!)!.MainAscendancy!.Selection);
+    }
+
+    static async Task ChargePublicationAcrossCurrentPublishers(Harness h)
+    {
+        const BindingFlags flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance;
+        var priorLogic = Program.Logic; var priorRules = Game.CombatLifetime; string? priorOptIn = Environment.GetEnvironmentVariable("Game_VERIFIED_POLYTHEIST");
+        string? priorDrops = Environment.GetEnvironmentVariable("Game_DROPS"); Environment.SetEnvironmentVariable("Game_VERIFIED_POLYTHEIST", "1"); Environment.SetEnvironmentVariable("Game_DROPS", "0");
+        var provider = new ModuleLifetime("PhreciaAscendancies"); using var source = AscendancyPolicies.Register(provider, h.Policy); var failures = new List<string>();
+        try
+        {
+            foreach (bool converted in new[] { false, true })
+            {
+                using var wire = new CaptureStream(); var ciphers = new ConnectionCiphers(new byte[64], false); var owner = new ModuleLifetime("Game");
+                Game.CombatLifetime = owner; Program.SetGameLogic(new GameServer.Modules.Game.GameLogic(owner));
+                var definition = new AscendancyCatalog().Definitions.Single(d => d.Name == "Polytheist");
+                byte row = (byte)Enumerable.Range(0, 7).First(r => Program.Skills.ClassFor(r).IntegerId == definition.BaseClass);
+                var c = h.NewConnection("chargeorder" + Guid.NewGuid().ToString("N"), optional: false, classRow: row);
+                c.LeagueModule = new(new League("WhispererTest", "Standard", false, false), new HashSet<string>(["Game", "PhreciaAscendancies"]));
+                c.MainAscendancy = new(definition.Identity, [27664, 22056, 26231, 32742, 21979, 61900, 59443], AscendancyRules.AwardKeys); c.Passives = [];
+                AscendancyPolicies.SelectionChanged(c); AscendancyPolicies.RequirePlayable(c, definition.Identity); Game.AscendancyRules.Validate(definition.BaseClass, c.MainAscendancy);
+                c.Wire = ("Whisperer", wire, ciphers); c.Walk.Teleport(100, 100, 0); c.AiEnabled = false;
+                var projectiles = new Game.ProjectileSession("Whisperer", wire, ciphers, c); c.ProjectileRuntime = projectiles; projectiles.Runtime.AdvanceTo(ProjectileRuntime.Time(100));
+                c.PlayerStats[Key("add_power_charge_on_kill_%_chance")] = 100;
+                c.PlayerStats[Key(Charges.ConversionFlag(ChargeType.Power))] = converted ? 1 : 0;
+                c.Pools = Game.PoolsFor(c, 68); c.PlayerLife = c.PlayerMaxLife; c.PlayerMana = c.Pools.Mana; c.PlayerSent = true;
+                var grant = Assert.Single(Game.FootstepSkills(c, 100)); Assert.Equal("RepeatingShockwave", grant.EffectId);
+                var variety = Game.Monsters.All.First(v => v.Supported && v.Id.Contains("Zombies/Zombie") && Game.Monsters.BaseExperience(v, 68) > 0);
+                var victim = new SpawnedMonster("charge ordering victim", new(104, 100, 0), 0, 0, 1) { Variety = variety, Level = 68 }; c.Monsters[42] = victim;
+                var loadedType = typeof(ModHost).GetNestedType("LoadedMod", flags)!;
+                var loaded = Activator.CreateInstance(loadedType, flags, null, [ModHost.ReadManifest("charge-order-r14", "{}"), "logs", null], null)!;
+                var context = (IModuleContext)Activator.CreateInstance(typeof(ModHost).GetNestedType("Context", flags)!, flags, null, [Program.ServerMods, loaded], null)!;
+                var heldHook = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                // Inline release drives the real hook continuation to the already-held cipher gate before that write resumes.
+                var releaseHook = new TaskCompletionSource(); int notifications = 0, kills = 0;
+                using var notify = context.OnMonsterKilled(k => { if (k.Player.Character != c.Character) return Task.CompletedTask; notifications++; heldHook.TrySetResult(); return releaseHook.Task; });
+                using var xp = context.ModifyExperience(e => { if (e.Player.Character == c.Character) e.Experience = 37; });
+                using var kill = GameEvents.Kill.Add("Game", k => { if (ReferenceEquals(k.Conn, c)) { kills++; Assert.True(k.PlayerKill); } });
+                Task? accepted = null, ticker = null; bool heldProjectionGate = false;
+                var projectionGate = Program.SendGates.GetValue(ciphers, _ => new(1, 1));
+                var schedule = new ManualUpdates(new ManualRuntime { At = 100 }) { At = 100 }; var updates = new PlayerUpdatesState(owner, schedule);
+                try
+                {
+                    uint startXp = c.Experience; accepted = Game.TriggerFootstepSkill("Whisperer", wire, ciphers, c, grant);
+                    await heldHook.Task; Assert.False(accepted.IsCompleted); Assert.True(victim.Dead); Assert.Equal(1, c.PlayerChargeState.Held(ChargeType.Power));
+                    var session = Game.ChargesOf(c);
+                    foreach (var type in Charges.Types) session.Enqueue(new ChargeEvent.Grant(type, 1, "production queue ordering control"));
+                    c.PlayerUpdatesState = updates;
+                    Assert.True(c.PlayerUpdatesWorker.TryStart(c, owner, null, updates, out long generation)); updates.Generation = generation;
+                    ticker = Game.RunCharges("Whisperer", wire, ciphers, c, updates); schedule.Completion = ticker;
+                    var first = await schedule.Next(PlayerUpdateRole.Charges);
+                    while (wire.Plain.Reader.TryRead(out _)) { }
+                    wire.Hold = () => true; first.Advance(100); await wire.Held.Task; Assert.False(ticker.IsCompleted);
+                    var shown = c.PlayerChargeState.Presented.ToArray(); Assert.Equal(new[] { 1, 1, 2 }, shown.Select(v => v.Count).ToArray()); Assert.Equal(converted, shown[2].Converted);
+                    projectiles.Runtime.AdvanceTo(ProjectileRuntime.Time(111.25)); releaseHook.TrySetResult(); Assert.False(accepted.IsCompleted);
+                    wire.Release.TrySetResult(); await accepted; var following = await schedule.Next(PlayerUpdateRole.Charges);
+                    var frames = new List<byte[]>(); while (wire.Plain.Reader.TryRead(out var packet)) frames.Add(packet);
+                    projectiles.Runtime.AdvanceTo(ProjectileRuntime.Time(111.30)); following.Advance(111.30); await schedule.Next(PlayerUpdateRole.Charges);
+                    var nextFrames = new List<byte[]>(); while (wire.Plain.Reader.TryRead(out var packet)) nextFrames.Add(packet);
+                    var bytes = frames.SelectMany(p => p).ToArray();
+                    foreach (var type in Charges.Types)
+                    {
+                        var old = shown[(int)type]; var add = ChargeBuffs.Add(type, old.Buff, old.Count, 10, Program.PlayerId, old.Converted);
+                        var remove = InstanceEntities.RemoveBuff(Program.PlayerId, old.Buff);
+                        int addAt = bytes.AsSpan().LastIndexOf(add), removeAt = bytes.AsSpan().LastIndexOf(remove);
+                        if (addAt < 0 || removeAt <= addAt) failures.Add($"expired {type} add overtook removal (converted={converted}, add={addAt}, remove={removeAt})");
+                        Assert.Equal(0, c.PlayerChargeState.Held(type)); Assert.Equal(0, c.PlayerChargeState.Presented[(int)type].Count);
+                        Console.WriteLine($"[r14] converted={converted} {type}: last add={addAt}, removal={removeAt}, held/shown=0/0");
+                    }
+                    Assert.DoesNotContain(nextFrames, p => p.Length > 1 && p[0] == 1 && (p[1] == 0xc1 || p[1] == 0xc2));
+                    Assert.Empty(session.Presentation(111.30, () => c.NextBuff++));
+                    Assert.Equal(startXp + 37, c.Experience); Assert.Equal(1, notifications); Assert.Equal(1, kills); Assert.False(c.Closed);
+                    Console.WriteLine("[r14] buff frames: " + string.Join(",", frames.Where(p => p.Length > 1 && p[0] == 1 && (p[1] == 0xc1 || p[1] == 0xc2)).Select(Convert.ToHexString)));
+                    // The projectile consumer uses this real outbox wrapper: no snapshot/ack before its send gate.
+                    projectiles.Runtime.AdvanceTo(ProjectileRuntime.Time(120));
+                    session.Enqueue(new ChargeEvent.Grant(ChargeType.Frenzy, 1, "projectile output ordering control"));
+                    var current = Game.CharacterPlayerStats(c);
+                    int Get(string name) => Program.Stats.Key(name) is uint key ? current.GetValueOrDefault(key) : 0;
+                    session.Step(120, Get, () => Game.WeaponProfileFor(c), true, false, false, new FixedDraw(0));
+                    await projectionGate.WaitAsync(); heldProjectionGate = true;
+                    projectiles.PresentCharges(); Assert.Equal(0, c.PlayerChargeState.Presented[(int)ChargeType.Frenzy].Count);
+                    projectiles.Runtime.AdvanceTo(ProjectileRuntime.Time(131.25));
+                    var drained = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                    projectiles.Enqueue(() => { drained.TrySetResult(); return Task.CompletedTask; });
+                    projectionGate.Release(); heldProjectionGate = false; await drained.Task;
+                    Assert.Equal(0, c.PlayerChargeState.Held(ChargeType.Frenzy)); Assert.Equal(0, c.PlayerChargeState.Presented[(int)ChargeType.Frenzy].Count);
+                    while (wire.Plain.Reader.TryRead(out var late)) Assert.False(late.Length > 1 && late[0] == 1 && late[1] == 0xc1);
+                    // A retired projectile job waiting at the same gate neither sends nor acknowledges the gain.
+                    projectiles.Runtime.AdvanceTo(ProjectileRuntime.Time(140));
+                    session.Enqueue(new ChargeEvent.Grant(ChargeType.Frenzy, 1, "retired projectile output control"));
+                    session.Step(140, Get, () => Game.WeaponProfileFor(c), true, false, false, new FixedDraw(0));
+                    await projectionGate.WaitAsync(); heldProjectionGate = true; projectiles.PresentCharges();
+                    owner.Stop(_ => { }); projectionGate.Release(); heldProjectionGate = false; await projectiles.OutputCompleted;
+                    Assert.Equal(0, c.PlayerChargeState.Presented[(int)ChargeType.Frenzy].Count);
+                    while (wire.Plain.Reader.TryRead(out var late)) Assert.False(late.Length > 1 && late[0] == 1 && late[1] == 0xc1);
+                    Console.WriteLine($"[r14] converted={converted}: delayed projectile output expired without add; retired output did not acknowledge/send");
+                }
+                finally
+                {
+                    if (heldProjectionGate) projectionGate.Release();
+                    wire.Release.TrySetResult(); releaseHook.TrySetResult(); if (accepted is not null) await accepted;
+                    c.RetirePlayerUpdates();
+                    if (ticker is not null) try { await ticker; } catch (OperationCanceledException) when (updates.Stop.IsCancellationRequested) { }
+                    c.Closed = true; owner.Stop(_ => { }); await projectiles.OutputCompleted;
+                    ((ModuleLifetime)context.Lifetime).Stop(_ => { });
+                }
+            }
+            Assert.True(failures.Count == 0, string.Join("; ", failures));
+        }
+        finally
+        {
+            Game.CombatLifetime = priorRules; Program.SetGameLogic(priorLogic); provider.Stop(_ => { });
+            Environment.SetEnvironmentVariable("Game_VERIFIED_POLYTHEIST", priorOptIn); Environment.SetEnvironmentVariable("Game_DROPS", priorDrops);
+        }
     }
 
     static async Task AcceptedLevelAndChargeClockAcrossGameAssemblies(Harness h)

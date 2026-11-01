@@ -632,6 +632,7 @@ Part of [Status](../Status.md); what to build next in this area is in
   Its current minion/link/footstep roles retain main's cadences and share generation ownership with the resource writer.
   Accepted minion expiry and player/owned-kill gameplay precede awaits; neutral output survives replacement.
   Queued quest/tree/equipment projections retain newer progress; accepted charge events leave live periodic time intact.
+  All charge-buff consumers project and acknowledge at the send gate, avoiding stale buffered ticker output.
   See [Whisperer](../docs/game/whisperer.md).
 
 - Selected supported-spell panel: final linked-support damage replaces both spell and inherited hand ranges,

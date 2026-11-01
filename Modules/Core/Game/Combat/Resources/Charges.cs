@@ -278,7 +278,7 @@ static partial class Game
                 }
                 double now = updates.Schedule.Now(conn);
                 ChargeSession.StepResult step;
-                List<ChargeSession.BuffChange> buffs;
+                bool presentationPending;
                 using (ProjectileMutation(conn))
                 {
                     if (!PlayerUpdatesCurrent(conn, updates)) break;
@@ -286,7 +286,7 @@ static partial class Game
                     now = ProjectileWorldTime(conn);
                     step = session.Step(now, stats, () => weapon, alive: conn.PlayerLife > 0, moving: now < conn.Walk.ArrivesAt,
                         inTown: InTown(conn), Random.Shared);
-                    buffs = session.Presentation(now, () => conn.NextBuff++);
+                    presentationPending = ChargePresentationPending(session);
                     if (step.CountsChanged)
                     {
                         conn.Pools = PoolsFor(conn, conn.Pools.Level);
@@ -294,10 +294,20 @@ static partial class Game
                     }
                 }
                 foreach (string line in step.Log) Console.WriteLine($"[gateway] {remote} {line} (t={now:0.000})");
-                foreach (var change in buffs)
-                    foreach (var (packet, label) in ChargeBuffs.Packets(change, PlayerId))
-                        await Send(remote, stream, ciphers, packet, label);
-                if (step.CountsChanged)
+                bool countsChanged = step.CountsChanged;
+                if (presentationPending)
+                    await Send(remote, stream, ciphers, [], null, atGate: () =>
+                    {
+                        lock (conn.Monsters)
+                        {
+                            if (!PlayerUpdatesCurrent(conn, updates) || conn.LeavingArea) return null;
+                            var (packet, changed) = CurrentChargePresentationLocked(conn, remote);
+                            countsChanged |= changed;
+                            return packet;
+                        }
+                    });
+                if (!PlayerUpdatesCurrent(conn, updates)) return;
+                if (countsChanged)
                 {
                     await SendChargeStats(remote, stream, ciphers, conn,
                         string.Join(", ", Charges.Types.Select(t => $"{session.Effective(t)} {Charges.Label(t, session.Converted(t))}")));

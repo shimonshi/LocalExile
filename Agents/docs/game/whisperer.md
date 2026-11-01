@@ -126,26 +126,24 @@ This dispatch boundary does not promise that every mid-command file-watcher race
 
 ## Validation limits
 
-The current correction starts at `a57300ff7cb1601005a98fd10212e9b4cb0a0f3e`, retaining reconciled main
+The current correction starts at `9ed98ec7920c8d63f7e610cbc6877148dc6bea94`, retaining reconciled main
 `d377bd256036242d2fb43f53eb7110b4897e1862`, `57053948` and `bf1fd6d0` ancestry, the four newer descriptors and generic APIs.
-Exact `a57300ff` passed the recorded build without warnings/errors, Core 436, Data 45, Gateway 25 and unchanged
-native V4 all 36 controls. Its minion supplement was partial (three controls); an immediate SQL XP assumption stopped
-it before acceptance, while the real kill and XP34 were confirmed after logout. No supplement pass is claimed.
-Independent R9 resolved the earlier lost-footstep-kill and stale-quest-flag objections, but found two further gaps:
-a queued level-up tree overwrote a later paid refund, and historical charge output rewound periodic integration.
-Both failures reproduced against exact `a57300ff` before this correction, without and with distinct Game assemblies.
-The same accepted-output audit found a queued gem-XP equipment row could replay an item moved to the cursor.
-Accepted level-up trees and gem rows now project current state at the cipher gate, alongside Life, XP and quest flags.
-Immutable accepted drop/event output retains its own data and identity guards.
-A charge batch resolves inside its admitted contact transaction at the original time; its queued marker only refreshes
-current expiry/limits and presents current buffs. It never steps periodic/moving timers, drains unrelated charge events,
-or changes the live integration origin. Original deadlines and the neutral connection values/shown identities remain.
-The same two Facts cover held real public hooks, level-up, paid refund5 with15 points left, whole decrypted tree frames,
-real item pickup after gem XP, periodic gain/loss and partial moving timers, expired charges, successive batches,
-old/current repeats and distinct Game assemblies, retaining the earlier real Paladin/Spirit/Mercy and resource controls.
-These are bounded deterministic source checks; no real-time, native or Auth/account-level synchronization acceptance is claimed.
-This corrected head requires its own full-suite, independent-review and native acceptance; exact-head results belong to
-revision-specific PR receipts. The unchanged native V4 and partial supplement results remain historical source evidence.
+Exact `9ed98ec7` passed the recorded build without warnings/errors, Core 436, Data 45, Gateway 25 and unchanged
+native V4 all 36 controls. The supplemental minion runner stopped on output-oracle assertions twice; neither a full
+supplement pass nor a native product-bug conclusion is claimed from those incomplete runs.
+Independent R10 resolved the previous stale-tree and charge-time objections, but found an ordinary ticker's buffered
+charge-buff tail could follow accepted expiry/removal output and leave an untracked native buff.
+That ordering reproduced on exact `9ed98ec7`, with actual legal grants, a real kill/public-hook hold, actual RunCharges,
+a claimed area role, the real cipher write and the manually advanced production clock, including converted Power charges.
+Ordinary, accepted and projectile charge consumers now build and acknowledge their complete current presentation at
+the actual send gate. A pure pending hint does not acknowledge buffs or add idle ticker stat builds/gate waits.
+The projectile outbox retains its existing source/epoch and pause guards; delayed expiry and retirement controls cover
+its gate-time wrapper. Existing per-buff diagnostics remain tied to the actual gate-time packets.
+The R13 charge admission/periodic/moving clocks, original deadlines and neutral connection values/shown identities remain.
+Current Life/XP/quest/passive/equipment projections and immutable accepted event/drop output retain their prior guards.
+The same two Facts retain all earlier resource, actual player/owned kill, paid-refund, minion/Mercy, snapshot and reload
+controls. Build/focused checks are local preparation; real-time/native/Auth/account-level and complete class acceptance
+require revision-specific full suites, fresh review and native receipts for this corrected head.
 
 The evidence below is historical and keeps its tested source/base scope.
 

@@ -23,19 +23,38 @@ static partial class Game
         conn.Minions.OutputQueue.Add(new([], null, Kind: PlayerMinions.OutputKind.Charges, Charges: accepted));
     }
 
-    static byte[]? AcceptedChargePresentationLocked(ClientState conn)
+    static byte[]? AcceptedChargePresentationLocked(ClientState conn, string remote)
     {
         if (conn.PlayerLife == 0) return null;
-        var session = ChargesOf(conn); _ = CharacterPlayerStats(conn);
-        double now = ProjectileWorldTime(conn);
+        _ = CharacterPlayerStats(conn);
+        var (packet, changed) = CurrentChargePresentationLocked(conn, remote);
+        if (changed) conn.Minions.StatRevision++;
+        return packet;
+    }
+
+    // A hint only: no buff ids or shown records change until a sender owns the real cipher gate.
+    static bool ChargePresentationPending(ChargeSession session) => Charges.Types.Any(type =>
+    {
+        int count = session.Effective(type); var old = session.State.Presented[(int)type];
+        double expires = session.State.Held(type) > session.Limits(type).Minimum ? session.State.ExpiresAt(type) : double.PositiveInfinity;
+        return (count != 0 || old.Buff != 0) && !(old.Count == count &&
+            (count == 0 || old.ExpiresAt == expires && old.Converted == session.Converted(type)));
+    });
+
+    // All consumers build/acknowledge the entire native change under Monsters at their actual send gate.
+    // No producer may buffer a tail of this presentation for separate later sends.
+    static (byte[]? Packet, bool CountsChanged) CurrentChargePresentationLocked(ClientState conn, string remote)
+    {
+        var session = ChargesOf(conn); double now = ProjectileWorldTime(conn);
         var step = session.Refresh(now);
         if (step.CountsChanged)
         {
-            conn.Pools = PoolsFor(conn, conn.Pools.Level); conn.ApplyMovementSpeed(); conn.Minions.StatRevision++;
+            conn.Pools = PoolsFor(conn, conn.Pools.Level); conn.ApplyMovementSpeed();
         }
-        var packets = session.Presentation(now, () => conn.NextBuff++)
-            .SelectMany(b => ChargeBuffs.Packets(b, PlayerId).SelectMany(p => p.Packet)).ToArray();
-        return packets.Length > 0 ? packets : null;
+        var packets = session.Presentation(now, () => conn.NextBuff++).SelectMany(b => ChargeBuffs.Packets(b, PlayerId)).ToArray();
+        foreach (var (packet, label) in packets)
+            Console.WriteLine($"[gateway] {remote} => {label}: {Convert.ToHexString(packet.AsSpan(0, Math.Min(packet.Length, 96)))}");
+        return (packets.Length > 0 ? packets.SelectMany(p => p.Packet).ToArray() : null, step.CountsChanged);
     }
 
     static void CommitAcceptedCritFlasksLocked(ClientState conn, IReadOnlyDictionary<uint, int> player, double at)

@@ -131,6 +131,13 @@ static partial class Game
                 Conn.Closed = true; Invalidate(); stream.Close();
             }
         }
+        internal void PresentCharges() => Packet(() =>
+        {
+            _ = CharacterPlayerStats(Conn);
+            var (packet, changed) = CurrentChargePresentationLocked(Conn, remote);
+            if (changed) Conn.Minions.StatRevision++;
+            return packet;
+        });
         internal void Packet(byte[] bytes, string? log = null) => Packet(() => bytes, log);
         void Packet(Func<byte[]?> snapshot, string? log = null) => Enqueue(async () =>
         {

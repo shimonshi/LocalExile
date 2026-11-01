@@ -164,7 +164,7 @@ static partial class Game
                         return InstanceItems.InventoryChange(PlayerInventories.InventoryId(row), items.NextRevision(row), output.ItemIds!,
                             [.. items.Items(row).Where(item => output.ItemIds!.Contains(item.Id))]);
                     }
-                    if (output.Kind == PlayerMinions.OutputKind.Charges) return AcceptedChargePresentationLocked(conn);
+                    if (output.Kind == PlayerMinions.OutputKind.Charges) return AcceptedChargePresentationLocked(conn, remote);
                     if (output.TargetId is uint id && !ReferenceEquals(conn.Monsters.GetValueOrDefault(id), output.Target)) return null;
                     return output.Kind switch
                     {
