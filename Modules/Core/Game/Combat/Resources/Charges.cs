@@ -17,7 +17,7 @@ static partial class Game
     // A ticket nobody connects with (a failed load) is forgotten after a few minutes.
     internal static readonly ConcurrentDictionary<uint, (DateTime At, List<Charges.Carried> Charges)> CarriedCharges = new();
 
-    internal static ChargeSession ChargesOf(ClientState conn) => ChargeSessions.GetValue(conn, _ => new ChargeSession());
+    internal static ChargeSession ChargesOf(ClientState conn) => ChargeSessions.GetValue(conn, _ => new ChargeSession(conn.PlayerChargeState));
 
     // A player hit on a monster that landed (Attack, AreaSkillHit, a projectile's impact): its "on hit", "on critical
     // strike" and "on non-critical strike" gains. effect: the gem skill's GrantedEffects row (-1: the default attack).

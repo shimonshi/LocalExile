@@ -10,7 +10,7 @@ using System.Collections.Concurrent;
 /// <see cref="Die"/> takes every gained charge at once. <see cref="Presentation"/> says which charge buffs the client
 /// must get or lose. Not thread-safe: the Gateway calls it under the connection's Monsters lock.
 /// </summary>
-sealed class ChargeSession
+sealed class ChargeSession(Charges.State? state = null)
 {
     /// <summary>How often the ticker steps (seconds): expiry and periodic gains are this precise.</summary>
     public const double StepSeconds = 0.05;
@@ -18,12 +18,12 @@ sealed class ChargeSession
     /// <summary>PoE's "recently": the last 4 seconds.</summary>
     public const double RecentlySeconds = 4;
 
-    public Charges.State State { get; } = new();
+    public Charges.State State { get; } = state ?? new();
     readonly ConcurrentQueue<ChargeEvent> events = new();
     readonly ChargeGains.Timers timers = new();
     readonly Charges.Limits[] limits = [Default, Default, Default];
     readonly int[] applied = new int[3];
-    readonly Shown[] shown = new Shown[3];
+    Charges.Shown[] shown => State.Presented;
     Dictionary<string, int> observed = [];
     double lastStep = double.NaN;
 
@@ -151,10 +151,6 @@ sealed class ChargeSession
         log.Add($"{gain.Source}: {Charges.Label(gain.Type, Converted(gain.Type))} charges {before} -> {now2}/{l.Maximum}" +
             (toMaximum ? " (to maximum)" : "") + $", {l.DurationMs / 1000.0:0.###} s");
     }
-
-    /// <summary>A charge buff as the client has it: the count and expiry it was sent with, its buff instance and
-    /// whether it was the special type's buff.</summary>
-    public readonly record struct Shown(int Count, double ExpiresAt, ushort Buff, bool Converted = false);
 
     /// <summary>A charge buff to send: the previous instance to remove (0: none) and, when <paramref name="Count"/> is
     /// above 0, the new one to add with its remaining seconds (null: no duration, the minimum charges).

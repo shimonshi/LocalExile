@@ -126,18 +126,24 @@ This dispatch boundary does not promise that every mid-command file-watcher race
 
 ## Validation limits
 
-The current candidate starts at `175721ead28fa220e714d4bf0e2aad4ea80bf352`, the clean reconciliation of
-`c2e4bd01` with main `d377bd256036242d2fb43f53eb7110b4897e1862` (a LICENSE-only main advance).
-It retains the `57053948` and `bf1fd6d0` ancestries, the four newer optional descriptors and generic main APIs.
-Two current-source reload failures were reproduced before correction: an expired qualified relic lost its explosion,
-and an accepted lethal minion hit lost XP/drop/league hooks after its blocked hit output.
-No-reload controls dealt 5,316 damage and awarded 37 controlled XP with one kill/XP/drop hook each.
-The correction completes accepted gameplay before awaits and hands only neutral publication data to current Game.
-The same two Whisperer Facts cover distinct assemblies, real Paladin/Spirit triggers, held sends, one native projection,
-late completion, paid source refund, source stop, actor identity and the real Mercy Medicine Chest drop.
+The current correction starts at `f0d8b40a9c8aa56e085404e178e0ca858e157eee`, retaining reconciled main
+`d377bd256036242d2fb43f53eb7110b4897e1862`, `57053948` and `bf1fd6d0` ancestry, the four newer descriptors and generic APIs.
+At exact `f0d8b40a`, the recorded build passed with no warnings/errors, Core 436, Data 45, Gateway 25 and unchanged
+native V4 all 36 controls. The prepared minion supplement stopped before authentication; it ran no minion trial.
+R7 on preceding `eebb2d77` nevertheless confirmed an accepted player footstep kill lost after blocked output/reload,
+and queued owned-kill flags overwrote newer client quest progress. R11 changed diagnostic provenance only.
+Both failures were reproduced against `f0d8b40a` before this correction, including normal setters queued on both sides.
+Accepted footstep hit/ailment/Blind/Rage/ignite and reflected-ailment work now commits before output awaits,
+then its kills use the shared accepted-outcome seam with explicit player attribution.
+Current Game claims neutral player-mod notifications, charge/critical-flask receipts and pending output exactly once;
+owned kills retain `PlayerKill=false`. Charge values, deadlines and shown buff identities are neutral connection state.
+Whole quest flags and transition visibility sample current progress at the cipher gate, without taking QuestGate there.
+The same two Facts retain the real Paladin expiry/Spirit/Mercy controls and add legal Polytheist grants, paid source
+refund, actual Hillock kills, distinct Game assemblies, held output, player/owned attribution, XP/drop/Vaal/flask/charge
+accounting, current full flags, cleared transition visibility, actor identity and late-old/current publication controls.
 The earlier combined resource, Blind, minion/link, Onslaught, ground, command and flask controls remain.
-Solution build and bounded focused checks are local preparation; this corrected head has no full-suite, native or
-independent-review acceptance yet. Exact current-head results belong to the PR's revision-specific receipts.
+Build and bounded focused checks are local preparation. This corrected head requires its own full-suite,
+independent-review and native acceptance; exact-head results belong to the PR's revision-specific receipts.
 
 The evidence below is historical and keeps its tested source/base scope.
 

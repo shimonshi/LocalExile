@@ -8,7 +8,10 @@ static partial class Game
 {
     // Call in the admitted contact transaction, before any network await. There is no deferred Game kill closure.
     static void CommitMinionHitLocked(ClientState conn, uint id, SpawnedMonster monster, MonsterHit hit, int damage,
-        double now, string by)
+        double now, string by) => CommitAcceptedHitLocked(conn, id, monster, hit, damage, now, by, playerKill: false);
+
+    static void CommitAcceptedHitLocked(ClientState conn, uint id, SpawnedMonster monster, MonsterHit hit, int damage,
+        double now, string by, bool playerKill, bool deferKill = false)
     {
         var state = conn.Minions;
         if (hit.Life == 0) state.OutputQueue.Add(new(InstanceEntities.StatsUpdate(id, [(StatKeys.HideMiniLifeBar, 1)]),
@@ -18,10 +21,10 @@ static partial class Game
                 PlayerMinions.OutputKind.Flinch, monster.FlinchUntil, monster.ActionGeneration));
         state.OutputQueue.Add(new([], $"0x01b1 monster 0x{id:x} hit by {by} for {damage}, life {hit.Life}/{monster.MaxLife}{(hit.Life == 0 ? " (dies)" : "")}",
             id, monster, PlayerMinions.OutputKind.Life));
-        if (hit.Life == 0) CommitMinionKillLocked(conn, id, monster, now);
+        if (hit.Life == 0 && !deferKill) CommitAcceptedKillLocked(conn, id, monster, now, playerKill);
     }
 
-    static void CommitMinionKillLocked(ClientState conn, uint victimId, SpawnedMonster monster, double now)
+    static void CommitAcceptedKillLocked(ClientState conn, uint victimId, SpawnedMonster monster, double now, bool playerKill, List<PlayerMinions.AcceptedCharges>? chargeBatch = null)
     {
         var state = conn.Minions;
         if (!state.OutputQueue.Any(o => o.Kind == PlayerMinions.OutputKind.Vaal))
@@ -29,25 +32,28 @@ static partial class Game
         if (!state.Rewarded.Add(monster) || HardcoreProgressBlocked(conn) || monster.Variety is not { } variety || !monster.Hostile) return;
         var at = monster.Walk.Position(now);
         var killer = PlayerOf(conn); var modMonster = ModMonster(monster, at);
-        // Owned kills dispatch league content, XP and drops, but never the player's MonsterKilled/charge hooks.
+        // An admitted player kill retains its mod notification and charge event; owned kills do not acquire either.
+        if (playerKill)
+        {
+            state.OutputQueue.Add(new([], null, Kind: PlayerMinions.OutputKind.PlayerKill, Kill: modMonster));
+            var charge = new PlayerMinions.AcceptedCharges(true, false, monster.Rarity, null, null, false, now);
+            if (chargeBatch is not null) chargeBatch.Add(charge);
+            else state.OutputQueue.Add(new([], null, Kind: PlayerMinions.OutputKind.Charges, Charges: [charge]));
+        }
         var packets = new List<(byte[] Packet, string? Log)>();
         if (CommitQuestFlags(conn, Quests.OnMonsterKilled(conn.Layout.Id, variety.Id)) is { } quest)
         {
-            if (conn.PlayerSent) packets.Add((InstanceEntities.PlayerQuestFlagsUpdate(PlayerId, quest.All), "0x02ba player quest flags (minion kill)"));
+            if (conn.PlayerSent) state.OutputQueue.Add(new([], "0x02ba player quest flags (accepted kill)", Kind: PlayerMinions.OutputKind.QuestFlags));
             foreach (var (id, transition) in conn.Layout.AreaTransitions)
             {
                 if (TransitionFlag(conn, transition) is not { } flag || !quest.Effective.Contains(flag)) continue;
-                if (ClientHasQuestFlag(conn, flag))
-                {
-                    packets.Add((InstanceEntities.CreateObject(id, InstanceEntities.ObjectTypeHash(transition.Type), transition.Blob()), "quest area transition"));
-                    packets.Add((InstanceProtocol.EnterWakeZone(id), null));
-                }
-                else packets.Add((InstanceProtocol.RemoveObject(id), "quest area transition removed"));
+                state.OutputQueue.Add(new([], "quest area transition (current eligibility)", TargetId: id,
+                    Kind: PlayerMinions.OutputKind.QuestTransition, Transition: transition));
             }
-            foreach (uint id in quest.Removed) packets.Add((InstanceProtocol.RemoveObject(id), "quest room object removed"));
+            foreach (uint id in quest.Removed) state.OutputQueue.Add(new([], "quest room object removed", TargetId: id, Kind: PlayerMinions.OutputKind.QuestRoomRemove));
             state.StatRevision++;
         }
-        var kill = new KillContext(conn, monster, variety.Id, at) { PlayerKill = false, CommittedOutput = packets };
+        var kill = new KillContext(conn, monster, variety.Id, at) { PlayerKill = playerKill, CommittedOutput = packets };
         foreach (var run in GameEvents.Kill.For(conn)) run(kill);
         foreach (var (packet, log) in packets) state.OutputQueue.Add(new(packet, log));
         uint xp = 0;
@@ -121,6 +127,20 @@ static partial class Game
                 if (!Current() || conn.Closed || conn.LeavingArea || state.OutputQueue.Count == 0) break;
                 output = state.OutputQueue[0];
             }
+            if (output.Kind == PlayerMinions.OutputKind.PlayerKill)
+            {
+                Task notification;
+                lock (conn.Monsters)
+                {
+                    if (!Current() || conn.Closed || conn.LeavingArea || state.OutputQueue.Count == 0
+                        || !ReferenceEquals(state.OutputQueue[0], output)) return;
+                    state.OutputQueue.RemoveAt(0);
+                    // Start exactly once while claimed by the current owner. No Game callback is stored in the receipt.
+                    notification = Program.ServerHooks.MonsterKilled(new(PlayerOf(conn), output.Kill!));
+                }
+                await notification;
+                continue;
+            }
             await Send(remote, stream, ciphers, [], output.Log, atGate: () =>
             {
                 lock (conn.Monsters)
@@ -130,6 +150,12 @@ static partial class Game
                     state.OutputQueue.RemoveAt(0);
                     if (output.Kind == PlayerMinions.OutputKind.Remove)
                         return output.TargetId is uint gone && !conn.Monsters.ContainsKey(gone) ? output.Packet : null;
+                    if (output.Kind == PlayerMinions.OutputKind.QuestFlags) return QuestFlagPresentation(conn);
+                    if (output.Kind == PlayerMinions.OutputKind.QuestTransition)
+                        return QuestTransitionPresentation(conn, output.TargetId!.Value, output.Transition!);
+                    if (output.Kind == PlayerMinions.OutputKind.QuestRoomRemove)
+                        return conn.QuestRoomObjects.ContainsKey(output.TargetId!.Value) ? null : InstanceProtocol.RemoveObject(output.TargetId.Value);
+                    if (output.Kind == PlayerMinions.OutputKind.Charges) return AcceptedChargePresentationLocked(conn, output.Charges!);
                     if (output.TargetId is uint id && !ReferenceEquals(conn.Monsters.GetValueOrDefault(id), output.Target)) return null;
                     return output.Kind switch
                     {
@@ -166,7 +192,7 @@ static partial class Game
                         || ItemsFor(conn).FlaskChargesOf(type) is not { } basis) continue;
                     var local = ItemModStats.Local(flask.Item, ItemsFor(conn).Mods); var charges = FlaskCharges.Of(basis, local);
                     if (flask.Item.Charges >= charges.MaxCharges) continue;
-                    double gain = FlaskCharges.FullShortcut ? int.MaxValue : FlaskCharges.KillCharges(reward.Rarity, ItemsFor(conn).Mods);
+                    double gain = reward.CritGains is { } gains ? gains.GetValueOrDefault(flask.Id) : FlaskCharges.FullShortcut ? int.MaxValue : FlaskCharges.KillCharges(reward.Rarity, ItemsFor(conn).Mods);
                     int whole = conn.FlaskChargeCarry.Take(flask.Id, gain * FlaskCharges.GainMultiplier(local, Get));
                     if (whole > 0 && items.ChangeUnsaved(PlayerInventories.Flask, flask.Id, item => Flasks.Gain(item, charges, whole)) is { } done) changed.Add(done);
                 }

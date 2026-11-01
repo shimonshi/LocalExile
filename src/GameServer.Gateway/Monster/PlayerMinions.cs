@@ -49,10 +49,13 @@ sealed class PlayerMinions
     }
     internal readonly Dictionary<uint, Attack> Attacks = [];
     // Accepted gameplay finishes under Monsters; only neutral output/projection data crosses Game replacement.
-    internal enum OutputKind { Packet, Life, Experience, Flinch, Remove, Vaal }
+    internal enum OutputKind { Packet, Life, Experience, Flinch, Remove, Vaal, QuestFlags, QuestTransition, QuestRoomRemove, PlayerKill, Charges }
     internal sealed record Output(byte[] Packet, string? Log, uint? TargetId = null, SpawnedMonster? Target = null,
-        OutputKind Kind = OutputKind.Packet, double Until = 0, int Action = 0);
-    internal sealed record FlaskReward(MonsterRarity Rarity);
+        OutputKind Kind = OutputKind.Packet, double Until = 0, int Action = 0,
+        AreaTransitionObject? Transition = null, GameServer.Modding.MonsterInfo? Kill = null, IReadOnlyList<AcceptedCharges>? Charges = null);
+    internal sealed record AcceptedCharges(bool KillEvent, bool Critical, MonsterRarity Rarity, string? Effect,
+        IReadOnlyDictionary<uint, int>? Skill, bool Primary, double At, bool Killed = false);
+    internal sealed record FlaskReward(MonsterRarity Rarity, IReadOnlyDictionary<uint, double>? CritGains = null);
     internal readonly List<Output> OutputQueue = [];
     internal readonly List<FlaskReward> FlaskRewards = [];
     internal readonly HashSet<SpawnedMonster> Rewarded = [];

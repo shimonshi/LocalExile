@@ -460,6 +460,7 @@ public sealed class WhispererRuntimeTests
         replacementRules.Stop(ex => throw ex); Assert.Null(ordinary.ResourceEffectsState);
         await nextUpdates.Completion; Assert.Null(ordinary.PlayerUpdatesState);
         ordinary.Closed = true;
+        await AcceptedFootstepAndQuestAcrossGameAssemblies(h);
         await MinionAcceptedWorkAcrossGameAssemblies(h);
         await AcrossGameAssemblies(h);
         await UtilityAcrossGameAssemblies(h);
@@ -470,6 +471,243 @@ public sealed class WhispererRuntimeTests
     }
 
     // Actual qualified relic expiry and accepted fighting-minion lethal contact, across the real cipher gate.
+    static async Task AcceptedFootstepAndQuestAcrossGameAssemblies(Harness h)
+    {
+        const BindingFlags flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance;
+        var priorLogic = Program.Logic; var priorRules = Game.CombatLifetime; var priorSchedule = Game.PlayerUpdatesSchedule;
+        string[] optIns = ["Game_VERIFIED_POLYTHEIST", "Game_VERIFIED_ANCESTRAL_COMMANDER", "Game_DROPS"];
+        var priorFlags = optIns.Select(Environment.GetEnvironmentVariable).ToArray();
+        foreach (string flag in optIns) Environment.SetEnvironmentVariable(flag, "1");
+        var provider = new ModuleLifetime("PhreciaAscendancies"); using var source = AscendancyPolicies.Register(provider, h.Policy);
+        var failures = new List<string>();
+        try
+        {
+            foreach (var scenario in new (bool Player, bool Reload, bool Earlier, bool Refund)[] { (true, false, false, false),
+                (true, false, false, true), (false, false, false, false), (false, true, false, false),
+                (false, false, true, false), (false, true, true, false), (true, true, false, false) })
+            {
+                using var wire = new CaptureStream(); var ciphers = new ConnectionCiphers(new byte[64], false);
+                var oldOwner = new ModuleLifetime("Game"); var owner = new ModuleLifetime("Game");
+                var alc = new AssemblyLoadContext("Accepted footstep/quest " + scenario, isCollectible: true);
+                alc.Resolving += (_, name) => AssemblyLoadContext.Default.Assemblies.FirstOrDefault(a => a.GetName().Name == name.Name);
+                var assembly = alc.LoadFromAssemblyPath(typeof(Game).Assembly.Location); Assert.NotSame(typeof(Game).Assembly, assembly);
+                var game = typeof(Game);
+                object? Call(string name, params object?[] args) => game.GetMethods(flags)
+                    .Single(m => m.Name == name && m.GetParameters().Length == args.Length).Invoke(null, args);
+                var runtime = new ManualRuntime(); var before = new ManualUpdates(runtime); var after = new ManualUpdates(runtime);
+                Game.CombatLifetime = oldOwner; Game.PlayerUpdatesSchedule = before; Program.SetGameLogic(new GameServer.Modules.Game.GameLogic(oldOwner));
+                var definition = new AscendancyCatalog().Definitions.Single(d => d.Name == (scenario.Player ? "Polytheist" : "Ancestral Commander"));
+                byte classRow = (byte)Enumerable.Range(0, 7).First(row => Program.Skills.ClassFor(row).IntegerId == definition.BaseClass);
+                var c = h.NewConnection("accepted" + Guid.NewGuid().ToString("N"), optional: false, classRow: classRow, area: "1_1_1");
+                c.LeagueModule = new(new League("WhispererTest", "Standard", false, false), new HashSet<string>(["Game", "PhreciaAscendancies"]));
+                c.MainAscendancy = new(definition.Identity, scenario.Player
+                    ? [27664, 22056, 26231, 32742, 21979, 61900, 59443] : [19258, 47491, 17511], AscendancyRules.AwardKeys);
+                c.Passives = []; c.Wire = ("Whisperer", wire, ciphers); c.AiEnabled = false;
+                AscendancyPolicies.SelectionChanged(c); AscendancyPolicies.RequirePlayable(c, definition.Identity);
+                Game.AscendancyRules.Validate(definition.BaseClass, c.MainAscendancy);
+                c.ProjectileRuntimeState = runtime; c.Walk.Teleport(100, 100, 0);
+                c.Pools = Game.PoolsFor(c, 68) with { Life = 1000, Mana = 1000, Evasion = 0, SpellCriticalStrikeChancePct = 100000 }; c.PlayerLife = c.PlayerMana = 1000;
+                c.Minions.Random = new FixedDraw(0);
+                c.PlayerStats[Key("add_frenzy_charge_on_skill_hit_%")] = 100;
+                c.PlayerStats[Key("add_power_charge_on_kill_%_chance")] = 100;
+                c.PlayerStats[Key("recharge_flasks_on_crit")] = 1;
+                var inventory = Game.ItemsOf(c);
+                foreach (var f in inventory.Items(PlayerInventories.Flask).ToArray()) inventory.Remove(PlayerInventories.Flask, f.Id);
+                inventory.Add(PlayerInventories.Flask, 0, 0, ItemCatalog.Create(Program.Items.Find("Small Mana Flask")!) with { Charges = 0 });
+                var vaal = ItemCatalog.Create(Program.Items.Find("Metadata/Items/Gems/SkillGemVaalGroundSlam")!);
+                inventory.Add(PlayerInventories.Weapon1, 0, 0, ItemCatalog.Create(Program.Items.Find("Driftwood Club")!) with
+                    { Sockets = [new(SocketColour.White, vaal)], Links = [1] });
+                c.PlayerStats[Key("virtual_strength_for_requirements")] = 1000;
+                Game.RefreshVaalSouls(c); Assert.Equal(0u, Assert.Single(c.VaalSouls.Read()).Current);
+                var variety = Game.Monsters.Find("Metadata/Monsters/ZombieBoss/ZombieBossHillockNormal")!;
+                var victim = new SpawnedMonster("accepted quest victim", new(104, 100, 0), 0, 0, 1) { Variety = variety, Level = 68 };
+                c.Monsters[42] = victim;
+                var exit = new AreaTransitionObject(110, 100, AreaTransitionCatalog.HashOf("1_1_town")!.Value);
+                typeof(ClientState).GetProperty(nameof(ClientState.Layout))!.SetValue(c, c.Layout with { AreaTransitions = [(0x501u, exit)] });
+                Assert.Equal("a1q1-KilledHillock", Game.TransitionFlag(c, exit));
+                bool clearedExit = !scenario.Player && scenario.Reload && !scenario.Earlier;
+                var loadedType = typeof(ModHost).GetNestedType("LoadedMod", flags)!;
+                var loaded = Activator.CreateInstance(loadedType, flags, null, [ModHost.ReadManifest("accepted-r12", "{}"), "logs", null], null)!;
+                var context = (IModuleContext)Activator.CreateInstance(typeof(ModHost).GetNestedType("Context", flags)!, flags, null, [Program.ServerMods, loaded], null)!;
+                int kills = 0, playerKills = 0, xpHooks = 0, dropHooks = 0, excluded = 0;
+                using var kill = GameEvents.Kill.Add("Game", k => { if (ReferenceEquals(k.Conn, c)) { kills++; Assert.Equal(scenario.Player, k.PlayerKill); } });
+                using var absent = GameEvents.Kill.Add("not-in-this-league", k => { if (ReferenceEquals(k.Conn, c)) excluded++; });
+                using var playerKill = context.OnMonsterKilled(k => { if (k.Player.Character == c.Character) playerKills++; return Task.CompletedTask; });
+                using var xp = context.ModifyExperience(e => { if (e.Player.Character == c.Character) { xpHooks++; e.Experience = 37; } });
+                using var drops = context.ModifyDrops(d => { if (d.Player.Character == c.Character) { dropHooks++; d.Cancel = true; d.Items.Add("Portal Scroll"); } });
+                var gate = Program.SendGates.GetValue(ciphers, _ => new(1, 1)); bool held = false;
+                Task? pending = null, normal = null; Task? completion = null; PlayerUpdatesState? oldState = null;
+                try
+                {
+                    var grant = scenario.Player ? Assert.Single(Game.FootstepSkills(c, 0)) : default;
+                    if (scenario.Player) Assert.Equal("RepeatingShockwave", grant.EffectId);
+                    PlayerMinions.Attack? attack = null;
+                    if (!scenario.Player)
+                    {
+                        var stats = Game.CharacterPlayerStats(c);
+                        Assert.True(Game.SpiritChieftainsWhenHitLocked(c, stats, false, false, 1000));
+                        await Game.SpiritChieftainMinion("Whisperer", wire, ciphers, c);
+                        var minion = Assert.Single(c.Minions.All); minion.Monster.Walk.Teleport(103, 100, 0);
+                        attack = new(minion.Id, minion.Monster, (103, 100), 42, victim, (104, 100), 0) { Started = true };
+                        c.Minions.Attacks[minion.Id] = attack;
+                    }
+                    if (scenario.Refund)
+                    {
+                        c.RefundPoints = 200;
+                        CharacterSaves.SetMainAscendancy(c.Character!, c.MainAscendancy, [], new Dictionary<ushort, ushort>(), 200);
+                        c.SavedPassiveProgress = new(c.MainAscendancy, [], new Dictionary<ushort, ushort>(), 200);
+                        Assert.Null(await Game.ChangePassives("Whisperer", wire, ciphers, c, [grant.Node], false, "footstep source refund", refundPoints: true));
+                        Assert.Empty(Game.FootstepSkills(c, 0)); Assert.Equal((ushort)195, c.RefundPoints);
+                    }
+                    if (clearedExit) await Game.SetQuestFlags("Whisperer", wire, ciphers, c, ["a1q1-SeenHillock"]);
+                    c.PlayerSent = true; Program.ActivatePlayerUpdates(c);
+                    oldState = (PlayerUpdatesState)c.PlayerUpdatesState!; before.Completion = oldState.Completion;
+                    await before.Next(PlayerUpdateRole.Recovery); await before.Next(PlayerUpdateRole.Player); await before.OtherRoles();
+                    while (wire.Plain.Reader.TryRead(out _)) { }
+                    uint startXp = c.Experience;
+                    if (scenario.Earlier)
+                    {
+                        await gate.WaitAsync(); held = true;
+                        normal = Game.SetQuestFlags("Whisperer", wire, ciphers, c, ["a1q1-SeenHillock"]);
+                        Assert.False(normal.IsCompleted);
+                    }
+                    else if (!scenario.Refund) wire.Hold = () => victim.Dead;
+                    if (scenario.Player) pending = Game.TriggerFootstepSkill("Whisperer", wire, ciphers, c, grant);
+                    else
+                    {
+                        // Real accuracy/block rolls stay intact; only accepted contacts enter this race.
+                        for (int attempt = 0; attempt < 32; attempt++)
+                        {
+                            c.Minions.Attacks[attack!.Id] = attack;
+                            pending = Game.MinionSwing("Whisperer", wire, ciphers, c, attack);
+                            if (!scenario.Earlier) await Task.WhenAny(pending, wire.Held.Task);
+                            if (victim.Dead) break;
+                            await pending!;
+                        }
+                        Assert.True(victim.Dead, "Bounded actual minion contact did not land");
+                    }
+                    if (scenario.Refund)
+                    {
+                        await pending!;
+                        if (victim.Life != 1 || c.Experience != startXp || kills != 0) failures.Add("refunded footstep source accepted stale grant");
+                        continue;
+                    }
+                    if (!scenario.Earlier) await wire.Held.Task;
+                    Assert.False(pending!.IsCompleted); Assert.True(victim.Dead); Assert.Equal(0u, victim.Life);
+                    byte[]? staleFlags = null;
+                    if (!scenario.Player && !scenario.Earlier)
+                        staleFlags = InstanceEntities.PlayerQuestFlagsUpdate(Program.PlayerId, Game.PlayerQuestFlags(c));
+                    if (scenario.Reload)
+                    {
+                        oldOwner.Stop(ex => throw ex); game = assembly.GetType("Game")!;
+                        game.GetField("CombatLifetime", flags)!.SetValue(null, owner);
+                        game.GetField("PlayerUpdatesSchedule", flags)!.SetValue(null, after);
+                        Program.SetGameLogic((IGameLogic)Activator.CreateInstance(assembly.GetType("GameServer.Modules.Game.GameLogic")!, flags, null, [owner], null)!);
+                        var state = c.PlayerUpdatesState!; completion = (Task)state.GetType().GetField("Completion", flags)!.GetValue(state)!; after.Completion = completion;
+                    }
+                    SpawnedMonster? replacement = null;
+                    if (scenario.Player && scenario.Reload)
+                    {
+                        replacement = new("replacement actor identity", new(104, 100, 0), 0, 0, 777) { Variety = variety, Level = 68 };
+                        c.Monsters[42] = replacement;
+                    }
+                    if (!scenario.Player && !scenario.Earlier)
+                        normal = (Task)Call("SetQuestFlags", "Whisperer", wire, ciphers, c,
+                            new[] { clearedExit ? "a1q1-KilledHillock" : "a1q1-SeenHillock" }, !clearedExit)!;
+                    if (held) { gate.Release(); held = false; } else wire.Release.TrySetResult();
+                    await pending!; if (normal is not null) await normal;
+                    if (scenario.Reload) { await after.Next(PlayerUpdateRole.Recovery); await after.Next(PlayerUpdateRole.Player); await after.OtherRoles(); }
+                    await (Task)Call("PlayerMinionsTick", "Whisperer", wire, ciphers, c, 0d)!;
+                    Console.WriteLine($"[r12] player={scenario.Player} reload={scenario.Reload} earlier={scenario.Earlier}: XP {startXp}->{c.Experience}; kill/player/xp/drop {kills}/{playerKills}/{xpHooks}/{dropHooks}");
+                    if (c.Experience != startXp + 37 || kills != 1 || playerKills != (scenario.Player ? 1 : 0) || xpHooks != 1 || dropHooks != 1)
+                        failures.Add("accepted kill lost or misattributed: " + scenario);
+                    Assert.Equal(0, excluded); Assert.False(c.Closed); Assert.False(c.LeavingArea);
+                    var packets = new List<byte[]>(); while (wire.Plain.Reader.TryRead(out var packet)) packets.Add(packet);
+                    Assert.Equal(1, packets.Count(p => p.SequenceEqual(InstanceEntities.PlayerExperienceUpdate(Program.PlayerId, c.Experience))));
+                    Assert.Equal(1u, Assert.Single(c.VaalSouls.Read()).Current);
+                    Assert.Equal(1u, Assert.Single(c.SentVaalSouls).Value.Current);
+                    var ground = c.Instance.Ground.Within(100, 100, 1000, _ => true).ToArray(); Assert.Single(ground);
+                    Assert.Equal(Program.Items.Find("Portal Scroll")!.Hash, ground[0].Item.Item.TypeHash);
+                    Assert.Equal(scenario.Player ? 1 : 0, c.PlayerChargeState.Held(ChargeType.Frenzy));
+                    Assert.Equal(scenario.Player ? 1 : 0, c.PlayerChargeState.Held(ChargeType.Power));
+                    Assert.Equal(FlaskCharges.FullShortcut ? 24 : (int)Math.Floor(FlaskCharges.KillCharges(MonsterRarity.Normal, Program.Items.Mods)) + (scenario.Player ? 1 : 0),
+                        inventory.Items(PlayerInventories.Flask).Single().Item.Charges);
+                    if (replacement is not null)
+                    {
+                        Assert.Same(replacement, c.Monsters[42]); Assert.Equal(777u, replacement.Life);
+                        Assert.DoesNotContain(packets, p => p.SequenceEqual(InstanceProtocol.LifeUpdate(42, 0)));
+                    }
+                    if (!scenario.Player)
+                    {
+                        var currentFlags = InstanceEntities.PlayerQuestFlagsUpdate(Program.PlayerId, (List<int>)Call("PlayerQuestFlags", c)!);
+                        var questPackets = packets.Where(p => p.Length > 17 && p[0] == 2 && p[1] == 0xba && p[13] == 0x0e).ToArray();
+                        if (questPackets.Length == 0 || questPackets.Any(p => !p.SequenceEqual(currentFlags)))
+                            failures.Add("stale full quest flags published: " + scenario);
+                        Assert.True(staleFlags is null || !staleFlags.SequenceEqual(currentFlags));
+                        var create = InstanceEntities.CreateObject(0x501, InstanceEntities.ObjectTypeHash(exit.Type), exit.Blob());
+                        if (clearedExit)
+                        {
+                            Assert.DoesNotContain(packets, p => p.AsSpan().IndexOf(create) >= 0);
+                            Assert.Contains(packets, p => p.SequenceEqual(InstanceProtocol.RemoveObject(0x501)));
+                        }
+                        else Assert.Contains(packets, p => p.AsSpan().IndexOf(create) >= 0);
+                        Console.WriteLine($"[r12] flags current={Convert.ToHexString(currentFlags)} packets=" + string.Join(",", questPackets.Select(Convert.ToHexString)));
+                    }
+                    uint acceptedXp = c.Experience; int acceptedKills = kills;
+                    await Game.PublishMinionOutcomes("Whisperer", wire, ciphers, c);
+                    if (scenario.Player) await Game.TriggerFootstepSkill("Whisperer", wire, ciphers, c, grant);
+                    else await Game.MinionSwing("Whisperer", wire, ciphers, c, attack!);
+                    await (Task)Call("PlayerMinionsTick", "Whisperer", wire, ciphers, c, 0d)!;
+                    Assert.Equal(acceptedXp, c.Experience); Assert.Equal(acceptedKills, kills);
+                    Assert.Equal(1, xpHooks); Assert.Equal(1, dropHooks); Assert.Equal(scenario.Player ? 1 : 0, playerKills);
+                    Assert.Empty(c.Minions.OutputQueue); Assert.Empty(c.Minions.FlaskRewards);
+                    while (wire.Plain.Reader.TryRead(out var late))
+                        Assert.False(late.AsSpan().IndexOf(InstanceEntities.PlayerExperienceUpdate(Program.PlayerId, c.Experience)) >= 0);
+                    if (scenario.Reload && scenario.Player)
+                    {
+                        // Retired producer cannot accept another genuine contact, even with a formerly valid grant.
+                        c.Monsters[43] = new("retired footstep target", new(104, 100, 0), 0, 0, 777) { Variety = variety, Level = 68 };
+                        await Game.TriggerFootstepSkill("Whisperer", wire, ciphers, c, grant);
+                        Assert.Equal(777u, c.Monsters[43].Life);
+                        provider.Stop(_ => { }); Assert.True(c.Closed);
+                        await (Task)Call("TriggerFootstepSkill", "Whisperer", wire, ciphers, c, grant)!;
+                        Assert.Equal(777u, c.Monsters[43].Life); Assert.Equal(acceptedXp, c.Experience);
+                    }
+                    else if (scenario.Player)
+                    {
+                        // Already completed gains keep their count, original deadline and native buff identity too.
+                        var shown = c.PlayerChargeState.Presented.ToArray();
+                        double deadline = c.PlayerChargeState.ExpiresAt(ChargeType.Power);
+                        oldOwner.Stop(ex => throw ex); game = assembly.GetType("Game")!;
+                        game.GetField("CombatLifetime", flags)!.SetValue(null, owner); game.GetField("PlayerUpdatesSchedule", flags)!.SetValue(null, after);
+                        Program.SetGameLogic((IGameLogic)Activator.CreateInstance(assembly.GetType("GameServer.Modules.Game.GameLogic")!, flags, null, [owner], null)!);
+                        var state = c.PlayerUpdatesState!; completion = (Task)state.GetType().GetField("Completion", flags)!.GetValue(state)!; after.Completion = completion;
+                        await after.Next(PlayerUpdateRole.Recovery); await after.Next(PlayerUpdateRole.Player); await after.OtherRoles();
+                        var session = Call("ChargesOf", c)!;
+                        Assert.Same(c.PlayerChargeState, session.GetType().GetProperty("State")!.GetValue(session));
+                        var repeated = (IEnumerable)session.GetType().GetMethod("Presentation")!.Invoke(session, [0d, (Func<ushort>)(() => c.NextBuff++), false])!;
+                        Assert.Empty(repeated.Cast<object>()); Assert.Equal(shown, c.PlayerChargeState.Presented);
+                        Assert.Equal(1, c.PlayerChargeState.Held(ChargeType.Power)); Assert.Equal(deadline, c.PlayerChargeState.ExpiresAt(ChargeType.Power));
+                    }
+                }
+                finally
+                {
+                    if (held) gate.Release(); wire.Release.TrySetResult();
+                    if (pending is not null) await pending!; if (normal is not null) await normal;
+                    c.Closed = true; c.RetirePlayerUpdates(); oldOwner.Stop(_ => { }); owner.Stop(_ => { });
+                    if (oldState is not null) await oldState.Completion; if (completion is not null) await completion;
+                    ((ModuleLifetime)context.Lifetime).Stop(_ => { }); alc.Unload();
+                }
+            }
+            Assert.True(failures.Count == 0, string.Join("; ", failures));
+        }
+        finally
+        {
+            Game.CombatLifetime = priorRules; Game.PlayerUpdatesSchedule = priorSchedule; Program.SetGameLogic(priorLogic); provider.Stop(_ => { });
+            for (int i = 0; i < optIns.Length; i++) Environment.SetEnvironmentVariable(optIns[i], priorFlags[i]);
+        }
+    }
+
     static async Task MinionAcceptedWorkAcrossGameAssemblies(Harness h)
     {
         const BindingFlags flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance;
@@ -1479,6 +1717,9 @@ public sealed class WhispererRuntimeTests
         readonly MemoryStream bytes = new(); readonly Socket peer;
         readonly ConnectionCiphers observer = new(new byte[64], true);
         internal readonly Channel<byte[]> Plain = Channel.CreateUnbounded<byte[]>();
+        internal Func<bool>? Hold;
+        internal readonly TaskCompletionSource Held = new(TaskCreationOptions.RunContinuationsAsynchronously),
+            Release = new(TaskCreationOptions.RunContinuationsAsynchronously);
         static (Socket Writer, Socket Peer) Pair()
         {
             using var listener = new TcpListener(IPAddress.Loopback, 0); listener.Start();
@@ -1488,7 +1729,10 @@ public sealed class WhispererRuntimeTests
         public CaptureStream() : this(Pair()) { }
         CaptureStream((Socket Writer, Socket Peer) pair) : base(pair.Writer, ownsSocket: true) => peer = pair.Peer;
         public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
-        { bytes.Write(buffer.Span); var plain = buffer.ToArray(); observer.Receive.Process(plain); Plain.Writer.TryWrite(plain); return ValueTask.CompletedTask; }
+        {
+            bytes.Write(buffer.Span); var plain = buffer.ToArray(); observer.Receive.Process(plain); Plain.Writer.TryWrite(plain);
+            return Hold?.Invoke() == true && Held.TrySetResult() ? new(Release.Task) : ValueTask.CompletedTask;
+        }
         public byte[] Drain(ConnectionCiphers receive) { var result = bytes.ToArray(); bytes.SetLength(0); receive.Receive.Process(result); return result; }
         protected override void Dispose(bool disposing) { if (disposing) { peer.Dispose(); bytes.Dispose(); } base.Dispose(disposing); }
     }

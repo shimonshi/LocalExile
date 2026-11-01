@@ -63,25 +63,41 @@ static partial class Game
     {
         foreach (string flag in change.Changed) Console.WriteLine($"[gateway] {remote} {CharacterName(conn)}: quest flag {flag} {(on ? "set" : "cleared")}");
         if (!conn.PlayerSent) return;
-        await Send(remote, stream, ciphers, InstanceEntities.PlayerQuestFlagsUpdate(PlayerId, change.All), $"0x02ba player quest flags: {change.All.Count}");
+        await Send(remote, stream, ciphers, [], "0x02ba player quest flags (current)", atGate: () => QuestFlagPresentation(conn));
         if (ChangesResistancePenalty(change.Changed))
             await SendCharacterStats(remote, stream, ciphers, conn, "Kitava resistance penalty changed");
         bool Has(string flag) => ClientHasQuestFlag(conn, flag);
         foreach (var (id, transition) in conn.Layout.AreaTransitions)
         {
             if (TransitionFlag(conn, transition) is not { } flag || !change.Effective.Contains(flag)) continue;
-            if (Has(flag))
-            {
-                await Send(remote, stream, ciphers, InstanceEntities.CreateObject(id, InstanceEntities.ObjectTypeHash(transition.Type), transition.Blob()),
-                    $"0x02b9 create area transition 0x{id:x} {transition} (quest flag {flag})");
-                await Send(remote, stream, ciphers, InstanceProtocol.EnterWakeZone(id), null);
-            }
-            else await Send(remote, stream, ciphers, InstanceProtocol.RemoveObject(id), $"0x02bb remove area transition 0x{id:x} (quest flag {flag} cleared)");
+            await Send(remote, stream, ciphers, [], $"quest area transition 0x{id:x} (current eligibility: {flag})",
+                atGate: () => QuestTransitionPresentation(conn, id, transition));
         }
         if (change.Effective.Contains(GlyphQuest.PlacedGlyphs))
             await ChangeSubmergedPassage(remote, stream, ciphers, conn, Has(GlyphQuest.PlacedGlyphs));
         foreach (uint id in change.Removed)
-            await Send(remote, stream, ciphers, InstanceProtocol.RemoveObject(id), $"0x02bb remove room object 0x{id:x} (quest flag set)");
+            await Send(remote, stream, ciphers, [], $"0x02bb remove room object 0x{id:x} (quest flag set)", atGate: () =>
+            { lock (conn.Monsters) return conn.Closed || conn.LeavingArea || conn.QuestRoomObjects.ContainsKey(id) ? null : InstanceProtocol.RemoveObject(id); });
+    }
+
+    // Whole flag sets are projections, not snapshots: combat can commit while a normal setter awaits the cipher gate.
+    // These pure projections never take QuestGate, so QuestGate -> cipher -> Monsters keeps its existing lock order.
+    static byte[]? QuestFlagPresentation(ClientState conn)
+    {
+        lock (conn.Monsters)
+            return conn.Closed || conn.LeavingArea || !conn.PlayerSent ? null
+                : InstanceEntities.PlayerQuestFlagsUpdate(PlayerId, PlayerQuestFlags(conn));
+    }
+
+    static byte[]? QuestTransitionPresentation(ClientState conn, uint id, AreaTransitionObject transition)
+    {
+        lock (conn.Monsters)
+        {
+            if (conn.Closed || conn.LeavingArea || !conn.Layout.AreaTransitions.Any(e => e.Id == id && ReferenceEquals(e.Transition, transition))) return null;
+            return TransitionShown(conn, transition)
+                ? [.. InstanceEntities.CreateObject(id, InstanceEntities.ObjectTypeHash(transition.Type), transition.Blob()), .. InstanceProtocol.EnterWakeZone(id)]
+                : InstanceProtocol.RemoveObject(id);
+        }
     }
 
     // The quest flag an area transition needs (Quests.FlagToEnter), or null. Such an exit is created only once the character

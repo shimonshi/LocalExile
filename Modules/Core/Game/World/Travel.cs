@@ -219,8 +219,7 @@ static partial class Game
         // The pins need their areas' access quest flags first (the player object carried the ones known at creation).
         if (conn.PlayerSent)
         {
-            var flags = PlayerQuestFlags(conn);
-            await Send(remote, stream, ciphers, InstanceEntities.PlayerQuestFlagsUpdate(PlayerId, flags), $"0x02ba player quest flags: {flags.Count}");
+            await Send(remote, stream, ciphers, [], "0x02ba player quest flags (waypoints, current)", atGate: () => QuestFlagPresentation(conn));
         }
         await Send(remote, stream, ciphers, InstanceWaypoints.Waypoints(bits), $"0x004c waypoints: {bits.Count} activated ({why})");
     }
