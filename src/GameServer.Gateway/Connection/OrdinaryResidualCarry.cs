@@ -2,7 +2,15 @@ sealed partial class ClientState
 {
     internal string? OrdinaryResidualPayload;
     internal long OrdinaryDeathSequence;
+    internal long OrdinaryUtilitySequence;
     internal ushort OrdinaryMovementBuff, OrdinaryAttackBuff, OrdinaryTailwindBuff;
+    internal volatile bool OrdinarySharesTailwind;
+    internal uint OrdinaryTailwindSource;
+    internal int OrdinaryTailwindAmount;
+    internal int OrdinaryTailwindObserved;
+    internal ushort[] OrdinaryGaleBuffs = [];
+    internal double[] OrdinaryGaleDeadlines = [];
+    internal double OrdinaryGaleRate;
     internal double OrdinaryMovementDeadline, OrdinaryAttackDeadline;
     internal (int Movement, int Attack, int Area, int Taken, bool Stun, bool Bleed) OrdinaryStats;
     internal bool OrdinaryStatsDirty;

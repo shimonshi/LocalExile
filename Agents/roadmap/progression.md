@@ -45,7 +45,7 @@ Items keep the Roadmap's priority groups, and are in rough priority order within
   Ordinary command selection, refunds, relog and a Gateway restart are verified with a native Duelist/Slayer smoke.
   Ordinary Inquisitor residual helpers have a [private implementation candidate](../docs/game/inquisitor-candidate.md).
   Slayer/Deadeye hit, leech and owner Gale hooks have a [private candidate](../docs/game/ordinary-slayer-deadeye-migration.md).
-  Complete mark/Mirage actors and remaining lifecycle adapters before claiming whole-class gameplay.
+  Reconcile the separate Mirage actor candidate and certify the combined native lifecycle before whole-class claims.
   **Next:** parent integrates its shared hooks after actual #333 and #339, then verifies the combined client behavior.
   Ordinary Inquisitor has a [private wired integration](../docs/game/inquisitor-candidate.md).
   **Next:** parent reconciles final Harbinger and actual #333/#339 heads, then verifies the combined native checklist.

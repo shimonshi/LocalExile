@@ -177,7 +177,8 @@ Part of [Status](../Status.md); what to build next in this area is in
   Code: `AscendancyCatalog`, `AscendancyProgress`, `OrdinaryPassiveRules`, `CharacterSaves`, Gateway progression.
   Docs: [scope, evidence and beginner steps](../docs/game/ascendancies.md).
   Ordinary Slayer/Deadeye have a [private gameplay candidate](../docs/game/ordinary-slayer-deadeye-migration.md).
-  Supported hit/leech/Gale consumers have automated coverage; mark/Mirage execution and native replay remain incomplete.
+  Supported hit/leech/marks, peer Tailwind, Gale clocks and charge/projectile adapters have automated coverage.
+  Mirage execution belongs to its separate writer; combined native replay remains incomplete.
 
 - Antiquarian: all nine notables and nine small nodes execute through three legal connected eight-point builds.
   Native checks cover Ward/Adrenaline, final attributes/requirements, stun recovery, Enduring Cry duration,

@@ -526,7 +526,8 @@ static partial class Game
     // it was refused (cooldown, mana), so its use is not confirmed to the client.
     internal static async Task<bool> CastGemSkill(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn,
         ushort skillId, (int X, int Y) from, (int X, int Y) to, uint targetId = 0, ushort sequence = 0,
-        int? actionToken = null, CooldownUseTicket? cooldownUse = null, bool locationInstant = false)
+        int? actionToken = null, CooldownUseTicket? cooldownUse = null, bool locationInstant = false,
+        bool ordinaryInstantUse = false)
     {
         int action = actionToken ?? conn.ActionCount;
         int recoveryGeneration = 0;
@@ -643,7 +644,8 @@ static partial class Game
                 {
                     InquisitorAcceptedUse(conn, gem.Effect);
                     criticalRoll = CaptureSkillCriticalRoll(conn, skillId);
-                    OrdinaryAcceptedUse(conn, action);
+                    OrdinaryAcceptedUse(conn, cooldownUse?.Instant == true || locationInstant || ordinaryInstantUse
+                        ? -(++conn.OrdinaryUtilitySequence) : action);
                     if (markCast) AdmitPaidMark(conn, skillId, targetId, action);
                 }
                 if (paid && Supports.Of(gem.Effect)?.Types.Contains(47) == true)
@@ -738,7 +740,8 @@ static partial class Game
         if (!TryBeginSkillCooldownUse(conn, skillId, gem.Effect,
             CooldownFor(conn, gem.Effect, gem.Level, gem.Quality),
             true, () => { }, out var cooldownUse)) return;
-        if (await CastGemSkill(remote, stream, ciphers, conn, skillId, at, at, targetId, cooldownUse: cooldownUse))
+        if (await CastGemSkill(remote, stream, ciphers, conn, skillId, at, at, targetId,
+            cooldownUse: cooldownUse, ordinaryInstantUse: true))
         {
             await Send(remote, stream, ciphers, InstanceProtocol.InstantAction(PlayerId, skillId, at.X, at.Y, targetId),
                 $"0x01ce player skill 0x{skillId:x4}: instant action (its use and cooldown)",
@@ -860,7 +863,11 @@ static partial class Game
             conn.ApplyMovementSpeed();
             conn.AuraStatsDirty = true;
             CharacterSaves.SetAuraActive(CharacterName(conn), effectId, started is not null);
-            if (started is not null) InquisitorAcceptedUse(conn, effect);
+            if (started is not null)
+            {
+                InquisitorAcceptedUse(conn, effect);
+                OrdinaryAcceptedUse(conn, -(++conn.OrdinaryUtilitySequence));
+            }
         }
 
         await SendOwnAuraChanges(remote, stream, ciphers, conn);

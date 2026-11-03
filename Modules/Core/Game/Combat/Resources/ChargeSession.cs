@@ -20,12 +20,13 @@ sealed class ChargeSession(Charges.State? state = null)
 
     public Charges.State State { get; } = state ?? new();
     readonly ConcurrentQueue<ChargeEvent> events = new();
-    readonly ChargeGains.Timers timers = new();
+    ChargeGains.Timers? timerState;
+    ChargeGains.Timers timers => timerState ??= new(State.PeriodicElapsed);
     readonly Charges.Limits[] limits = [Default, Default, Default];
     readonly int[] applied = new int[3];
     Charges.Shown[] shown => State.Presented;
     Dictionary<string, int> observed = [];
-    double lastStep = double.NaN;
+    double lastStep { get => State.LastPeriodicStep; set => State.LastPeriodicStep = value; }
 
     static readonly Charges.Limits Default = new(ChargePanelStats.BaseMaximumCharges, 0, Charges.BaseDurationMs);
 
@@ -48,13 +49,13 @@ sealed class ChargeSession(Charges.State? state = null)
     /// the stats the session reads between events (the periodic gains, the gain-to-maximum chances, the duration
     /// stats), kept until the next observation.
     /// </summary>
-    public void Observe(Func<string, int> get)
+    public void Observe(Func<string, int> get, Func<string, int?>? replacement = null)
     {
         var seen = new Dictionary<string, int>(StringComparer.Ordinal);
         int Record(string name) => seen[name] = get(name);
         foreach (var type in Charges.Types)
         {
-            limits[(int)type] = Charges.LimitsOf(type, Record, State.Held(type));
+            limits[(int)type] = Charges.LimitsOf(type, Record, State.Held(type), replacement);
             Record(ChargeGains.ToMaximumStat(type));
             Record(Charges.ConversionFlag(type));
             Record(Charges.MinimumConversionFlag(type));
@@ -79,6 +80,7 @@ sealed class ChargeSession(Charges.State? state = null)
     {
         while (events.TryDequeue(out _)) { }
         timers.Reset();
+        lastStep = double.NaN;
         return State.Clear();
     }
 

@@ -288,5 +288,7 @@ public interface IProjectileWorld
     ProjectileHitResult Hit(ProjectileDamage damage);
     /// <summary>Current target-local split count. This query must not commit effects or advance clocks.</summary>
     int TargetSplit(ProjectileEntity projectile, ProjectileActorKey target) => 0;
+    /// <summary>Release-owned terrain-chain policy, queried once after a reachable target and budget exist.</summary>
+    bool ChainFromTerrain(ProjectileEntity projectile) => false;
     void Publish(ProjectileEvent value);
 }

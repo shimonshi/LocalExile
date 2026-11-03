@@ -37,6 +37,9 @@ static partial class Game
     internal static bool RefreshOrdinaryStatsLocked(ClientState conn)
     {
         _ = CharacterStatSources(conn);
+        int tailwind = OrdinaryTailwindSpeed(conn);
+        if (tailwind != conn.OrdinaryTailwindObserved)
+        { conn.OrdinaryTailwindObserved = tailwind; conn.OrdinaryStatsDirty = true; }
         if (!conn.OrdinaryStatsDirty) return false;
         conn.Pools = PoolsFor(conn, conn.Pools.Level);
         conn.ApplyMovementSpeed();
@@ -64,9 +67,27 @@ static partial class Game
             double now = ProjectileWorldTime(conn); var state = OrdinaryOf(conn, Get);
             state.Gale.Observe(now, OrdinaryGathering(conn), Get, conn.PlayerLife > 0);
             conn.OrdinaryResidualPayload = state.Capture(now);
-            return state.Gale.Tailwind ? (int)Math.Floor(8 * Math.Max(0,
-                1 + ((long)Get("tailwind_effect_+%") + state.Gale.TailwindEffect) / 100d)) : 0;
+            return OrdinaryTailwindReceipt(conn, state.Gale, Get).Amount;
         }
+    }
+
+    // Presence is the supported same-instance allied cohort. It has no party membership or hostile-player mode.
+    // Publish only the owner's qualified source flag; never enter a peer's combat lock or retain its Game objects.
+    internal static (uint Source, int Amount) OrdinaryTailwindReceipt(ClientState conn, DeadeyeGaleState gale,
+        Func<string, int> get)
+    {
+        conn.OrdinarySharesTailwind = gale.Tailwind;
+        if (conn.PlayerLife == 0 || conn.Closed || conn.LeavingArea) return default;
+        var here = conn.Walk.Position(ProjectileWorldTime(conn));
+        uint source = gale.Tailwind ? PlayerId : 0;
+        if (source == 0 && conn.Instance is { } instance)
+            source = instance.PlayersExcept(conn.PeerId)
+                .Where(p => p.Current && p.Life > 0 && p.Owner is { OrdinarySharesTailwind: true } owner
+                    && owner.PlayerLife > 0 && ReferenceEquals(owner.Instance?.Presence, instance.Presence)
+                    && Dist(here, (p.X, p.Y)) <= DeadeyeGaleAura.Radius)
+                .OrderBy(p => p.Id).Select(p => p.Id).FirstOrDefault();
+        return source == 0 ? default : (source, (int)Math.Clamp(Math.Floor(8 * Math.Max(0,
+            1 + ((long)get("tailwind_effect_+%") + (source == PlayerId ? gale.TailwindEffect : 0)) / 100d)), 0, int.MaxValue));
     }
 
     internal static double OrdinaryIncomingHit(ClientState conn, IReadOnlyDictionary<uint, int> stats, double now)
@@ -81,6 +102,7 @@ static partial class Game
 
     internal static void ClearOrdinary(ClientState conn)
     {
+        conn.OrdinarySharesTailwind = false;
         MarkSessions.Remove(conn);
         OrdinarySessions.Remove(conn); conn.OrdinaryResidualPayload = null;
     }
@@ -137,11 +159,30 @@ static partial class Game
         }
         Sync(buffs.Movement, 1341, ref conn.OrdinaryMovementBuff, ref conn.OrdinaryMovementDeadline);
         Sync(buffs.Attack, 1342, ref conn.OrdinaryAttackBuff, ref conn.OrdinaryAttackDeadline);
-        if (state.Gale.Tailwind != (conn.OrdinaryTailwindBuff != 0))
+        var receipt = OrdinaryTailwindReceipt(conn, state.Gale, Get);
+        if (receipt.Source != conn.OrdinaryTailwindSource || receipt.Amount != conn.OrdinaryTailwindAmount)
         {
             if (conn.OrdinaryTailwindBuff != 0) bytes.AddRange(InstanceEntities.RemoveBuff(PlayerId, conn.OrdinaryTailwindBuff));
-            conn.OrdinaryTailwindBuff = state.Gale.Tailwind ? conn.NextBuff++ : (ushort)0;
-            if (state.Gale.Tailwind) bytes.AddRange(InstanceEntities.AddBuff(PlayerId, conn.OrdinaryTailwindBuff, 1094, PlayerId));
+            conn.OrdinaryTailwindSource = receipt.Source; conn.OrdinaryTailwindAmount = receipt.Amount;
+            conn.OrdinaryTailwindBuff = receipt.Source != 0 ? conn.NextBuff++ : (ushort)0;
+            if (receipt.Source != 0) bytes.AddRange(InstanceEntities.AddBuff(PlayerId, conn.OrdinaryTailwindBuff,
+                1094, receipt.Source, values: [unchecked((uint)-receipt.Amount)]));
+        }
+        // Each Gale grant has its own recipient clock. Do not give the oldest nine the newest stack's deadline.
+        double[] deadlines = state.Gale.Stacks.Select(s => s.Deadline).ToArray();
+        double rate = state.Gale.Stacks.FirstOrDefault()?.Rate ?? 1;
+        if (!deadlines.AsSpan().SequenceEqual(conn.OrdinaryGaleDeadlines) || rate != conn.OrdinaryGaleRate)
+        {
+            foreach (ushort buff in conn.OrdinaryGaleBuffs) bytes.AddRange(InstanceEntities.RemoveBuff(PlayerId, buff));
+            conn.OrdinaryGaleBuffs = new ushort[deadlines.Length];
+            conn.OrdinaryGaleDeadlines = deadlines; conn.OrdinaryGaleRate = rate;
+            for (int i = 0; i < deadlines.Length; i++)
+            {
+                ushort buff = conn.OrdinaryGaleBuffs[i] = conn.NextBuff++;
+                var clock = state.Gale.Stacks[i];
+                bytes.AddRange(InstanceEntities.AddBuff(PlayerId, buff, 1095, PlayerId,
+                    u68: BitConverter.SingleToUInt32Bits((float)clock.Remaining), f6c: (float)clock.Rate, stacks: 1));
+            }
         }
         conn.OrdinaryResidualPayload = state.Capture(now);
         return [.. bytes, .. MarkPresentation(conn)];
@@ -195,6 +236,8 @@ static partial class Game
                 ? conn.PlayerStats.TryGetValue(key, out int set) ? set : stats.GetValueOrDefault(key) : 0;
             double now = ProjectileWorldTime(conn);
             var state = OrdinaryOf(conn, Get);
+            state.Gale.Observe(now, OrdinaryGathering(conn), Get, conn.PlayerLife > 0);
+            conn.OrdinarySharesTailwind = state.Gale.Tailwind;
             var kill = state.Slayer.Read(now, Get);
             var leech = SlayerRules.WhileLeeching(Get, LeechOf(conn), now);
             var signature = (kill.MovementSpeedIncrease, kill.AttackSpeedIncrease + leech.AttackSpeedIncrease,

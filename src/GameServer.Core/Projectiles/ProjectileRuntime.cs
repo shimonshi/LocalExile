@@ -271,7 +271,18 @@ public sealed partial class ProjectileRuntime(IProjectileWorld world)
                 p.Position += c.Normal * .001; // Children start on the incident side of the blocking surface.
                 if (Split(p, actors, c.Normal)) return;
             }
-            if (p.TerrainBounces > 0)
+            var chainTarget = !p.Profile.CannotChain && p.Chain > 0
+                ? Nearby(p, actors).FirstOrDefault(a => world.TraceTerrain(p.Position + c.Normal * .001,
+                    a.Position(Now)) is null) : null;
+            if (chainTarget is not null && world.ChainFromTerrain(p))
+            {
+                p.Chain--;
+                p.Position += c.Normal * .001;
+                p.Direction = (chainTarget.Position(Now) - p.Position).Unit;
+                p.Remaining = p.Profile.Range;
+                Publish(ProjectileEventKind.Redirect, p);
+            }
+            else if (p.TerrainBounces > 0)
             {
                 p.TerrainBounces--;
                 p.Direction = (p.Direction - c.Normal * (2 * p.Direction.Dot(c.Normal))).Unit;
