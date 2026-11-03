@@ -670,6 +670,10 @@ static partial class Game
         }
         // The Portal skill: a town portal, as the Portal Scroll's, once its cast (2.5 s) is over.
         if (actionToken is not null && !PlayerActionCurrent(conn, action)) return false;
+        if (gem.Name is not null)
+            foreach (var handler in GameEvents.SkillCastAt.For(conn))
+                if (handler(conn, SkillsFor(conn).EffectId(gem.Effect), skillId, to,
+                    () => !conn.Closed && PlayerActionCurrent(conn, action) && Current()) is { } accepted) return accepted;
         if (gem.Name is not null && GameEvents.RunSkillCast(conn, SkillsFor(conn).EffectId(gem.Effect), skillId, from,
                 () => !conn.Closed && PlayerActionCurrent(conn, action) && Current()) is { } taken) return taken;
         if (gem.Name is not null && TotemVariety(conn, gem.Effect) is { } totem)

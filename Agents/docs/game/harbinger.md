@@ -1,170 +1,129 @@
-# Harbinger module candidate
+# Harbinger private gameplay integration
 
-## Delivery boundary
+## Delivery and exact inputs
 
-Private implementation candidate for #339, based on main `ec522f1876690c0b203636bf78b508f308365163`.
-The sole publisher integrates this candidate after the actual Whisperer #333 successor of `a8afe49e`.
-Order: Whisperer, Harbinger, ordinary Inquisitor, ordinary Slayer/Deadeye.
-No original branch push, PR edit, client launch or shared runtime access belongs to this candidate.
-Harbinger is deliberately absent from `PhreciaFamilyPolicy.ImplementedClasses` until integration is complete.
-This is implemented feature code with pending shared wiring, not an independently ready sibling PR.
-Idols remains separate.
+This is the private combined Whisperer/Harbinger stack for #339.
+The publisher owns publication and native acceptance.
+The order remains #333, #339, ordinary Inquisitor, ordinary Slayer/Deadeye.
+No original branch, PR, root worktree, running process or shared data was modified.
 
-## Migrated implementation
+The input is `5318b7b97436aa3b7f84153cd8e8f892aec39337` on main
+`ec522f1876690c0b203636bf78b508f308365163`.
+It already contains Whisperer `566f4e8dd811bef8ec0bd7d933932e671892c5b3`
+(tree-equivalent replay `53463c92`) and Harbinger `b914f0b93bf5b3c84dbf9ea442da3d07bfc72121`
+(replay `fdfffd48`).
+Whisperer corrections `0c9e627d` and `1d87a4f3732d1cdfce71786b1c97227c35cebaf4`
+are preserved as private commits `044ddfe9` and `13a93d75`.
+This integration is based on `13a93d75`, with both correction commits retained.
 
-`Modules/PhreciaAscendancies/Classes/Harbinger` owns the descriptor, metadata binding, roster, cycles,
-native actor profile, session adapter, recipient clocks, defence arithmetic and Temporal Chains feature state.
-The descriptor identifies only Phrecia `Occultist` revision `3.29.3b`, with the existing read-only graph verifier.
-Ordinary Occultist and unsupported revisions do not match it.
-The catalog accepts the current connection's mode-specific `SkillCatalog`; production paths remain `data/`.
-It resolves all three companions from existing extracted tables without new generators or archive writes.
+The descriptor is registered for Phrecia Occultist revision `3.29.3b`.
+Admission still requires `Game_VERIFIED_HARBINGER=1` and the existing read-only installed-graph check.
+Ordinary Occultist and other revisions do not match it.
+No archive installation, generator change or alternate production data path is introduced.
 
-| Node | Consumer retained in candidate |
+## Gameplay consumers
+
+| Node | Production consumer |
 |---|---|
-| 20105 | Arcane: varieties, two native buffs, source stats and count stat |
-| 60867 | Time: native action speed buff and separate action-speed arithmetic |
-| 18859 | Focus: a current paid skill/action/channel generation admits a cast |
-| 41042 | Remaining BASE recipient budgets and category-specific elapsed-rate calculation |
-| 39702 | Extra ES from final Life/Mana; Focus reduction and non-chaos bypass arithmetic |
-| 34822 | Temporal Chains source duration/effect, reflection, aura membership and suppression state |
-| 62155 | Source remains the current mode node vector; shared Mana/ES recovery wiring is still required |
-| 3702 | Source remains the current mode node vector; shared owner cooldown wiring is still required |
+| 20105 | Paid passive-granted Arcane summon, both metadata buffs, recipient stats and native count |
+| 60867 | Paid Time summon; received action speed feeds raw cast/attack/movement and native projection |
+| 18859 | Paid Focus summon; exact current paid channel/action/generation gates each new minion cast |
+| 41042 | Category-specific elapsed rates on remaining BASE effect budgets |
+| 39702 | Extra ES from final Life/Mana; typed non-chaos bypass after Ward |
+| 34822 | Temporal Chains area, free Blasphemy reservation, accepted curses, aura membership and reflection |
+| 62155 | Existing shared Mana/ES recovery consumers read the current mode-specific passive source |
+| 3702 | Existing owner cooldown engine reads the current source; minion cooldowns remain independent |
 
-Arcane binds `HarbingerArcaneSurgeUber` and `HarbingerArcaneSurgeUber2`; Time and Focus bind their own native effects.
-GrantedEffects.SkillID and AddBuffToTargetVarieties supply the recipient definitions and ordered fixed/source values.
-No guessed Arcane damage or Shock effect is added.
-Minion recovery comes exclusively from its own metadata; owner recovery never changes the minion's cooldown.
-Initial cooldown, metadata casting order, 700 ms cast phase and cooldown suspension during that source's buff survive.
-An already received Focus buff survives channel termination; starting another cast requires a current paid receipt.
-The native actor profile supplies one maximum Life, immortality flags, non-pathing skills and minion flags.
-The caller must additionally register it as a non-hostile, non-corpse owned minion with no attack AI.
+`HarbingerGameplay` subscribes to Game's existing passive-grant, cast, stat-source, minion-tick,
+pause and closing contracts.
+There is no additional worker, connection writer or resource engine.
+Summons pass the normal skill requirements, cooldown and payment gates before their pending cast is recorded.
+At completion the action, exact skill source, requirements, source node, living owner and current rules are checked.
+The original completion deadline is retained when the minion tick observes it late.
 
-The roster retains character transfer leases, pause boundaries, passive-source removal, replacement and retirement.
-Private fix `28d2f9ac` settles unobserved completed casts at the previous recipient rate before changing it.
-This prevents retroactive rate changes or resurrection after expiry; this fix is newer than old PR head `13aeea19`.
-Stat/publication reads also settle scheduled completions without starting a cast, before the next minion tick.
-The session checks epoch, lease, living owner, pause, source node and current native actor at publication.
-Native stats precede AddBuff's remaining BASE duration in the same writer packet.
-Publication resamples after building those stats; crossing expiry retains zero clears without adding an expired buff.
-Source refund is observed before recipient stat collection, even without a minion tick.
-Following beyond twelve cells remains a caller policy; official server AIS was never recovered.
+Actors spawn through the shared owned-monster acceptance gate with a one-Life maximum,
+metadata skills, immortality/minion flags, no fighting AI and no corpse persistence.
+Admission additionally checks the exact roster member, so replacement cannot publish an old member's actor.
+Cast phases use native actor skill ids; the existing minion schedule observes completions and publishes buffs.
+Following teleports a companion back beside its owner beyond twelve cells.
 
-Temporal Chains retains one source snapshot per hostile identity and one reflected self curse.
-Identical maintained aura snapshots retain their instance; source changes remove and replace it.
-Object-id reuse cannot receive an old recipient's removal.
-Hexproof, ignore-Hexproof and immunity use the target's fixed/rolled flags.
-Self suppression leaves its clock running, so removing suppression exposes only its remaining budget.
-Generic and curse duration increases add before support more-duration and self duration.
-The other-effects term excludes Temporal Chains itself and floors at the native recipient-rate minimum.
+The character roster retains transfer leases and freezes at the exact common pause boundary.
+Old leases cannot mutate a destination connection's roster.
+Refunds reconcile the successfully saved current node vector before recipient stat collection.
+Death clears summons and received effects; logout retires the session.
+A new Game lifetime retires the old session on access; optional-provider retirement uses the existing area-close policy.
+Retired actor/buff removals use the common minion output queue and current writer.
+
+Buff publication revalidates epoch, lease, source, living owner, actor and rules inside the current cipher gate.
+Pool/stat rebuilding precedes AddBuff's remaining BASE duration.
+A final resample suppresses an add that expired during stat construction while retaining consumed zero clears.
+Only a successfully constructed add enters the presented-instance ledger.
+Received Focus survives ending its channel; a further cast requires a fresh valid paid receipt.
+
+## Curses, action timing and effect clocks
+
+Temporal Chains uses the actual supported gem's source stats and ordinary paid cast admission.
+Blasphemy uses existing aura intent, support compatibility, restriction, reservation and publication ownership.
+The caster receives an aura source, never an accidental received self curse.
+Removing the free-reservation passive reprices the current aura and suspends it if it cannot be afforded.
+A maintained aura retains identical instances and replaces changed source snapshots.
+A timed curse keeps its captured source; hostile identity checks prevent object-id reuse from receiving an old removal.
+Fixed variety and rolled curse-immunity, Hexproof and reflection flags are combined.
+Ignore-Hexproof is read from the real caster source.
+Reflection installs a timed self curse; suppression retains its running clock and exposes only the remaining budget.
+Generic/curse/Temporal duration increases add before support more-duration and recipient self duration.
+The curse's own elapsed clock excludes its other-effects term.
+
+`RecipientEffectTime` is shared by production consumers and the feature clock's category calculation.
+Changes retain the remaining BASE budget, settle the old slope first and never resurrect expired effects.
+Charges keep BASE budgets across area carry and set their rate before Step; `Walk.Moving(now)` is retained.
+Fortification keeps exact stack-seconds/recovery and its independent hit-gain throttle.
+Utility effect expiry changes without rescaling resource-flask recovery or periodic trigger clocks.
+Incoming ailments, monster ailments, Ignite/Poison and taunt expiry retain independent damage/recovery fractions.
+Native charge/Fortification/ailment duration fields carry BASE seconds.
+Monster curse changes retime effects before changing action inputs and publish recipient clock stats before curse adds.
+Monster walk retiming multiplies the existing speed roll; stationary actors stay stationary.
+Swing duration is resampled at accepted action start and then retained for that contact.
+Player action speed composes the raw bucket, Tailwind effect, Chill, Temporal Chains and action floor once.
+Projectile flight and cooldown recovery remain independent of action speed.
+
+Focus reduces each mitigated component before typed Ward.
+Non-chaos ES bypass follows Ward; Whisperer's physical-only defensive Mana follows ES.
+Mana Recoup observes reduced post-Ward damage, independently of actual Life loss.
+Fractional non-chaos DoT bypass and copied flask-to-Life recovery retain their separate carries/rates.
+Extra ES rebuilds once from final Life/Mana without feeding a previously derived ES pool back into its base.
+Synchronous Hardcore death and the corrected quest, collision and current-writer retirement paths are preserved.
+
+## Validation and remaining native acceptance
+
+A clean full solution build passes with zero warnings/errors.
+Core: 434 passing; Data: 45 passing; Gateway: 96 passing.
+The two Harbinger Facts are extended rather than adding more Facts; all Whisperer tests remain.
+The grouped production tests cover paid summons, native ownership/counts, Time pacing, following,
+real gem curse casts/reflection/suppression, free Blasphemy, a saved companion refund,
+a real paid channel producing Focus, post-channel retention, provider retirement and BASE carry/recovery.
+The existing combined typed Ward/ES/Mana/Recoup/extra-ES tests and component pause/lease/publication races remain.
+The Whisperer cross-assembly spawn call includes the two optional native-profile parameters.
+
+Tests use private copies of non-secret extracted data from `t3-eadecbfa`, including the existing read-only graph archive.
+The shared TestEnvironment module initializer is unchanged.
+No generated data, keys, accounts, saves, client files or third-party tools enter the commit.
+No runtime/client window was used.
+
+The unavailable official AIS is represented by the documented metadata order, initial cooldown,
+700 ms phase, per-source cooldown suspension and twelve-cell follow policy.
+Companion and curse observations use the existing 100 ms minion schedule.
 Party propagation and strongest-of-multiple-casters curse arbitration remain outside this executor.
+These boundaries do not establish native acceptance for this new combined head.
 
-## Shared integration owned by the parent after Whisperer
+The publisher's native replay is:
 
-### Private combined resource integration
+1. Allocate and summon all three actors; inspect native skill lists, count stats and both Arcane buffs.
+2. Compare Time's raw/native cast, attack and movement timing with ordinary and chilled controls.
+3. Pay a real channel, observe Focus, stop/interrupt it and confirm the received buff's remaining duration.
+4. Cast/reflect Temporal Chains; toggle supported Blasphemy; suppress and restore the self curse.
+5. Change recipient rates with active charges, Fortification, flask effects, ailments, Ignite and taunt.
+6. Refund/reallocate, pause/resume, travel with a failed-transfer control, die and reload Game/provider.
+7. Replay typed Ward/ES/physical-Mana/Recoup, copied flask recovery, lockstep movement, monster spells and quests.
 
-This checkout combines exact inputs Whisperer `566f4e8dd811bef8ec0bd7d933932e671892c5b3`
-and Harbinger `b914f0b93bf5b3c84dbf9ea442da3d07bfc72121`, in that order,
-on `ec522f1876690c0b203636bf78b508f308365163`.
-The local replay commits are `53463c92` and `fdfffd48`; neither input was replaced with an older PR tree.
-The shared resource changes below are private, incomplete integration, not class readiness.
-The separate correction writer still owns QuestKillEffects and FreezeShown/HeldMove retirement.
-Neither correction is included here and neither quest nor LivingCollision was edited by this integration.
-
-`IncomingResourceDefences` is a small Gateway arithmetic contract usable by both Game and the optional feature.
-The candidate's HarbingerDefences delegates to it so component and production arithmetic cannot diverge.
-The current typed writer applies Focus to each mitigated component before Ward,
-then non-chaos bypass before ES, then physical-only defensive Mana.
-Mana Recoup still observes the reduced post-Ward components, independent of actual Life damage.
-Flask recovery and its accepted payment/copy machinery are unchanged.
-Extra ES uses freshly computed final Life/Mana and ES increases once in BuildPoolsFor.
-Rebuilding a pool never treats previously derived ES as a new base.
-Ignite and Righteous Fire route non-chaos DoT through the same bypass helper.
-Fractional DoT reduction/bypass carry lives in neutral connection data and clears on death/close.
-This does not yet establish live received-Focus or Temporal source reconciliation at every resource boundary.
-
-The real initial channel admission and repeated paid stages now issue a host-owned receipt with exact
-skill, effect, action, generation and rule-lifetime identity.
-PaidChannelCurrent rejects changed actions, stale rules, expired silence, pause, blocked actions,
-removed/replaced gems and failed current requirements.
-Zero-cost successful payment is still payment admission; an unpaid action never creates a receipt.
-Focus's session adapter is not yet attached to this production receipt consumer.
-
-The existing two Harbinger Facts retain component checks and add combined production transactions through
-the existing Whisperer harness; no new Core/Data test or individual working-directory setup was added.
-They cover Focus/Ward/typed ES/physical Mana/Recoup composition, an ordinary control,
-source-derived extra ES without feedback, a payable non-channel skill rejection and death cleanup.
-They do not establish companion actor acceptance or native class behavior.
-
-Remaining implementation is concrete: attach the roster/session to neutral lifetime/transfer state,
-route accepted summon completions to registered owned actors and native cast/follow/buff publication,
-feed their live recipient stats into pool/stat sources, attach Temporal self/aura/reflection/suppression,
-and integrate category-specific BASE budgets with charge/flask/fortification/ailment/Ignite/taunt clocks.
-Time/Temporal native and raw server pacing still need one shared action-factor integration.
-The descriptor remains absent until these consumers are complete.
-No native client, shared runtime, public push or PR state was touched.
-
-Do not cherry-pick the old 77-file PR tree or its generic foundations over current main.
-Do not register the descriptor before these steps; the isolated tests do not establish whole-class readiness.
-The following are the minimal behavioral integration points, not permission to replace the containing methods.
-
-| Current location | Required integration |
-|---|---|
-| `PhreciaFamilyPolicy.cs` | Add Harbinger descriptor only when the remaining hooks and acceptance pass |
-| Game `Passive/PassiveGrantedSkills.Rules.cs`, `Combat/Combat.cs` | Reuse passive grant ids/levels and normal payment/cooldown/requirements; call session Activate only at current accepted cast completion |
-| Game `Combat/Combat.cs` channel-payment gate | Supply receipt after successful payment; validate exact skill/action/generation and requirements at Focus cast start |
-| Game `Monster/PlayerMinions.cs`, `Monster/Monsters.cs`, `Player/Connection.cs` | Attach session/roster under current provider generation; spawn through common owner registry and writer acceptance; bind ids, tick Observe, publish cast phases/following and prune actors |
-| Game `Player/ClientState.cs`, `Player/Player.cs`, `Passive/Progression.cs` | Store opaque feature state in the current generation-owned contract; clear on death/logout/provider retirement, transfer lease on travel, reconcile only after a successful saved refund |
-| Game `Skill/Skills.cs`, `Item/ItemDefences.cs` | Merge current recipient stats/counts before final derived pools and caching; add extra ES once, without feeding derived ES back into its own base |
-| Game `Skill/Skills.cs`, `Skill/Gem/GemSupports.cs`, `Combat/Resources/OwnAuras.cs` | Dispatch Temporal Chains and Blasphemy through current aura machinery, real reservation and source validation; apply free reservation only while its actual source is present |
-| Game `Combat/Combat.cs`, `Monster/Monsters.cs`, `Monster/MonsterIgnites.cs`, `Flask/FlaskGrounds.cs` | At accepted curse changes, reconcile old Ignite/taunt budgets before replacing/removing the source; multiply existing monster walk roll and capture swing duration at accepted start |
-| Shared incoming/resource writers, Game `Player/Player.cs` | Compose Focus before typed Ward, non-chaos bypass after Ward, fractional DoT bypass; keep Whisperer physical Mana, recoup and unscaled flask-to-Life copying, and synchronous Hardcore death |
-| Game `Combat/Resources/Charges.cs`, charge/fortify/ailment/flask states | Keep category-specific BASE budgets, carry and native stats-prefix ordering; retain `SetExpiryRate` before charge Step and `moving: conn.Walk.Moving(now)` |
-| Game skill timing/panels/projectile dispatch | Feed Time/Temporal action factor once into raw server timers and movement; preserve Chill projection, native caches, dual wield and every newer main dispatch path; leave projectile flight and cooldown rate independent |
-| Gateway `Connection/Program.cs` | Any residual startup/loop hook belongs here, never recreate old root Program.cs |
-
-Use HarbingerActor's profile with current spawn ownership callbacks, not an old SpawnMonster replacement.
-Never restore the deleted `CollisionPosition` initializer.
-Common fighting-minion/aura/provider contracts belong to the Whisperer integration owner.
-HarbingerSession intentionally owns no task, cipher, shared cooldown, common provider registration or Game worker.
-The parent must bind callbacks to the currently active host-issued lifetime and retire them on reload.
-It must publish removals/replacements using its common buff-instance ledger and current writer gate.
-If building a stat prefix crosses expiry, preserve the already consumed stats clears and suppress the expired add.
-Promote feature-local clock/action arithmetic into an existing shared engine where appropriate; never install a second hook.
-
-The old diff's admission/graph changes map to the optional descriptor; companion files map to this directory.
-Old action/charge/taunt/flask/fortify/ailment/recovery/Ignite changes map to the shared integrations above.
-Old connection/death/refund/item changes map to ownership retirement and fresh source reconciliation.
-Old common documentation expansions and all historical test files are excluded from this candidate.
-Historical candidates including `candidate/harbinger-339-main-d415-09d013a5` remain read-only sources, not bases.
-
-## Validation and remaining acceptance
-
-### Combined resource candidate checks
-
-The private combined resource candidate builds the full solution with zero warnings/errors.
-Core passes 434, Data passes 45 and Gateway passes 96, including the existing two Harbinger Facts.
-The exact committed combined head and pinned inputs are recorded in `logs/private-harbinger/revisions.txt`
-in the prepared checkout; suite outputs are alongside it.
-The first Gateway attempt passed 94 and failed two installed-graph checks because this checkout lacked
-`data/game-files.zip`; after copying an existing extracted archive privately, all 96 passed.
-Existing extracted tables/catalogs were copied from the Harbinger candidate checkout.
-No generated data, archives, saves or credentials enter the commit.
-No native window was requested or used, so these automated results do not establish class acceptance.
-
-Solution build: zero warnings/errors.
-Core: 434 passing; Data: 45 passing; Gateway: 94 passing, including exactly two new Facts.
-Gateway uses the existing TestEnvironment module initializer; no individual test changes the working directory.
-The prepared checkout initially lacked extracted data, producing missing-input failures.
-Validation uses private copies of existing tables/catalog JSON and the unchanged vendor-stock generator's output.
-No keys, saves, credentials, client archives or generated data are committed.
-The two tests cover native catalog binding, delayed recipient rates, minion cooldown isolation, pause/lease/refund,
-paid Focus receipts, queue rejection, retirement, defence arithmetic and curse source/suppression/identity boundaries.
-These are component tests, not combined Whisperer/Harbinger or native acceptance.
-
-After #333 changes/merges, fetch its actual main successor and integrate the hooks above in the declared order.
-Repeat the solution build and Core/Data/Gateway, combined typed defence/recovery/channel/clock regressions,
-provider reload and ordinary controls against the exact resulting heads.
-The parent owns the future native window: all three actors and buffs, paid Focus, Time/raw/native timing,
-Temporal self/aura/reflection/suppression, recipient slopes, refund, pause, travel, death and reload need fresh logs.
-Old PR339 smoke at `ccad428e` and older native runs certify only those historical sources.
-They cannot establish readiness for this module migration.
+Use the exact private input/correction/integration heads for logs; historical PR339 smoke does not certify this head.

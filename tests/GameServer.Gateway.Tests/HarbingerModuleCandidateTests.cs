@@ -107,6 +107,7 @@ public sealed class HarbingerModuleCandidateTests
         Assert.Equal(1.1, HarbingerActionSpeed.From(n => n == "action_speed_-%" ? -10 : 0).Factor, 8);
         VerifyCurseReplacementAndSuppression();
         await WhispererRuntimeTests.CombinedHarbingerResourceTransactions();
+        await WhispererRuntimeTests.CombinedHarbingerGameplay();
     }
 
     static void VerifyCurseReplacementAndSuppression()

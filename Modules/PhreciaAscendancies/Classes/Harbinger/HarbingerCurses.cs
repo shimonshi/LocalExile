@@ -6,7 +6,8 @@ namespace GameServer.Modules.PhreciaAscendancies.Classes.Harbinger;
 /// accepted send gate, then reconciles Ignite/taunt clocks and monster walk/swing timing before publishing changes.</summary>
 internal sealed class HarbingerCurses
 {
-    internal sealed record Target(uint Id, object Identity, bool Rare, bool Immune, bool Hexproof, bool Reflects);
+    internal sealed record Target(uint Id, object Identity, bool Rare, bool Immune, bool Hexproof, bool Reflects)
+    { internal double Rate { get; init; } = 1; }
     internal sealed record Change(Target Target, HarbingerTemporalChains? Previous, HarbingerTemporalChains? Current);
     readonly Dictionary<uint, (Target Target, HarbingerTemporalChains Curse)> monsters = [];
     internal HarbingerTemporalChains? Self { get; private set; }
@@ -29,7 +30,7 @@ internal sealed class HarbingerCurses
         {
             if (!Allowed(target, player)) continue;
             monsters.Remove(target.Id, out var old);
-            var curse = New(allocate(), skill, now, source, aura: false);
+            var curse = New(allocate(), skill, now, source, aura: false, target.Rate);
             monsters[target.Id] = (target, curse);
             changes.Add(new(target, ReferenceEquals(old.Target?.Identity, target.Identity) ? old.Curse : null, curse));
             reflect |= target.Reflects || reflectOwn;
@@ -78,8 +79,11 @@ internal sealed class HarbingerCurses
     {
         if (Self is not { } curse) return default;
         curse.Clock.ChangeRate(now, HarbingerRecipientClock.RecipientRate(5, player, temporalChains: true));
+        if (curse.Clock.Remaining <= 0) { Self = null; return default; }
         // Suppression does not delete the running curse; refund can expose its remaining budget again.
         return alive && curse.Clock.Remaining > 0 && player("unaffected_by_curses") == 0
+            && player("unaffected_by_temporal_chains") == 0 && player("virtual_unaffected_by_temporal_chains") == 0
+            && player("immune_to_curses") == 0
             ? (curse.Slow(false), curse.OtherEffects) : default;
     }
 
@@ -91,4 +95,10 @@ internal sealed class HarbingerCurses
     }
 
     internal void Clear() { monsters.Clear(); Self = null; }
+    internal Change[] Retire()
+    {
+        var changes = monsters.Values.Select(e => new Change(e.Target, e.Curse, null)).ToArray();
+        Clear();
+        return changes;
+    }
 }

@@ -23,7 +23,7 @@ internal sealed class HarbingerSession(HarbingerRoster roster, Guid lease, DateT
         return true;
     }
 
-    internal Observation Observe(Frame frame, DateTimeOffset now, Func<ChannelReceipt, bool> channelCurrent)
+    internal Observation Observe(Frame frame, DateTimeOffset now, Func<ChannelReceipt, bool> channelCurrent, bool allowStart = true)
     {
         if (retired || !attachedLease || frame.Leaving) return new([], [], []);
         roster.Pause(lease, now, frame.Paused);
@@ -32,7 +32,7 @@ internal sealed class HarbingerSession(HarbingerRoster roster, Guid lease, DateT
         // Complete old casts at the OLD recipient rate before applying a new source snapshot.
         roster.SetRecipientRate(lease, now, frame.RecipientRate);
         bool channel = frame.PaidChannel is { } receipt && channelCurrent(receipt);
-        var changes = roster.Step(lease, now, frame.Alive && frame.InCombat, channel,
+        var changes = roster.Step(lease, now, allowStart && frame.Alive && frame.InCombat, channel,
             m => actors.ContainsKey(m.Id));
         return new(members, changes, roster.Buffs(lease, now));
     }
@@ -40,13 +40,13 @@ internal sealed class HarbingerSession(HarbingerRoster roster, Guid lease, DateT
     /// <summary>Called only at the accepted summon completion after the shared skill executor has checked
     /// payment, cooldown, requirements and current action/epoch. Owner recovery is never a minion input.</summary>
     internal bool Activate(HarbingerCompanionCatalog.Companion source, Frame frame, DateTimeOffset now,
-        Func<bool> actionCurrent, Func<string, uint?> key)
+        Func<bool> actionCurrent, Func<string, uint?> key, double age = 0)
     {
         if (retired || !frame.Alive || frame.Paused || frame.Leaving || !frame.Nodes.Contains(source.Node)
             || !actionCurrent()) return false;
         roster.Read(lease, frame.Nodes, now);
         int recovery = key("base_cooldown_speed_+%") is uint k ? source.MinionStats.GetValueOrDefault(k) : 0;
-        return roster.Activate(lease, source, recovery, now);
+        return roster.Activate(lease, source, recovery, now, age);
     }
 
     internal bool Bind(long member, uint actor)
@@ -54,6 +54,12 @@ internal sealed class HarbingerSession(HarbingerRoster roster, Guid lease, DateT
         if (retired || actor == 0 || !roster.Contains(lease, member)) return false;
         actors[member] = actor;
         return true;
+    }
+    internal bool Contains(long member) => !retired && roster.Contains(lease, member);
+
+    internal void Pause(DateTimeOffset now, bool paused)
+    {
+        if (!retired) roster.Pause(lease, now, paused);
     }
 
     /// <summary>Remove these native objects through the shared minion retirement path; never save them as hostiles.</summary>
@@ -68,7 +74,7 @@ internal sealed class HarbingerSession(HarbingerRoster roster, Guid lease, DateT
     /// only a token, never permission to publish. Stats precede the native remaining-BASE duration.</summary>
     internal byte[]? BuffPacket(HarbingerRoster.Active token, int epoch, Frame current, DateTimeOffset now,
         ushort instance, ushort skill, Func<uint, bool> actorCurrent, Func<byte[]> recipientStats,
-        Func<(Frame Frame, DateTimeOffset Now)> refresh)
+        Func<(Frame Frame, DateTimeOffset Now)> refresh, Action? presented = null)
     {
         if (retired || current.Epoch != epoch || !current.Alive || current.Paused || current.Leaving
             || !current.Nodes.Contains(token.Owner.Source.Node)
@@ -90,6 +96,7 @@ internal sealed class HarbingerSession(HarbingerRoster roster, Guid lease, DateT
         live = roster.Buffs(lease, now).FirstOrDefault(b => b.Owner.Id == token.Owner.Id
             && b.Buff.Skill.Effect == token.Buff.Skill.Effect && b.Buff.StartedAt == token.Buff.StartedAt);
         if (live is null || live.RemainingBase <= 0) return prefix;
+        presented?.Invoke();
         return [.. prefix, .. InstanceEntities.AddBuff(PlayerId, instance, live.Buff.Skill.Definition,
             actor, skill, u68: BitConverter.SingleToUInt32Bits((float)live.RemainingBase))];
     }
