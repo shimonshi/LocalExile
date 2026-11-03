@@ -24,7 +24,7 @@ static partial class Game
         {
             if (!CurrentGameWork || conn.Closed || conn.LeavingArea || conn.RageRetired || conn.InquisitorRetired) return;
             double now = InquisitorNow(conn);
-            InquisitorSettleMirror(conn, now);
+            InquisitorGroundStep(conn, now);
             var sources = InquisitorGroundKeys.ToDictionary(n => n,
                 n => Stats.Key(n) is uint k ? stats.GetValueOrDefault(k) : 0);
             bool changed = !sources.OrderBy(p => p.Key).SequenceEqual(conn.InquisitorGroundSources.OrderBy(p => p.Key));
@@ -68,6 +68,21 @@ static partial class Game
             bool on = alive && (covered || now < conn.InquisitorOwnerUntil || linger == 0 && genericOn);
             if (state.SetConsecrated(on, () => conn.NextBuff++) is { } change)
             {
+                // A natural arrival can precede this observation. Adopt its regeneration at the
+                // actual transition, before the next stat snapshot rebuilds the complete source vector.
+                if (change.Added != conn.InquisitorMirrorGroundIncluded)
+                {
+                    double delta = (change.Added ? 1 : -1) * conn.InquisitorMirrorGroundRate;
+                    var next = new List<double[]>();
+                    foreach (var segment in conn.InquisitorMirrorSegments)
+                    {
+                        if (segment[0] < transition) next.Add([segment[0], Math.Min(segment[1], transition), segment[2]]);
+                        if (segment[1] > transition) next.Add([Math.Max(segment[0], transition), segment[1], Math.Max(0, segment[2] + delta)]);
+                    }
+                    conn.InquisitorMirrorSegments = next;
+                    conn.InquisitorMirrorGroundIncluded = change.Added;
+                    conn.InquisitorMirrorRate = Math.Max(0, conn.InquisitorMirrorRate + delta);
+                }
                 pending.Packets.Add(change.Added
                     ? InstanceEntities.AddBuff(PlayerId, change.Buff, FlaskGrounds.ConsecratedBuffRow, PlayerId)
                     : InstanceEntities.RemoveBuff(PlayerId, change.Buff));
@@ -148,6 +163,12 @@ static partial class Game
             double now = InquisitorNow(conn);
             InquisitorSettleMirror(conn, now);
             conn.InquisitorMirrorRate = InquisitorMirrorRate(conn, get);
+            conn.InquisitorMirrorGroundIncluded = conn.FlaskGrounds.PlayerStats().Count > 0;
+            conn.InquisitorMirrorGroundRate = get(InquisitorRecipients.Mirror) != 0 && get("no_life_regeneration") == 0
+                && get("cannot_recover_energy_shield") == 0 ? conn.PlayerMaxLife * .05
+                * Math.Max(0, 1 + get("consecrated_ground_effect_+%") / 100d)
+                * Math.Max(0, 1 + get("life_regeneration_rate_+%") / 100d)
+                * Math.Max(0, 1 + get("energy_shield_recovery_rate_+%") / 100d) : 0;
             conn.InquisitorMirrorUntil = double.PositiveInfinity;
             var fort = FortificationOf(conn);
             var grants = fort.State.GrantSnapshot().Select(g => new FortificationState.Carried(g.Count,

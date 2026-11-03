@@ -116,7 +116,8 @@ static partial class Game
     internal static List<(uint, int)> WeaponStats(ClientState conn, SkillCatalog.Unarmed weapon, IReadOnlyDictionary<uint, int> stats)
     {
         var conversion = DamageStats.Conversion(stats, Stats, attack: true);
-        var mainHit = AttackHitConverted(weapon, stats, MeleeAttack(conn), conversion);
+        double inquisitorMore = InquisitorRead(conn, stats).AttackDamageFactor;
+        var mainHit = AttackHitConverted(weapon, stats, MeleeAttack(conn), conversion).Scale(inquisitorMore);
         var accuracy = OrdinaryAccuracy(conn, stats, weapon.LocalSources);
         double damageFactor = CriticalStrikePolicy.DamageFactor(CriticalProhibitedBy(stats, attack: true, own: null)
             ? 0 : conn.Pools.AttackCriticalStrikeChance, AttackCriticalMultiplier(conn, stats), CriticalExtraRollsFor(conn, stats),
@@ -125,7 +126,7 @@ static partial class Game
         AddHand(mainHit, "main_hand");
         if (OffhandWeaponFor(conn) is { } off)
         {
-            var offHit = AttackHitConverted(off, stats, MeleeAttack(conn), conversion);
+            var offHit = AttackHitConverted(off, stats, MeleeAttack(conn), conversion).Scale(inquisitorMore);
             list.AddRange(off.OffStats(stats, offHit));
             AddHand(offHit, "off_hand");
             // The hands alternate: the panel's per-use, per-second and attacks-per-second rows average both, each hand

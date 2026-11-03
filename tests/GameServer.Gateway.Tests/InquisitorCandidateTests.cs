@@ -155,7 +155,11 @@ public sealed class InquisitorCandidateTests
     {
         using var h = new OrdinaryHarness(); var c = h.Conn;
         h.Build(19417, 13851);
-        h.Time.At = 0; Game.InquisitorAcceptedUse(c, Game.SupportedSkill(c, h.Skill).Effect);
+        h.Time.At = 0;
+        var beforeUse = Game.WeaponStats(c, Game.WeaponFor(c), Game.CharacterPlayerStats(c)).ToDictionary(p => p.Item1, p => p.Item2);
+        Game.InquisitorAcceptedUse(c, Game.SupportedSkill(c, h.Skill).Effect);
+        var afterUse = Game.WeaponStats(c, Game.WeaponFor(c), Game.CharacterPlayerStats(c)).ToDictionary(p => p.Item1, p => p.Item2);
+        Assert.True(afterUse[StatKeys.DisplayHundredTimesDamagePerSkillUse] > beforeUse[StatKeys.DisplayHundredTimesDamagePerSkillUse]);
         Assert.Equal(10, Game.InquisitorRead(c, Game.CharacterPlayerStats(c)).AttackMorePct);
         var snapshot = c.InquisitorCombat.ToDictionary(p => p.Key, p => p.Value.ToArray());
         // A new Game helper instance reads only BCL payload on the durable connection.

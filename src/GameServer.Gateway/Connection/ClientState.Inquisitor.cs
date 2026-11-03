@@ -21,6 +21,8 @@ sealed partial class ClientState
     internal bool InquisitorWasMoving;
     internal double InquisitorMirrorAt, InquisitorMirrorRate, InquisitorMirrorPending;
     internal double InquisitorMirrorUntil = double.NegativeInfinity;
+    internal double InquisitorMirrorGroundRate;
+    internal bool InquisitorMirrorGroundIncluded;
     internal double InquisitorOwnerEntered = double.PositiveInfinity;
     internal List<double[]> InquisitorMirrorSegments = [];
 
@@ -33,5 +35,6 @@ sealed partial class ClientState
         InquisitorLoading = false; InquisitorOwnerInside = false; InquisitorOwnerUntil = double.NegativeInfinity;
         InquisitorOwnerEntered = double.PositiveInfinity;
         InquisitorMirrorPending = InquisitorMirrorRate = 0; InquisitorMirrorSegments.Clear();
+        InquisitorMirrorGroundRate = 0; InquisitorMirrorGroundIncluded = false;
     }
 }
