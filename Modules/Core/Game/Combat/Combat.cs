@@ -50,6 +50,7 @@ static partial class Game
             conn.Walk.Order(x, y, requestedAt);
             conn.ChannelSkill = skill;
             conn.ChannelSkillSequence = sequence;
+            OrdinaryAcceptedUse(conn, action);
             started = (action, x, y, CaptureSkillCriticalRoll(conn, skill));
             return true;
         }
@@ -227,6 +228,7 @@ static partial class Game
             target = m.Walk.Position(now);
             conn.NextAttackAt = AttackTiming.After(now, conn.NextAttackAt, duration);
             criticalRoll = CaptureSkillCriticalRoll(conn, SkillCatalog.FirstSkillId);
+            if (SwingInReach(m, stop, target, weapon.Range + 2)) OrdinaryAcceptedUse(conn, action);
         }
         if (!SwingInReach(m, stop, target, weapon.Range + 2))
         {
@@ -326,11 +328,12 @@ static partial class Game
                 if (WeaponProfileFor(conn, activeSet: true).Melee)
                     hit = WithMeleeProximityLocked(conn, player, ownPenetration, m, hit, contactAt);
                 var gambler = GamblerFor(player);
+                hit = hit.Scale(OrdinaryTargetMore(conn, m, player));
                 var ownRolled = GameEvents.WithOutgoingDamage(conn, player, m, (gambler with { DamageMorePct = 0 }).RollOutgoingHit(hit, Random.Shared));
                 critical = RollCriticalStrike(conn, CriticalChanceOn(conn, targetId, conn.Pools.AttackCriticalStrikeChance,
                         AttackCriticalChanceVsBlinded(conn, player), AttackCriticalChanceVsProfane(conn, player)), ownPenetration, skillRoll: criticalRoll)
                     && GameServer.Core.World.EvasionEntropy.ConfirmsCritical(hitChance, conn.AttackAccuracyRandom);
-                int sourceCriticalMultiplier = AttackCriticalMultiplier(conn, player);
+                int sourceCriticalMultiplier = AttackCriticalMultiplier(conn, player) + OrdinaryCriticalBonus(conn, player);
                 int criticalMultiplier = CriticalMultiplierOn(m, sourceCriticalMultiplier);
                 double at = ProjectileWorldTime(conn);
                 (damage, resistance, var mitigated) = MonsterHitDamage(m, ownRolled, critical, attack: true, at, resistanceMods, pen,
@@ -618,7 +621,11 @@ static partial class Game
             {
                 if (!Current()) return false;
                 paid = PayMana(conn, skillId, out cost, out lifeCost);
-                if (paid) criticalRoll = CaptureSkillCriticalRoll(conn, skillId);
+                if (paid)
+                {
+                    criticalRoll = CaptureSkillCriticalRoll(conn, skillId);
+                    OrdinaryAcceptedUse(conn, action);
+                }
                 if (paid && Supports.Of(gem.Effect)?.Types.Contains(47) == true)
                 {
                     channelGeneration = ++conn.ChannelGeneration;
@@ -1136,6 +1143,7 @@ static partial class Game
                     continue;
                 }
                 var gambler = GamblerFor(player);
+                contactHit = contactHit.Scale(OrdinaryTargetMore(conn, m, player));
                 var rolled = WithConditionalSupportDamageLocked(conn, skillStats, !spell, m,
                     GameEvents.WithOutgoingDamage(conn, player, m, (gambler with { DamageMorePct = 0 }).ForSkill(Stat, spell)
                         .RollOutgoingHit(contactHit, Random.Shared)),
@@ -1147,7 +1155,7 @@ static partial class Game
                 critical = RollCriticalStrike(conn, criticalChance, skillStats,
                         attack: !spell, skillRoll: criticalRoll, player: player)
                     && (spell || GameServer.Core.World.EvasionEntropy.ConfirmsCritical(hitChance, conn.AttackAccuracyRandom));
-                int multiplier = CriticalMultiplierOn(m, sweepMultiplier);
+                int multiplier = CriticalMultiplierOn(m, sweepMultiplier + OrdinaryCriticalBonus(conn, player));
                 double at = ProjectileWorldTime(conn);
                 (damage, resistance, var mitigated) = MonsterHitDamage(m, rolled, critical, attack: !spell, at, mods, pen,
                     gambler.InvertsResistance(Random.Shared));
@@ -1156,7 +1164,7 @@ static partial class Game
                 double more = damageMore * bloodMore;
                 if (more != 1) damage = (int)Math.Floor(damage * Math.Max(0, more));
                 LeechOnHitLocked(conn, m, taken, damage, leech!);
-                damage = WithImpaleHitLocked(conn, m, damage, rolled, critical, sweepMultiplier,
+                damage = WithImpaleHitLocked(conn, m, damage, rolled, critical, sweepMultiplier + OrdinaryCriticalBonus(conn, player),
                     critical ? criticalImpale : impale, more).Damage;
                 // Only the first victim has a freshly built player snapshot. After notification awaits, resolve the
                 // current raw source so a refund between victims cannot keep granting from the sweep's old snapshot.

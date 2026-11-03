@@ -44,6 +44,8 @@ Items keep the Roadmap's priority groups, and are in rough priority order within
   graph connectivity now have automated coverage; see [scope and limitations](../docs/game/ascendancies.md).
   Ordinary command selection, refunds, relog and a Gateway restart are verified with a native Duelist/Slayer smoke.
   Ordinary Inquisitor residual helpers have a [private implementation candidate](../docs/game/inquisitor-candidate.md).
+  Slayer/Deadeye hit, leech and owner Gale hooks have a [private candidate](../docs/game/ordinary-slayer-deadeye-migration.md).
+  Complete mark/Mirage actors and remaining lifecycle adapters before claiming whole-class gameplay.
   **Next:** parent integrates its shared hooks after actual #333 and #339, then verifies the combined client behavior.
 - **Known:** Antiquarian's complete supported node consumers and three legal builds have native acceptance (#98).
   Whaletooth scales actual Enduring Cry recovery; paid refunds, transient effects and durable class progress pass.

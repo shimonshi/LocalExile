@@ -55,6 +55,7 @@ sealed class GameLogic(IModuleLifetime? lifetime = null) : IGameLogic
     public void Closing(ClientState conn)
     {
         conn.PaidChannel = null;
+        Rules.ClearOrdinary(conn);
         conn.NonChaosDotBypassCarry = conn.NonChaosDotTakenCarry = 0;
         conn.RetirePlayerUpdates();
         Rules.FortificationOf(conn).Clear();

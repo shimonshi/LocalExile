@@ -24,6 +24,7 @@ sealed record ProjectileOffense(DamagePacket Hit, bool Spell, int Accuracy, int 
     public int AccuracyMoreUnique { get; init; }
     public int AccuracyMoreClose { get; init; }
     public bool AlwaysHits { get; init; }
+    public DeadeyeProjectileDamage OrdinaryDistance { get; init; }
     public bool FarShot { get; init; }
     public bool PointBlank { get; init; }
     public double ReturnMultiplier { get; init; } = 1;

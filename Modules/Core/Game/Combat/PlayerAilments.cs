@@ -95,9 +95,9 @@ static partial class Game
     /// from attack/cast/movement increases so it is applied once.</summary>
     internal static int ActionSpeedReduction(ClientState conn)
     {
-        if (Stats.Key("action_speed_-%") is not uint key) return 0;
+        if (Stats.Key("action_speed_-%") is not uint key) return -OrdinaryTailwindSpeed(conn);
         lock (conn.Monsters) if (conn.PlayerStats.TryGetValue(key, out int dev)) return dev;
-        return CharacterStatSources(conn).Stats.GetValueOrDefault(key);
+        return CharacterStatSources(conn).Stats.GetValueOrDefault(key) - OrdinaryTailwindSpeed(conn);
     }
 
     internal static double PlayerActionFactor(ClientState conn) =>

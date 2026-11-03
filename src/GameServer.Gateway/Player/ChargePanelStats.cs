@@ -27,10 +27,13 @@ static class ChargePanelStats
         int powerAndFrenzy = get("maximum_power_and_frenzy_charges_+");
         int all = get("maximum_frenzy_power_endurance_charges");
         static int Maximum(long value) => (int)Math.Clamp(value, 0, int.MaxValue);
+        int endurance = Maximum((long)BaseMaximumCharges + get("max_endurance_charges") + powerAndEndurance + all);
+        if (get("maximum_endurance_charges_is_equal_to_maximum_frenzy_charges") != 0)
+            endurance = Maximum((long)BaseMaximumCharges + get("max_frenzy_charges") + powerAndFrenzy + all);
         return
         [
             ("virtual_maximum_endurance_charges",
-                Maximum((long)BaseMaximumCharges + get("max_endurance_charges") + powerAndEndurance + all)),
+                endurance),
             ("virtual_maximum_frenzy_charges",
                 Maximum((long)BaseMaximumCharges + get("max_frenzy_charges") + powerAndFrenzy + all)),
             ("virtual_maximum_power_charges",

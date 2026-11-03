@@ -20,7 +20,7 @@ static partial class Game
     internal static int PlayerBlindAccuracy(ClientState conn, int rating, IReadOnlyDictionary<uint, int>? player = null) =>
         TimedBlind.Apply(rating, PlayerBlindValue(conn, player).Less);
     internal static int PlayerAccuracy(ClientState conn, IReadOnlyDictionary<uint, int>? player = null) =>
-        PlayerBlindAccuracy(conn, conn.Pools.Accuracy, player);
+        PlayerBlindAccuracy(conn, OrdinaryAccuracy(conn, conn.Pools.Accuracy, player), player);
     internal static int PlayerEvasion(ClientState conn, IReadOnlyDictionary<uint, int>? player = null) =>
         TimedBlind.Apply(PlayerEvasionBase(conn, ResourceEffectsTime(conn)), PlayerBlindValue(conn, player).Less);
     internal static int PlayerEvasion(ClientState conn, double now) =>

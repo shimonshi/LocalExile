@@ -29,6 +29,7 @@ public class OrdinaryResidualMigrationTests
     [Fact]
     public void SlayerCommittedKillsQualifiedConditionsAndReloadKeepTheirOriginalDeadlines()
     {
+        WhispererRuntimeTests.OrdinaryGameplayTransactions();
         foreach (bool ruthless in new[] { false, true })
         {
             var stats = Sources(ruthless, "Headsman", "Bane of Legends", "Impact", "Overwhelm",
@@ -80,6 +81,7 @@ public class OrdinaryResidualMigrationTests
     [Fact]
     public void DeadeyeReleaseDistanceAcceptedUsesMarksAndActorsKeepTheirScopes()
     {
+        WhispererRuntimeTests.DeadeyeGameplayTransactions();
         foreach (bool ruthless in new[] { false, true })
         {
             var stats = Sources(ruthless, "Far Shot", "Gathering Winds", "Wind Ward", "Focal Point", "Occupying Force");

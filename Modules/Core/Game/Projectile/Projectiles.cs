@@ -276,12 +276,14 @@ static partial class Game
                     return ProjectileHitResult.Miss;
             }
             if (MonsterBlocks(target, random, shot.Spell)) return ProjectileHitResult.Blocked;
-            double more = contact.Multiplier * (contact.Phase > 0 ? shot.ReturnMultiplier : 1);
+            double more = contact.Multiplier * (contact.Phase > 0 ? shot.ReturnMultiplier : 1)
+                * shot.OrdinaryDistance.HitMultiplier(contact.Projectile.Distance, !shot.Spell);
             if (!shot.Spell && shot.FarShot) more *= AntiquarianEffects.FarShot(contact.Projectile.Distance);
             if (!shot.Spell && shot.PointBlank) more *= AntiquarianEffects.PointBlank(contact.Projectile.Distance);
             var baseHit = contact.IsArea ? shot.AreaHit ?? shot.Hit : shot.Hit;
             // One stat build per contact: every input below reads the same owner state (about 120 µs per build).
             var player = CharacterPlayerStats(Conn);
+            more *= OrdinaryTargetMore(Conn, target, player);
             var packet = new SkillDamageContext(shot.Spell ? SkillHitKind.Spell : SkillHitKind.Attack, player).Hit(baseHit).Scale(more);
             var gambler = GamblerFor(player);
             var rolled = WithConditionalSupportDamageLocked(Conn, shot.SkillStats, !shot.Spell, target,
@@ -294,7 +296,8 @@ static partial class Game
             // Base chance/multiplier belong to release; conditional owner state is read at this contact.
             bool critical = RollCriticalStrike(Conn, chance, shot.SkillStats, attack: !shot.Spell, skillRoll: shot.CriticalRoll, player: player)
                 && (shot.Spell || EvasionEntropy.ConfirmsCritical(hitChance, Conn.AttackAccuracyRandom));
-            int multiplier = CriticalMultiplierOn(target, shot.CriticalMultiplier);
+            int sourceCriticalMultiplier = shot.CriticalMultiplier + OrdinaryCriticalBonus(Conn, player);
+            int multiplier = CriticalMultiplierOn(target, sourceCriticalMultiplier);
             var (damage, _, mitigated) = MonsterHitDamage(target, rolled, critical, !shot.Spell, at, shot.ResistanceMods,
                 shot.Penetration, gambler.InvertsResistance(random));
             if (critical) damage = DamageModel.CriticalDamage(damage, multiplier);
@@ -303,7 +306,7 @@ static partial class Game
             if (!immune)
             {
                 var settings = (critical ? shot.CriticalImpaleSettings : null) ?? shot.ImpaleSettings ?? new(shot.ImpaleChance);
-                double physical = rolled[DamageType.Physical].Min * (critical ? Math.Max(0, shot.CriticalMultiplier) / 100d : 1);
+                double physical = rolled[DamageType.Physical].Min * (critical ? Math.Max(0, sourceCriticalMultiplier) / 100d : 1);
                 var (stored, _) = target.Impale.OnHit(physical, at, settings, random, target.Mods.Effects["avoid_impale_%"]);
                 damage = ImpaleStats.AddReflected(damage, MonsterImpaleDamage(target, stored));
             }
@@ -313,7 +316,8 @@ static partial class Game
             if (!immune)
                 AilmentsOnHitLocked(Conn, target, mitigated, shot.Spell, critical, multiplier, player, shot.SkillStats,
                     at, contact.Projectile.ReactionRandomSource);
-            if (!immune && hit.Value.Life > 0 && rolled[DamageType.Fire].Max > 0) IgniteOnHitLocked(this, contact.Target.Id, target, shot.Ignite, critical, at);
+            if (!immune && hit.Value.Life > 0 && rolled[DamageType.Fire].Max > 0) IgniteOnHitLocked(this, contact.Target.Id, target,
+                OrdinaryIgniteAt(Conn, target, shot, contact.Projectile.Distance, player), critical, at);
             RageOnHitLocked(Conn, attack: !shot.Spell, melee: false, critical, shot.SkillStats,
                 contact.Projectile.ReactionRandomSource, player);
             ChargesOnHit(Conn, target, critical, shot.Spell, shot.Effect, shot.Level, shot.Quality, melee: false);

@@ -259,6 +259,7 @@ static partial class Game
             AccuracyMoreUnique = conn.Pools.AccuracyMoreVsUniquePct,
             AccuracyMoreClose = conn.Pools.AccuracyMoreInCloseRangePct,
             AlwaysHits = Get("global_always_hit") != 0, FarShot = Get("player_far_shot") != 0,
+            OrdinaryDistance = DeadeyeProjectileDamage.Capture(Get) with { PointBlank = false },
             PointBlank = Get("keystone_point_blank") != 0,
             ReturnMultiplier = ProjectileReturn.DamageMore(Get), Blind = BlindInputs(player, own),
             // A spell's action spawns its projectiles itself, every one of a volley, from where it stands (Frida

@@ -402,6 +402,7 @@ static partial class Game
             Console.WriteLine($"[gateway] {remote} transfer failed: {r.Error}");
             return;
         }
+        CarryOrdinary(conn, r.Ticket);
         CarryCharges(conn, r.Ticket);
         CarryFortification(conn, r.Ticket);
         CarryRampage(conn, r.Ticket);

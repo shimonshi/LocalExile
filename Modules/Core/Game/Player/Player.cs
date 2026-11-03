@@ -136,6 +136,7 @@ static partial class Game
             FortificationOf(conn).Clear();
             LeechOf(conn).Clear(conn.Clock.Elapsed.TotalSeconds);
             ClearRageOnDeath(conn);
+            ClearOrdinary(conn);
             conn.Rampage.Clear();
             conn.RetireOwnedCombat();
             ChargesOnDeath(conn);
@@ -975,6 +976,7 @@ static partial class Game
         var (layout, name, classRow, pools) = (conn.Layout, conn.Character, conn.ClassRow, conn.Pools);
         var cls = SkillsFor(conn).ClassFor(classRow);
         // Keep the ticket's remaining Rage timers frozen while the destination loads (before 0x7d).
+        RestoreOrdinary(conn);
         RestoreRage(conn);
         RestoreRampage(conn);
         RestoreResourceEffects(conn);

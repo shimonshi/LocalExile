@@ -66,6 +66,20 @@ sealed class OrdinaryResidualSession(long generation)
         return state;
     }
 
+    public static string RebaseTransfer(string json, double oldNow, double newNow)
+    {
+        var value = JsonSerializer.Deserialize<Payload>(json, JsonOptions)!;
+        double shift = newNow - oldNow;
+        OrdinaryEffectClock.Carried? Move(OrdinaryEffectClock.Carried? c) => c is null ? null
+            : c with { Sampled = c.Sampled + shift, Deadline = c.Deadline + shift };
+        return JsonSerializer.Serialize(value with
+        {
+            Slayer = value.Slayer with { Kills = value.Slayer.Kills.Select(t => t + shift).ToArray(),
+                Movement = Move(value.Slayer.Movement), Attack = Move(value.Slayer.Attack) },
+            Gale = value.Gale.Select(c => Move(c)!).ToArray(), Kills = [], Uses = []
+        }, JsonOptions);
+    }
+
     // Mark/actor native identities retire on reload/transfer. The parent removes their old objects/buffs, then
     // creates new identities if desired. Never resurrect an old queued attack or mark by reusing its object id.
     public void Retire()

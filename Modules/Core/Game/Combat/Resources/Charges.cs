@@ -316,7 +316,9 @@ static partial class Game
                     now = ProjectileWorldTime(conn);
                     step = session.Step(now, stats, () => weapon, alive: conn.PlayerLife > 0, moving: conn.Walk.Moving(now),
                         inTown: InTown(conn), Random.Shared);
-                    presentationPending = ChargePresentationPending(session);
+                    if (RefreshOrdinaryStatsLocked(conn)) step = step with { CountsChanged = true };
+                    presentationPending = ChargePresentationPending(session) || conn.OrdinaryResidualPayload is not null
+                        || conn.OrdinaryMovementBuff != 0 || conn.OrdinaryAttackBuff != 0 || conn.OrdinaryTailwindBuff != 0;
                     if (step.CountsChanged)
                     {
                         conn.Pools = PoolsFor(conn, conn.Pools.Level);
