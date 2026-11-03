@@ -1475,7 +1475,7 @@ public sealed partial class WhispererRuntimeTests
             }
             Assert.False(c.Minions.Attacks.ContainsKey(44)); Assert.Same(owned, c.Minions.All.Single());
             uint freshMinion = await (Task<uint>)Call("SpawnMonster", "Whisperer", h.Wire, h.Ciphers, c, variety, (byte)68,
-                MonsterRarity.Normal, 110, 110, null, true, false, null, null, true, null, 0f, null, admitMinion, (Func<bool>)(() => true))!;
+                MonsterRarity.Normal, 110, 110, null, true, false, null, null, true, null, 0f, null, admitMinion, (Func<bool>)(() => true), null, null)!;
             Assert.True(freshMinion > 0); Assert.Equal(1, spawnCommits);
             Assert.Same(c.Monsters[freshMinion], c.Minions.All.Single(m => m.Id == freshMinion).Monster);
             Has(h.Wire.Drain(h.Receive), InstanceProtocol.EnterWakeZone(freshMinion));
@@ -2165,14 +2165,14 @@ public sealed partial class WhispererRuntimeTests
         internal (ushort Id, int Effect, string Name, int Level, int Quality, uint Gem) Fireball =>
             Game.GemSkillEffects(Conn).Single(g => Game.SkillsFor(Conn).EffectId(g.Effect) == "Fireball");
         readonly IDisposable questTables = Quests.Register("QuestObjects", GameServer.Modules.M_questobjects.QuestObjectsModule.Acts());
-        internal Harness(AscendancyCatalog.Definition definition)
+        internal Harness(AscendancyCatalog.Definition definition, byte classRow = 3)
         {
             Saves.Open(path); Definition = definition;
             Game.CombatLifetime = Rules; Program.SetGameLogic(new GameServer.Modules.Game.GameLogic());
             var assembly = typeof(GameServer.Modules.PhreciaAscendancies.PhreciaAscendanciesModule).Assembly;
             Policy = (IAscendancyFamilyPolicy)Activator.CreateInstance(assembly.GetType("GameServer.Modules.PhreciaAscendancies.PhreciaFamilyPolicy")!, true)!;
             OptIn(true); registration = AscendancyPolicies.Register(Provider, Policy);
-            Conn = NewConnection("Whisperer" + Guid.NewGuid().ToString("N")); Conn.ProjectileRuntimeState = Time;
+            Conn = NewConnection("Whisperer" + Guid.NewGuid().ToString("N"), classRow: classRow); Conn.ProjectileRuntimeState = Time;
             var gem = ItemCatalog.Create(Program.Items.Find("Metadata/Items/Gems/SkillGemFireball")!);
             Items.Add(PlayerInventories.Weapon1, 0, 0, ItemCatalog.Create(Program.Items.Find("Driftwood Wand")!) with
                 { Sockets = [new(SocketColour.White, gem)], Links = [1] });

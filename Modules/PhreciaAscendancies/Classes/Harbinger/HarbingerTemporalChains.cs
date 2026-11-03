@@ -21,7 +21,8 @@ sealed class HarbingerTemporalChains(ushort instance, ushort skill, HarbingerRec
             or "buff_time_passed_+%_other_than_temporal_chains" or "base_skill_effect_duration"
             or "curse_effect_+%_final_vs_players" ? own(name)
             : (int)Math.Clamp((long)player(name) + own(name), int.MinValue, int.MaxValue);
-        double effect = Math.Max(0, 1 + Get("curse_effect_+%") / 100.0)
+        double effect = Math.Max(0, 1 + ((long)Get("curse_effect_+%") + Get("temporal_chains_curse_effect_+%")
+            + Get("temporal_chains_effeciveness_+%")) / 100.0)
             * Math.Max(0, 1 + Get("support_blasphemy_curse_effect_+%_final") / 100.0);
         if (self) effect *= Math.Max(0, 1 + Get("curse_effect_+%_final_vs_players") / 100.0)
             * Math.Max(0, 1 + player("curse_effect_on_self_+%") / 100.0);
@@ -36,10 +37,10 @@ sealed class HarbingerTemporalChains(ushort instance, ushort skill, HarbingerRec
         // Generic and curse-specific increased skill duration share one source bucket.
         int DurationGet(string name) => name == SkillDurationModifiers.IncreasedDuration
             ? (int)Math.Clamp((long)player(name) + player("curse_duration_+%")
-                + player("curse_skill_effect_duration_+%"), int.MinValue, int.MaxValue) : player(name);
+                + player("curse_skill_effect_duration_+%") + player("temporal_chains_duration_+%"), int.MinValue, int.MaxValue) : player(name);
         int OwnGet(string name) => name == SkillDurationModifiers.IncreasedDuration
             ? (int)Math.Clamp((long)own(name) + own("curse_duration_+%") + own("base_curse_duration_+%")
-                + own("curse_skill_effect_duration_+%"), int.MinValue, int.MaxValue) : own(name);
+                + own("curse_skill_effect_duration_+%") + own("temporal_chains_duration_+%"), int.MinValue, int.MaxValue) : own(name);
         double seconds = SkillDurationModifiers.Seconds(baseMilliseconds, DurationGet, OwnGet);
         // Recipient self-duration changes the received curse, separately from its source duration and elapsed clock.
         return self ? seconds * Math.Max(0, 1 + player("self_curse_duration_+%") / 100.0) : seconds;

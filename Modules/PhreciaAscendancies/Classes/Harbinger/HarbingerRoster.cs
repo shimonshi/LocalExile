@@ -79,14 +79,14 @@ sealed class HarbingerRoster
             if (lease == owner) { AdvanceTime(now); paused = pause; }
     }
 
-    public bool Activate(Guid owner, HarbingerCompanionCatalog.Companion source, int ownRecovery, DateTimeOffset now)
+    public bool Activate(Guid owner, HarbingerCompanionCatalog.Companion source, int ownRecovery, DateTimeOffset now, double age = 0)
     {
         lock (gate)
         {
             if (lease != owner || paused || source.Limit < 1) return false;
             AdvanceTime(now);
             if (members.Remove(source.Node, out var old)) old.Cycles.Clear();
-            members[source.Node] = new(++nextId, source, new(source.Buffs, elapsed, ownRecovery));
+            members[source.Node] = new(++nextId, source, new(source.Buffs, Math.Max(0, elapsed - Math.Max(0, age)), ownRecovery));
             return true;
         }
     }
