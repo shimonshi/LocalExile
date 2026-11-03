@@ -27,6 +27,8 @@ sealed class GameLogic(IModuleLifetime? lifetime = null) : IGameLogic
     public Task OnClientMessages(string remote, NetworkStream stream, ConnectionCiphers ciphers, IReadOnlyList<(ushort Id, byte[] Bytes)> messages, byte[] unknown, ClientState conn, long readAt) =>
         Rules.OnClientMessages(remote, stream, ciphers, messages, unknown, conn, readAt);
 
+    public void ObservePlayerMotion(ClientState conn, double at, bool after) => Rules.InquisitorMotion(conn, at, after);
+
     public void Admitting(ClientState conn) => Rules.RegisterVitalsAdmission(conn);
 
     public int PrepareCharacter(string remote, ClientState conn, int level)
@@ -62,6 +64,7 @@ sealed class GameLogic(IModuleLifetime? lifetime = null) : IGameLogic
         Rules.LeechOf(conn).Clear(conn.Clock.Elapsed.TotalSeconds);
         conn.Rage.Clear();
         conn.Rampage.Clear();
+        Rules.ClearInquisitor(conn);
         conn.RetireOwnedCombat();
         conn.RetireResourceEffects();
         conn.VaalPreventionUntil = 0;

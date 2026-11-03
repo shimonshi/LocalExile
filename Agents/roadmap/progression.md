@@ -42,6 +42,8 @@ Items keep the Roadmap's priority groups, and are in rough priority order within
 - **Known:** command selection, saved identities, separate point awards, paid refunds and ordinary/ascendancy
   graph connectivity now have automated coverage; see [scope and limitations](../docs/game/ascendancies.md).
   Ordinary command selection, refunds, relog and a Gateway restart are verified with a native Duelist/Slayer smoke.
+  Complete ordinary Inquisitor's native weapon/damage, recovery and lifecycle matrix after its shared prerequisites.
+  See [Inquisitor findings and limits](../docs/game/inquisitor-candidate.md).
 - **Known:** Antiquarian's complete supported node consumers and three legal builds have native acceptance (#98).
   Whaletooth scales actual Enduring Cry recovery; paid refunds, transient effects and durable class progress pass.
   See [Status](../status/progression.md) and the [model/evidence audit](../docs/game/antiquarian.md).
