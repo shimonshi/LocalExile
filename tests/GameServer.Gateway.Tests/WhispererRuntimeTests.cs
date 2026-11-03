@@ -13,7 +13,7 @@ using GameServer.Core.World;
 using GameServer.Modding;
 using MonsterRarity = GameServer.Core.Protocol.Instance.MonsterRarity;
 
-public sealed class WhispererRuntimeTests
+public sealed partial class WhispererRuntimeTests
 {
     static readonly ushort[] A = [17123, 4174, 1116, 22720, 27553, 50932, 15390, 26415];
     static readonly ushort[] B = [30419, 53715, 21095, 2266, 540, 863, 9982, 5888];
@@ -2115,5 +2115,61 @@ public sealed class WhispererRuntimeTests
             Program.SetGameLogic(oldLogic!); Environment.SetEnvironmentVariable(Flag, oldFlag);
             Saves.Db.Dispose(); foreach (string suffix in new[] { "", "-wal", "-shm" }) File.Delete(path + suffix);
         }
+    }
+}
+
+public sealed partial class WhispererRuntimeTests
+{
+    // The existing two Harbinger tests now exercise the combined production resource writer, too.
+    internal static async Task CombinedHarbingerResourceTransactions()
+    {
+        var definition = Assert.Single(new AscendancyCatalog().Definitions,
+            d => d.Identity.Family == AscendancyFamily.Phrecia && d.Name == "Whisperer");
+        using var h = new Harness(definition);
+        h.Build(A);
+        var c = h.Conn;
+        c.PlayerLife = c.PlayerMana = 1000;
+        c.Ward.SetMaximum(50);
+        c.EnergyShield.SetMaximum(100, true);
+        var stats = Game.CharacterPlayerStats(c);
+        stats[Key(IncomingResourceDefences.TakenStat)] = -20;
+        stats[Key(IncomingResourceDefences.BypassStat)] = 50;
+        stats[Key("physical_damage_%_taken_from_mana_before_life")] = 100;
+        stats[Key("damage_taken_goes_to_mana_%")] = 50;
+        var state = Game.ResourceEffectsOf(c); state.Mana.Clear();
+        Assert.Equal(120, Game.DamagePlayerHitTyped(c, 100, 100, 100, 0, stats));
+        Assert.Equal(985u, c.PlayerMana);
+        Assert.Equal(45u, c.EnergyShield.Current);
+        Assert.Equal(95, state.Mana.Take(4), 8); // Reduced, post-Ward 190; no pre-Ward or Life-only Recoup.
+
+        // Ordinary controls retain the exact typed ordering with neither Harbinger input.
+        c.PlayerMana = 1000; c.Ward.SetMaximum(50); c.Ward.Restore(); c.EnergyShield.SetMaximum(100, true);
+        stats.Remove(Key(IncomingResourceDefences.TakenStat)); stats.Remove(Key(IncomingResourceDefences.BypassStat));
+        state.Mana.Clear();
+        Assert.Equal(150, Game.DamagePlayerHitTyped(c, 100, 100, 100, 0, stats));
+        Assert.Equal(1000u, c.PlayerMana); Assert.Equal(0u, c.EnergyShield.Current);
+        Assert.Equal(125, state.Mana.Take(4), 8);
+
+        // The final Life/Mana sources add ES once; repeated rebuilding cannot compound the derived pool.
+        c.PlayerStats[Key("maximum_life_%_to_add_as_maximum_energy_shield")] = 0;
+        c.PlayerStats[Key("mana_%_to_add_as_energy_shield")] = 0;
+        var ordinary = Game.PoolsFor(c, c.Pools.Level);
+        c.PlayerStats[Key("maximum_life_%_to_add_as_maximum_energy_shield")] = 10;
+        c.PlayerStats[Key("mana_%_to_add_as_energy_shield")] = 20;
+        var extra = Game.PoolsFor(c, c.Pools.Level);
+        Assert.Equal(IncomingResourceDefences.Maximum(ordinary.EnergyShield, extra.Life, extra.Mana,
+            extra.EnergyShieldPct, 10, 20), extra.EnergyShield);
+        c.Pools = extra;
+        Assert.Equal(extra.EnergyShield, Game.PoolsFor(c, extra.Level).EnergyShield);
+
+        // A forged receipt for a non-channelled, otherwise payable skill is never a Focus permission.
+        var fireball = h.Fireball;
+        Assert.True(Game.PayMana(c, fireball.Id, out _, out _));
+        c.ChannelSkill = fireball.Id; c.ChannelGeneration = 7; c.LastChannelUpdateAt = c.Clock.Elapsed.TotalSeconds;
+        c.PaidChannel = new(fireball.Id, fireball.Effect, c.ActionCount, 7, h.Rules);
+        Assert.False(Game.PaidChannelCurrent(c, c.PaidChannel));
+        c.PlayerLife = 0; c.InvalidateIncomingHits();
+        Assert.Null(c.PaidChannel); Assert.Equal(0, c.NonChaosDotBypassCarry);
+        await Task.CompletedTask;
     }
 }
