@@ -1,5 +1,6 @@
 using GameServer.Core.World;
 using GameServer.Core.Protocol.Instance;
+using GameServer.Core.Projectiles;
 
 using League = GameServer.Core.Accounts.League;
 
@@ -24,6 +25,7 @@ public sealed partial class WhispererRuntimeTests
         var native = Game.OrdinaryPresentation(c);
         Assert.NotEmpty(native); Assert.NotEqual((ushort)0, c.OrdinaryTailwindBuff);
         Assert.Empty(Game.OrdinaryPresentation(c));
+        OrdinaryAdapterTransactions(h);
         var gem = h.Fireball;
         var session = Game.ProjectilesFor("ordinary", h.Wire, h.Ciphers, c);
         var released = Game.CaptureGemProjectile(c, session, gem.Id, gem, (170, 100), Game.CaptureSkillCriticalRoll(c, gem.Id));
@@ -37,13 +39,130 @@ public sealed partial class WhispererRuntimeTests
             Game.CaptureSkillCriticalRoll(c, gem.Id)).Payload is ProjectileOffense next
                 ? next.OrdinaryDistance.HitMultiplier(70, false) : 0);
         MarkGameplayTransactions(h);
+        OrdinaryUtilityTransactions(h);
+    }
+
+    static void OrdinaryAdapterTransactions(Harness h)
+    {
+        var c = h.Conn;
+        Assert.Single(c.OrdinaryGaleBuffs);
+        double deadline = Assert.Single(c.OrdinaryGaleDeadlines);
+        // A replacement assembly restores neutral clocks, while host presentation retains native instance ids.
+        var table = typeof(Game).GetField("OrdinarySessions", System.Reflection.BindingFlags.Static
+            | System.Reflection.BindingFlags.NonPublic)!.GetValue(null)!;
+        table.GetType().GetMethod("Remove", [typeof(ClientState)])!.Invoke(table, [c]);
+        Assert.Empty(Game.OrdinaryPresentation(c));
+        Assert.Equal(deadline, Assert.Single(c.OrdinaryGaleDeadlines));
+        Assert.Single(c.OrdinaryGaleBuffs);
+
+        var peer = new ClientState(c.Layout, 2, c.Seed)
+        { Instance = new(c.Instance!.Presence), PlayerLife = 1000, PlayerMana = 1000,
+            LeagueModule = c.LeagueModule };
+        peer.MainAscendancy = new(h.Definition.Identity, [], []);
+        peer.PlayerSent = true; c.PlayerSent = true;
+        peer.ProjectileRuntimeState = h.Time;
+        peer.Instance!.PublishPlayer(new(c.PeerId, 0, null!, 100, 100, c.PlayerLife, c));
+        Assert.Equal(8, Game.OrdinaryTailwindSpeed(peer)); // Owner Gale does not scale recipients.
+        Assert.NotEmpty(Game.OrdinaryPresentation(peer));
+        Assert.Equal(c.PeerId, peer.OrdinaryTailwindSource);
+        peer.Instance.PublishPlayer(new(c.PeerId, 0, null!, 161, 100, c.PlayerLife, c));
+        Assert.Equal(0, Game.OrdinaryTailwindSpeed(peer));
+        Assert.NotEmpty(Game.OrdinaryPresentation(peer));
+        peer.Instance.PublishPlayer(new(c.PeerId, 0, null!, 100, 100, c.PlayerLife, c));
+        c.LeavingArea = true;
+        Assert.Equal(0, Game.OrdinaryTailwindSpeed(peer)); c.LeavingArea = false;
+        peer.Instance.RemovePlayer(c.PeerId);
+        c.PlayerSent = false;
+
+        foreach (bool ruthless in new[] { false, true })
+        {
+            c.LeagueModule = new(new League("ordinary", "Standard", false, false)
+                { DataSet = ruthless ? "HardMode" : null }, new HashSet<string>(["Game"]));
+            c.MainAscendancy = new(h.Definition.Identity, [44482], []); c.StatSourcesCacheState = null;
+            var stats = Game.CharacterPlayerStats(c);
+            int Get(string name) => stats.GetValueOrDefault(Key(name));
+            int period = Get("gain_a_frenzy_charge_every_X_seconds_while_moving");
+            Assert.True(period > 0);
+            Game.ChargeSessions.Remove(c);
+            var charges = Game.ChargesOf(c); charges.Die(); charges.Observe(Get);
+            double start = ruthless ? 100 : 10;
+            charges.Step(start, Get, () => Game.WeaponProfileFor(c), true, true, false, new Random(1));
+            charges.Step(start + period * .75, Get, () => Game.WeaponProfileFor(c), true, true, false, new Random(1));
+            Assert.Equal(0, charges.State.Held(ChargeType.Frenzy));
+            Game.ChargeSessions.Remove(c);
+            var replacement = Game.ChargesOf(c); replacement.Observe(Get);
+            replacement.Step(start + period, Get, () => Game.WeaponProfileFor(c), true, true, false, new Random(1));
+            Assert.Equal(1, replacement.State.Held(ChargeType.Frenzy));
+            replacement.Die();
+        }
+        c.LeagueModule = new(new League("Standard", "Standard", false, false), new HashSet<string>(["Game"]));
+        c.MainAscendancy = new(h.Definition.Identity, [24848, 23169, 45313, 44482], []); c.StatSourcesCacheState = null;
+        Game.OrdinaryAcceptedUse(c, 12);
+        var session = Game.ProjectilesFor("ordinary adapters", h.Wire, h.Ciphers, c);
+        c.PlayerStats[Key("projectile_chain_from_terrain_chance_%")] = 100;
+        c.PlayerStats[Key("no_barrage_projectile_spread")] = 1;
+        c.PlayerStats[Key("projectiles_barrage")] = 1;
+        var gem = h.Fireball;
+        var release = Game.CaptureGemProjectile(c, session, gem.Id, gem, (170, 100),
+            Game.CaptureSkillCriticalRoll(c, gem.Id));
+        Assert.Equal(-1, release.Profile.NativeVolley!.FixedDegrees);
+        var frozen = Assert.IsType<ProjectileOffense>(release.Payload);
+        c.PlayerStats.Remove(Key("projectile_chain_from_terrain_chance_%"));
+        c.PlayerStats.Remove(Key("no_barrage_projectile_spread"));
+        c.PlayerStats.Remove(Key("projectiles_barrage"));
+        var world = new OrdinaryTerrainWorld(session);
+        var runtime = new ProjectileRuntime(world);
+        runtime.Release(release with { Origin = new(0, 0), Aim = new(10, 0),
+            Profile = new("ordinary terrain regression") { Speed = 100, Range = 20,
+                Radius = .1, Chain = 1, Lifetime = ProjectileRuntime.Time(1) } });
+        runtime.AdvanceTo(ProjectileRuntime.Time(.3));
+        Assert.Equal(1, world.Redirects); Assert.Equal(1, world.Hits);
+        Assert.Equal(100, frozen.OrdinaryResidual.TerrainChainChance);
+    }
+
+    sealed class OrdinaryTerrainWorld(Game.ProjectileSession production) : IProjectileWorld
+    {
+        public int Redirects, Hits;
+        public IReadOnlyList<ProjectileActor> Actors(long from, long until) =>
+            [new(new(42), 2, _ => new(0, 5), .1)];
+        public TerrainContact? TraceTerrain(ProjectileVector from, ProjectileVector to) =>
+            from.X < 5 && to.X >= 5 ? new((5 - from.X) / (to.X - from.X), new(-1, 0)) : null;
+        public bool ChainFromTerrain(ProjectileEntity p) => production.ChainFromTerrain(p);
+        public ProjectileHitResult Hit(ProjectileDamage damage) { Hits++; return ProjectileHitResult.Hit; }
+        public void Publish(ProjectileEvent value) { if (value.Kind == ProjectileEventKind.Redirect) Redirects++; }
+    }
+
+    static void OrdinaryUtilityTransactions(Harness h)
+    {
+        var c = h.Conn;
+        c.MainAscendancy = new(h.Definition.Identity, [24848], []); c.StatSourcesCacheState = null;
+        foreach (var old in h.Items.Items(PlayerInventories.Weapon1).ToArray()) h.Items.Remove(PlayerInventories.Weapon1, old.Id);
+        var auraGem = ItemCatalog.Create(Program.Items.Find("Metadata/Items/Gems/SkillGemClarity")!);
+        h.Items.Add(PlayerInventories.Weapon1, 0, 0, ItemCatalog.Create(Program.Items.Find("Driftwood Wand")!) with
+            { Sockets = [new(SocketColour.White, auraGem)], Links = [1] });
+        var skill = Game.GemSkillEffects(c).Single(g => Game.SkillsFor(c).EffectId(g.Effect) == "Clarity");
+        c.Pools = c.Pools with { Mana = 1000 }; c.PlayerMana = 1000;
+        var reservation = Game.SupportedReservation(c, skill.Id)!.Value;
+        int Count() => Game.OrdinaryOf(c, n => Game.CharacterPlayerStats(c).GetValueOrDefault(Key(n))).Gale.Count;
+        int before = Count();
+        Assert.True(Game.ToggleAura("ordinary aura", h.Wire, h.Ciphers, c, skill.Id, skill.Effect,
+            skill.Name, reservation, skill.Level, skill.Quality).GetAwaiter().GetResult());
+        Assert.Equal(before + 1, Count());
+        Assert.True(Game.ToggleAura("ordinary aura", h.Wire, h.Ciphers, c, skill.Id, skill.Effect,
+            skill.Name, reservation, skill.Level, skill.Quality).GetAwaiter().GetResult());
+        Assert.Equal(before + 1, Count()); // Deactivation is not a skill use.
     }
 
     static void MarkGameplayTransactions(Harness h)
     {
         var c = h.Conn;
         var runtime = Game.ProjectilesFor("marks", h.Wire, h.Ciphers, c).Runtime;
-        void Advance(double seconds) { h.Time.At += seconds; runtime.AdvanceTo((long)(h.Time.At * 120000)); }
+        void Advance(double seconds)
+        {
+            h.Time.At = Math.Max(h.Time.At, Math.Max(c.Clock.Elapsed.TotalSeconds, runtime.Now / 120000d)) + seconds;
+            runtime.AdvanceTo((long)(h.Time.At * 120000));
+            h.Time.At = runtime.Now / 120000d;
+        }
         c.PlayerStats[Key("virtual_dexterity_for_requirements")] = 1000;
         c.PlayerStats[Key("virtual_strength_for_requirements")] = 1000;
         var target = new SpawnedMonster("mark", new(105, 100, 0), 0, 0, 1000) { Hostile = true };
@@ -146,6 +265,26 @@ public sealed partial class WhispererRuntimeTests
         c.LeagueModule = new(new League("Standard", "Standard", false, false), new HashSet<string>(["Game"]));
         c.StatSourcesCacheState = null;
         void Set(string name, int value) => c.PlayerStats[Key(name)] = value;
+        foreach (bool ruthless in new[] { false, true })
+        {
+            c.LeagueModule = new(new League("ordinary", "Standard", false, false)
+                { DataSet = ruthless ? "HardMode" : null }, new HashSet<string>(["Game"]));
+            c.MainAscendancy = new(definition.Identity, [16306], []); c.StatSourcesCacheState = null;
+            Set("virtual_maximum_frenzy_charges", 0);
+            _ = Game.CharacterPlayerStats(c);
+            Assert.Equal(0, Game.ChargesOf(c).Limits(ChargeType.Endurance).Maximum);
+            Set("virtual_maximum_frenzy_charges", 7);
+            _ = Game.CharacterPlayerStats(c);
+            Assert.Equal(7, Game.ChargesOf(c).Limits(ChargeType.Frenzy).Maximum);
+            Assert.Equal(7, Game.ChargesOf(c).Limits(ChargeType.Endurance).Maximum);
+            Set("virtual_maximum_endurance_charges", 2);
+            _ = Game.CharacterPlayerStats(c);
+            Assert.Equal(2, Game.ChargesOf(c).Limits(ChargeType.Endurance).Maximum);
+            c.PlayerStats.Remove(Key("virtual_maximum_endurance_charges"));
+            c.PlayerStats.Remove(Key("virtual_maximum_frenzy_charges"));
+        }
+        c.LeagueModule = new(new League("Standard", "Standard", false, false), new HashSet<string>(["Game"]));
+        c.MainAscendancy = new(definition.Identity, [], []); c.StatSourcesCacheState = null;
         Set(SlayerRules.KillMovementSpeed, 20); Set(SlayerRules.RareKillAttackSpeed, 20);
         Set(SlayerRules.RecentKillDamage, 10); Set(SlayerRules.UniqueDamage, 20);
         Set(SlayerRules.OverkillLeech, 20); Set("life_leech_does_not_stop_at_full_life", 1);

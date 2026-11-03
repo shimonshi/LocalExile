@@ -1,6 +1,9 @@
 # Private ordinary Slayer and Deadeye gameplay candidate
 
 Input rules: `0831ee7f75f3963c7c3dcb96284a33b72b54b21a`, originally based on main `ec522f18`.
+The bounded remaining-adapter candidate starts at exact private base `56d6f4a9a219aae23ca42742af4ec4e7720c4327`.
+Its output and verification logs live only in isolated checkout `t3-b0c0ac03`; `t3-f62fbadf` is read-only input.
+The root's later `2694afcc` corrections are a separate integration input, not part of this tested base.
 Private combined base: `e3587919`, containing exact Whisperer `1d87a4f3`, Harbinger `5318b7b9`,
 and Inquisitor `65b99d17`, followed by the input rules.
 The private merge `009ec47d` retains Whisperer quest transactions, phase-type output, held movement,
@@ -28,7 +31,8 @@ The Inquisitor reference here contains its input helpers, not the other writer's
   The incoming increased-taken bucket and existing stun consumer receive the corresponding leech conditions.
   Bleeding-unaffected projects its flag; there is no claim of a new player-bleeding damage engine.
 - Masterful Form changes the shared standard Endurance maximum consumed by the panel and charge session.
-  Ordinary additive Frenzy maxima are supported; explicit virtual maximum replacement ordering remains incomplete.
+  Explicit Frenzy replacements, including zero, precede the Endurance mirror in both consumers.
+  A final explicit Endurance replacement retains precedence over that mirror.
 - Projectile release captures ordinary Far Shot independently of legacy Far Shot and Point Blank.
   Contact reads cumulative runtime distance, and separately scales the independent ignite settings.
   Slayer unique/recent-kill more also scales projectile ignite settings independently of direct-hit leech.
@@ -45,6 +49,21 @@ The Inquisitor reference here contains its input helpers, not the other writer's
   Death and closing clear the state. Mark/actor identities intentionally do not cross replacement or travel.
 - Avidity accuracy scales the existing accuracy consumer using current effective Frenzy charges.
   Its moving Frenzy source already uses the shared periodic charge timer; no duplicate charge engine was added.
+  Timer progress and its last sampled world time now live with the host charge state across Game reloads.
+  Death clears both; a fresh connection starts a fresh timer rather than inheriting another character's progress.
+- Tailwind selects self or a living, current, nearby published player in the same instance-presence cohort.
+  The cohort is the existing allied-player model; no party membership or PvP policy exists to extend it.
+  Peer selection reads immutable published poses and a neutral qualified source flag, without peer combat locks.
+  Gale scales only its owner; the recipient's Tailwind-effect stat scales the selected nonstacking receipt once.
+  The current cipher gate owns Tailwind source/value changes and independent row1095 Gale grant clocks.
+  Ordinary finite clocks delegate category rates to the shared `RecipientEffectTime` contract.
+- Aura activation, accepted links, Vaal costs and instant utility uses join paid manual-use Gale admission.
+  Instant utility identities are separate from the interrupted ordinary action; aura deactivation grants nothing.
+- Released ordinary/gem projectiles retain terrain-chain policy across refund and child propagation.
+  The existing simulator checks a reachable hostile and chain budget before asking the production adapter to roll.
+  A terrain chain consumes that budget and resets only the movement-instance range, retaining total distance.
+  The gem release adapter suppresses both native and server spread for Barrage/`projectiles_barrage` sources.
+  It does not add a missing Barrage skill recipe or change unsupported-skill admission.
 
 All sources use the selected normal graph and existing Standard/Ruthless qualification.
 Ordinary production transactions are tested with only the Game league module enabled.
@@ -68,11 +87,7 @@ The following requested behavior remains unimplemented or uncertified:
   Native art/timing, knockback and legacy Sniper flask-charge behavior still need separate certification.
 - Mirage autonomous native actor allocation, target selection, equipment/visual packets, projectile attacks and retirement.
   `DeadeyeMirageLifecycle` remains a tested lifecycle rule object without that production actor loop.
-- Ally Tailwind selection/sharing, Gale stack presentation, every utility/instant/aura use admission route,
-  and a final migration to the publisher's accepted common recipient-clock contract.
-- Terrain-chain collision and no-Barrage-spread adapters remain disconnected from production collision/volley execution.
-- Explicit virtual charge maximum replacement ordering, Avidity moving-timer carry across Game reload,
-  and all-source direct/DoT/proxy provenance certification across every historical damage route.
+- All-source direct/DoT/proxy provenance certification across every historical damage route.
 - Player bleeding damage suppression, complete Slayer DoT/ailment coverage outside the supported projectile ignite path,
   and real-client timing/art/equipment verification.
 
@@ -87,10 +102,14 @@ clock-preserving lethal transfer, ordinary non-Deadeye use and Standard/Ruthless
 It also includes ordinary-only admission, actual lethal/duplicate/phase outcomes, overkill in the shared leech session,
 refund without retrospective regrant, native owner Tailwind output, accepted Gale deduplication and Wind Ward consumption,
 real projectile release freezing across refund, and accepted neutral transfer with the original remaining lifetime.
-The complete required suites and build are run on the private committed candidate; exact source and results are
-recorded in ignored `logs/ordinary-wiring/`, including `source.txt`, `build.log`, `core.log`, `data.log`, `gateway.log`.
+The bounded adapter build and required suites are recorded against the private committed candidate in ignored
+`logs/ordinary-finish/`, including `source.txt`, `build.log`, `core.log`, `data.log`, `gateway.log`.
+The earlier mark-wiring candidate's logs remain separate in `logs/ordinary-wiring/` in its originating checkout.
+The exact starting base reproduces an Inquisitor `WiredTiming` failure at line171: ranged admission expects one
+Fanatic charge but produces zero (`logs/ordinary-finish/base-inquisitor.log`).
+That predecessor assertion is outside the two ordinary Facts; this candidate preserves it for root reconciliation.
 No Core/Data tests, sleeps, production catalog path changes or per-test working-directory changes were added.
-Prepared nonsecret data is physically copied from `t3-eadecbfa`; the existing vendor-stock file is present.
+Prepared nonsecret data is physically copied from `t3-f62fbadf`; the existing vendor-stock file is present.
 The predecessor graph-admission tests also require its nonsecret `game-files.zip` fixture.
 A first full Gateway run lacked that fixture and failed two predecessor admission checks; the rerun includes it.
 
@@ -103,5 +122,11 @@ A first full Gateway run lacked that fixture and failed two predecessor admissio
 4. Check accepted/rejected manual uses, repeated contacts, ten Gale stacks, blocked/evaded hits and current native Tailwind.
 5. Check timed stat/buff expiry while idle, paid refund, death, logout, Game reload and successful/failed area travel.
 6. Repeat admitted Standard/Ruthless vectors. Do not claim mark/Mirage completion from helper tests or class selection.
+7. With two supported same-instance peers, verify60-cell Tailwind entry/exit, source refund/death/leave and source swaps.
+   Confirm Gale stacks affect only their owner, independent stack expiry, rate changes and native row1095 display.
+8. Verify aura on/off, link, Vaal and instant utility admission/rejection without duplicate Gale on repeats.
+   Check terrain chains consume the existing budget and Barrage spread suppression on an admitted executable recipe.
+9. Replace Game midway through Avidity's moving period and verify the remaining interval, then stop/move and die.
+   Set virtual Frenzy maximum to zero and seven with Masterful Form; compare the charge session and native panels.
 
 The running client and its logs belong to the root; this private writer did not access or rebuild them.

@@ -216,6 +216,9 @@ static partial class Game
             return result;
         }
 
+        public bool ChainFromTerrain(ProjectileEntity projectile) => projectile.Use.Payload is ProjectileOffense shot
+            && shot.OrdinaryResidual.ChainsFromTerrain(true, projectile.RandomSource.Next(100));
+
         public TerrainContact? TraceTerrain(ProjectileVector from, ProjectileVector to) =>
             ProjectileGeometry.TraceGrid(from, to, Wall);
 

@@ -62,6 +62,7 @@ static partial class Game
                     AccuracyMoreUnique = conn.Pools.AccuracyMoreVsUniquePct, AccuracyMoreClose = conn.Pools.AccuracyMoreInCloseRangePct,
                     AlwaysHits = Get("global_always_hit") != 0, FarShot = Get("player_far_shot") != 0,
                     OrdinaryDistance = DeadeyeProjectileDamage.Capture(Get) with { PointBlank = false },
+                    OrdinaryResidual = DeadeyeResidualProjectile.Capture(Get),
                     PointBlank = Get("keystone_point_blank") != 0,
                     ReturnMultiplier = ProjectileReturn.DamageMore(Get), Blind = BlindInputs(character),
                     // The object flies at the height the clip releases it (the bow's nock, the wand's tip).

@@ -89,7 +89,7 @@ static partial class Game
         {
             // The session's limits, periodic stats and conversion flags follow every change of the character's stats
             // from here, so the ticker never polls them.
-            session.Observe(Get);
+            session.Observe(Get, name => Stats.Key(name) is uint k && dev.TryGetValue(k, out int value) ? value : null);
             foreach (var type in Charges.Types)
             {
                 limits[type] = session.Limits(type);
