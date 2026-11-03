@@ -192,7 +192,7 @@ static partial class Game
         internal ProjectileActorKey ActorKey(uint id, SpawnedMonster monster) => Key(id, monster);
         public int TargetSplit(ProjectileEntity projectile, ProjectileActorKey target)
         {
-            if (projectile.Use.Payload is not ProjectileOffense || MarksOf(Conn).Active is not { } mark
+            if (projectile.Use.Payload is not ProjectileOffense || CurrentMark(Conn) is not { } mark
                 || mark.Id != target.Id || !Conn.Monsters.TryGetValue(target.Id, out var monster)
                 || !ReferenceEquals(mark.Monster, monster) || Key(target.Id, monster) != target
                 || !MarkOwnerCurrent(Conn) || !MarkSourceCurrent(Conn, mark.Source) || monster.Dead || monster.Life == 0

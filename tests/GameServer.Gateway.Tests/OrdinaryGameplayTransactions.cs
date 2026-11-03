@@ -228,7 +228,8 @@ public sealed partial class WhispererRuntimeTests
     static void MarkGameplayTransactions(Harness h)
     {
         var c = h.Conn;
-        var runtime = Game.ProjectilesFor("marks", h.Wire, h.Ciphers, c).Runtime;
+        var production = Game.ProjectilesFor("marks", h.Wire, h.Ciphers, c);
+        var runtime = production.Runtime;
         void Advance(double seconds)
         {
             h.Time.At = Math.Max(h.Time.At, Math.Max(c.Clock.Elapsed.TotalSeconds, runtime.Now / 120000d)) + seconds;
@@ -260,6 +261,16 @@ public sealed partial class WhispererRuntimeTests
             Assert.True(Cast(42)); uint paid = c.PlayerMana; Assert.True(paid < before);
             Assert.False(Cast(42)); Assert.Equal(paid, c.PlayerMana);
             Advance(2);
+            if (metadata.Id == "SnipersMark")
+            {
+                Assert.NotNull(Game.MarksOf(c).Pending);
+                var splitProbe = new ProjectileRuntime(new OrdinaryTerrainWorld(production));
+                splitProbe.Release(new(new("mark split probe") { Speed = 1, Range = 10 }, new(Program.PlayerId),
+                    new(Program.PlayerId), 1, new(100, 100), new(110, 100))
+                    { Payload = new ProjectileOffense(DamagePacket.Empty, false, 100, 0, 100, "mark split probe") });
+                Assert.True(production.TargetSplit(Assert.Single(splitProbe.Projectiles), production.ActorKey(42, target)) > 0);
+                Assert.Null(Game.MarksOf(c).Pending);
+            }
             var mark = Assert.IsType<Game.MarkTarget>(Game.CurrentMark(c));
             Assert.Equal(42u, mark.Id); Assert.True(double.IsPositiveInfinity(mark.Clock.Remaining));
             Assert.NotEmpty(Game.MarkPresentation(c)); Assert.Empty(Game.MarkPresentation(c));

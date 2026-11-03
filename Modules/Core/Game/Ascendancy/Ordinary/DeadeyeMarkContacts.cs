@@ -24,10 +24,11 @@ static partial class Game
         int Get(string name) => MarkStat(player, name);
         var weapon = WeaponFor(c); var raw = SupportedAttackDamage.Raw(weapon, Get);
         var conversion = DamageStats.Conversion(player, Stats, attack: true);
+        double attackFactor = InquisitorRead(c, player).AttackDamageFactor;
         return new(flat => MaximumAttackDamage.Apply(RageStats.ApplyAttack(PlayerHitDamage.Resolve(
             raw.Add(DamageType.Physical, flat), Get, conversion, spell: false, melee: melee,
             projectile: !melee, wieldingWand: weapon.WieldingWand), Get), Get)
-                .Scale(melee ? GamblerFor(player).DamageFactor : 1),
+                .Scale(attackFactor * (melee ? GamblerFor(player).DamageFactor : 1)),
             flat => MonsterIgnites.Settings.From(AilmentPanelStats.Compute(
                 new("main_hand", Spell: false, Melee: melee, Projectile: !melee),
                 raw.Add(DamageType.Physical, flat), conversion, Get), "main_hand", Get));
