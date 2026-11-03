@@ -263,7 +263,10 @@ static class OrdinaryGameplayChecks
         Assert.True(Toggle(pbReservation));
         Assert.False(c.PetrifiedBlood.Active);
         Assert.Equal(beforeBlood + 1, Count());
-        Assert.False(Toggle((0, 101)));
+        c.Auras[skill.Id] = new(skill.Id, skill.Effect, "Clarity", skill.Name, 500, AuraCatalog.BuffRow("Clarity"),
+            (int)c.Pools.Mana, 0);
+        Assert.False(Toggle(pbReservation));
+        c.Auras.Remove(skill.Id);
         Assert.Equal(beforeBlood + 1, Count());
         CharacterSaves.SetPetrifiedBlood(c.Character!, true);
         Game.RestoreRememberedPetrifiedBlood(c);
