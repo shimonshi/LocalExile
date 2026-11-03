@@ -2070,6 +2070,23 @@ public sealed partial class WhispererRuntimeTests
         }
     }
 
+    // The fixture pins entropy separately: one-argument percent draws here belong to double armour.
+    sealed class Incoming538Random : Random
+    {
+        public int ArmourDraws { get; private set; }
+        public int AvoidanceDraws { get; private set; }
+        public override int Next(int maxValue)
+        {
+            Assert.Equal(100, maxValue); ArmourDraws++; return 0;
+        }
+        public override int Next(int minValue, int maxValue)
+        {
+            if (minValue == 0 && maxValue == 100) AvoidanceDraws++;
+            return minValue;
+        }
+        public override double NextDouble() => 0;
+    }
+
     sealed class FixedDraw(int value) : Random { public override int Next(int maxValue) => value; public override double NextDouble() => 0; }
     sealed class HighDraw : Random { public override int Next(int maxValue) => maxValue - 1; public override double NextDouble() => 0; }
     sealed class ManualRuntime : IProjectileRuntime
@@ -2255,6 +2272,166 @@ public sealed partial class WhispererRuntimeTests
         Assert.Equal(150, Game.DamagePlayerHitTyped(c, 100, 100, 100, 0, stats));
         Assert.Equal(1000u, c.PlayerMana); Assert.Equal(0u, c.EnergyShield.Current);
         Assert.Equal(125, state.Mana.Take(4), 8);
+
+        //538's typed Mana must use the actual residual types after this same production resource writer.
+        var momOnly = h.NewConnection("mom538-only", optional: false); momOnly.MainAscendancy = new();
+        lock (momOnly.Monsters)
+        {
+            momOnly.PlayerMana = 100; momOnly.Ward.SetMaximum(0); momOnly.EnergyShield.SetMaximum(0, false);
+            Assert.Equal(60, Game.DamagePlayerHit(momOnly, 100, 0, 0,
+                new Dictionary<uint, int> { [Key("keystone_mana_shield")] = 1 },
+                DamagePacket.Of(DamageType.Physical, 100, 100)));
+            Assert.Equal(60u, momOnly.PlayerMana);
+        }
+        DamagePacket Incoming538Packet(params (DamageType Type, int Amount)[] parts) => parts.Aggregate(
+            DamagePacket.Empty, (packet, part) => packet.Add(part.Type, new(part.Amount, part.Amount)));
+        void Incoming538Resources(string label, DamagePacket packet, uint available, int expectedMana,
+            int expectedLife, int expectedRecoup, params (string Stat, int Value)[] additions)
+        {
+            var typed = h.NewConnection("typed538-" + label, optional: false); typed.MainAscendancy = new();
+            lock (typed.Monsters)
+            {
+                typed.PlayerMana = available; typed.Ward.SetMaximum(10); typed.Ward.Restore();
+                typed.EnergyShield.SetMaximum(30, true);
+                var typedStats = additions.ToDictionary(s => Key(s.Stat), s => s.Value);
+                typedStats[Key("damage_taken_goes_to_mana_%")] = 100;
+                var typedState = Game.ResourceEffectsOf(typed); typedState.Mana.Clear(); typedState.Mana.Spent(199, 10);
+                Assert.True(Game.ResourceEffectsCurrent(typed, typedState));
+                Assert.Equal(expectedLife, Game.DamagePlayerHitTyped(typed, packet, 0, typedStats));
+                Assert.Equal(available - (uint)expectedMana, typed.PlayerMana);
+                Assert.True(typed.Ward.Broken); Assert.Equal(0u, typed.EnergyShield.Current);
+                Assert.Equal(expectedRecoup, typedState.Mana.Take(4), 8);
+                Assert.Equal(199, typedState.Mana.SpentRemainder); // Defensive Mana is not a paid cost.
+            }
+        }
+        var p40f60 = Incoming538Packet((DamageType.Physical, 40), (DamageType.Fire, 60));
+        var p60f40 = Incoming538Packet((DamageType.Physical, 60), (DamageType.Fire, 40));
+        Incoming538Resources("physical-gone", p40f60, 1000, 0, 60, 90,
+            ("physical_damage_%_taken_from_mana_before_life", 100));
+        Incoming538Resources("physical-left", p60f40, 1000, 20, 40, 90,
+            ("physical_damage_%_taken_from_mana_before_life", 100));
+        Incoming538Resources("mana-short", p60f40, 7, 7, 53, 90,
+            ("physical_damage_%_taken_from_mana_before_life", 100));
+        Incoming538Resources("lightning-gone", Incoming538Packet((DamageType.Lightning, 40), (DamageType.Fire, 60)),
+            1000, 0, 60, 90, ("lightning_damage_%_taken_from_mana_before_life", 100));
+        Incoming538Resources("bypass-mom", p40f60, 1000, 33, 27, 90,
+            (IncomingResourceDefences.BypassStat, 50), ("keystone_mana_shield", 1),
+            ("physical_damage_%_taken_from_mana_before_life", 100));
+        Incoming538Resources("focus", p40f60, 1000, 0, 40, 70,
+            (IncomingResourceDefences.TakenStat, -20), ("physical_damage_%_taken_from_mana_before_life", 100));
+
+        // Real accepted monster contacts exercise block/Recoup/when-hit and their lazy shared armour draw.
+        ClientState Incoming538Connection(string label, params (string Stat, int Value)[] sources)
+        {
+            var contact = h.NewConnection("contact538-" + label, optional: false); contact.MainAscendancy = new();
+            contact.PlayerStats.Clear();
+            foreach (var (name, value) in sources) contact.PlayerStats[Key(name)] = value;
+            contact.Pools = new(68, 1000, 1000, 100, 0, Evasion: 0,
+                FireResistance: 0, ColdResistance: 0, LightningResistance: 0, ChaosResistance: 0);
+            contact.PlayerLife = contact.PlayerMana = 1000;
+            contact.EvasionEntropy = 99; contact.LastEvasionAt = 0;
+            contact.IncomingHitRandom = new Incoming538Random();
+            return contact;
+        }
+        Game.MonsterHitOutcome Incoming538Contact(ClientState contact, DamagePacket packet, out SpawnedMonster attacker)
+        {
+            var swing = new MonsterAttack(0x102, .4, 10, packet);
+            attacker = new("incoming538", new(105, 100, 0), 0, 0, 1000) { Attack = swing };
+            contact.Monsters[42] = attacker;
+            var outcome = Game.CommitMonsterHitLocked("Whisperer", contact, 42, attacker, swing, 0,
+                (100, 100), (105, 100), checkRange: false);
+            Assert.NotNull(outcome);
+            return outcome!;
+        }
+        var p100 = Incoming538Packet((DamageType.Physical, 100));
+        var partial = Incoming538Connection("partial", ("keystone_glancing_blows", 1), ("keystone_mana_shield", 1),
+            ("damage_taken_goes_to_mana_%", 100), ("damage_taken_goes_to_life_over_4_seconds_%", 100));
+        lock (partial.Monsters)
+        {
+            partial.Pools = partial.Pools with { BlockChance = 100 };
+            partial.Ward.SetMaximum(10); partial.Ward.Restore(); partial.EnergyShield.SetMaximum(20, true);
+            var recoup538 = Game.ResourceEffectsOf(partial); recoup538.Mana.Clear();
+            var result = Incoming538Contact(partial, p100, out _);
+            Assert.True(result.Blocked); Assert.Equal(979u, result.Life); Assert.Equal(986u, result.Mana);
+            Assert.Equal(65, partial.LifeRecoup.Take(4), 8); Assert.Equal(55, recoup538.Mana.Take(4), 8);
+            Assert.Equal(0u, partial.EnergyShield.Current); Assert.True(partial.Ward.Broken);
+        }
+        foreach (bool keepsBlockedShare in new[] { false, true })
+        {
+            var block538 = Incoming538Connection("armour-" + keepsBlockedShare,
+                (RecentEnemyHits.GenericChance, 100));
+            if (keepsBlockedShare) block538.PlayerStats[Key("keystone_glancing_blows")] = 1;
+            lock (block538.Monsters)
+            {
+                block538.Pools = block538.Pools with { Armour = 500, BlockChance = 100 };
+                var result = Incoming538Contact(block538, p100, out _);
+                Assert.True(result.Blocked);
+                Assert.Equal(keepsBlockedShare ? 979u : 1000u, result.Life); // Doubled1000 armour:33 damage, then65%=21.
+                Assert.Equal(keepsBlockedShare, result.Armour.Doubled);
+                Assert.Equal(keepsBlockedShare ? 1000 : 500, result.Armour.EffectiveArmour);
+                Assert.Equal(keepsBlockedShare ? 1 : 0, ((Incoming538Random)block538.IncomingHitRandom).ArmourDraws);
+                Assert.Equal(0, ((Incoming538Random)block538.IncomingHitRandom).AvoidanceDraws);
+                Assert.Equal(500, block538.Pools.Armour); // The single-hit decision never mutates the permanent pool.
+            }
+        }
+        var baseline538 = Incoming538Connection("no538-stat-control", (RecentEnemyHits.GenericChance, 100));
+        lock (baseline538.Monsters)
+        {
+            baseline538.Pools = baseline538.Pools with { Armour = 500 };
+            var result = Incoming538Contact(baseline538, p100, out _);
+            Assert.False(result.Blocked); Assert.Equal(967u, result.Life);
+            Assert.Equal(1000, result.Armour.EffectiveArmour); Assert.True(result.Armour.Doubled);
+            Assert.Equal(1, ((Incoming538Random)baseline538.IncomingHitRandom).ArmourDraws);
+            Assert.Equal(0, ((Incoming538Random)baseline538.IncomingHitRandom).AvoidanceDraws);
+        }
+        var unrelatedShare = Incoming538Connection("immune-share", (RecentEnemyHits.GenericChance, 100),
+            ("block_%_damage_taken_from_elemental", 100), ("fire_damage_immunity", 1));
+        lock (unrelatedShare.Monsters)
+        {
+            unrelatedShare.Pools = unrelatedShare.Pools with { Armour = 500, BlockChance = 100 };
+            var result = Incoming538Contact(unrelatedShare,
+                Incoming538Packet((DamageType.Physical, 100), (DamageType.Fire, 100)), out _);
+            Assert.True(result.Blocked); Assert.Equal(1000u, result.Life);
+            Assert.Equal(0, ((Incoming538Random)unrelatedShare.IncomingHitRandom).ArmourDraws);
+        }
+        var generic538 = Incoming538Connection("two-generic-sources", ("damage_taken_+%", -10),
+            ("base_damage_taken_+%", 50));
+        lock (generic538.Monsters)
+        {
+            var result = Incoming538Contact(generic538, p100, out _);
+            Assert.False(result.Blocked); Assert.Equal(860u, result.Life);
+        }
+        var avoided538 = Incoming538Connection("all-avoided", ("avoid_fire_damage_%", 75), ("avoid_cold_damage_%", 75),
+            ("chill_enemy_when_hit_duration_ms", 1000), ("chance_to_freeze_enemies_for_1_second_when_hit_%", 100));
+        lock (avoided538.Monsters)
+        {
+            var result = Incoming538Contact(avoided538,
+                Incoming538Packet((DamageType.Fire, 100), (DamageType.Cold, 100)), out var attacker);
+            Assert.Equal(1000u, result.Life); Assert.Equal(1000u, result.Mana); Assert.False(result.Blocked);
+            Assert.Equal(2, ((Incoming538Random)avoided538.IncomingHitRandom).AvoidanceDraws);
+            Assert.Equal(0, ((Incoming538Random)avoided538.IncomingHitRandom).ArmourDraws);
+            Assert.Equal(30, attacker.Ailments.Magnitude(MonsterElementalAilments.Kind.Chill, 0), 8);
+            Assert.Equal(100, attacker.Ailments.Magnitude(MonsterElementalAilments.Kind.Freeze, 0), 8);
+            var incomingAilments = avoided538.ElementalAilments.Snapshot(0);
+            Assert.False(incomingAilments.Ignite); Assert.False(incomingAilments.Freeze);
+            Assert.Equal(0, incomingAilments.Chill); Assert.Equal(0, incomingAilments.Shock);
+            Assert.Equal(1, avoided538.RecentEnemyHits.Count(0)); // Avoidance did not evade this admitted contact.
+        }
+        var evaded538 = Incoming538Connection("evaded", ("chill_enemy_when_hit_duration_ms", 1000),
+            ("chance_to_freeze_enemies_for_1_second_when_hit_%", 100));
+        lock (evaded538.Monsters)
+        {
+            evaded538.Pools = evaded538.Pools with { Evasion = int.MaxValue };
+            evaded538.EvasionEntropy = 0;
+            var swing = new MonsterAttack(0x102, .4, 10, p100);
+            var attacker = new SpawnedMonster("evaded538", new(105, 100, 0), 0, 0, 1000) { Attack = swing };
+            Assert.Null(Game.CommitMonsterHitLocked("Whisperer", evaded538, 42, attacker, swing, 0,
+                (100, 100), (105, 100), checkRange: false));
+            Assert.Equal(1000u, evaded538.PlayerLife); Assert.Equal(1000u, evaded538.PlayerMana);
+            Assert.Equal(0, attacker.Ailments.Magnitude(MonsterElementalAilments.Kind.Chill, 0), 8);
+            Assert.Equal(0, attacker.Ailments.Magnitude(MonsterElementalAilments.Kind.Freeze, 0), 8);
+            Assert.Equal(0, evaded538.RecentEnemyHits.Count(0));
+        }
 
         // The final Life/Mana sources add ES once; repeated rebuilding cannot compound the derived pool.
         c.PlayerStats[Key("maximum_life_%_to_add_as_maximum_energy_shield")] = 0;

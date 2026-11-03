@@ -459,6 +459,8 @@ remaining native checks are recorded in [the port record](../docs/dev/issue75-po
   the proliferation radius's area scaling.
   See [20](../docs/protocol/20-damage.md#outgoing-chill-freeze-and-shock-on-monsters).
 - Ordinary supported monster basic contacts now exercise ignite/chill/freeze/shock and final avoidance.
+  Combined regressions cover shifted/avoided hits, partial block and typed Mana after Focus/Ward/ES.
+  Complete the native mixed-type, recipient-clock and source-removal matrix in the same integration order.
   Finish dedicated native buff icons and source/threshold/conditional-immunity parity before claiming a general ailment engine.
   Hostile spell adapters and alternative-ailment sources remain separate work; monster mortar shots already run the
   contact pipeline at their landing (status: Skills and combat, "Monster projectiles").

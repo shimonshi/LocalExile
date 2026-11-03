@@ -22,7 +22,7 @@ A hit is a **packet** with a separate minimum/maximum range for each type:
 Conversion only goes **forward** in this order:
 
 ```
-physical → lightning → cold → fire → chaos
+physical â†’ lightning â†’ cold â†’ fire â†’ chaos
 ```
 
 So physical can become fire, lightning or cold; cold can become fire or chaos; fire can become chaos. Fire cannot
@@ -38,13 +38,13 @@ results and remaining checks. Source `artifacts/issue75-completion/` paths remai
 
 ```
 base skill/weapon damage by type
-  → added damage (DamageStats.RawAdded; the stats it reads are in §2b)
-  → gain X% as extra (does not consume the source)
-  → conversion (source is consumed; converted damage can convert again)
-  → increased / more multipliers per type
-  → critical strike
-  → per-type resistance / mitigation (the critical-strike elemental rules resolve first, §4)
-  → roll a whole number per type and send the life change
+  â†’ added damage (DamageStats.RawAdded; the stats it reads are in Â§2b)
+  â†’ gain X% as extra (does not consume the source)
+  â†’ conversion (source is consumed; converted damage can convert again)
+  â†’ increased / more multipliers per type
+  â†’ critical strike
+  â†’ per-type resistance / mitigation (the critical-strike elemental rules resolve first, Â§4)
+  â†’ roll a whole number per type and send the life change
 ```
 
 `DamagePacket` is immutable and holds one `DamageRange` per type. `DamageConversion` holds global conversion,
@@ -55,7 +55,7 @@ as in Path of Building. Gains are added to the destination without reducing the 
 "gain as extra" rule.
 
 A player hit on a monster rolls each type once and then takes the monster's own base resistance on each type
-(MonsterResistanceCatalog, §4), before the critical multiplier and the life update. A monster's attack on the player
+(MonsterResistanceCatalog, Â§4), before the critical multiplier and the life update. A monster's attack on the player
 does the mirror pass through the player's resistances. Damage over time is outside this pass: it has no hit and no
 penetration. Righteous Fire's monster burn (its per-tick percentage-of-life model) and the player's ignites take the
 monster's capped resistance of their type, its base and its mods' as for hits, and its damage taken (`MonsterDotTaken`;
@@ -64,7 +64,7 @@ before the ignites, the burn took only the mods' resistance).
 Before the per-type roll, `GamblerModifiers.RollOutgoingHit` rolls one damage multiplier per hit: triple damage
 (`base_chance_to_deal_triple_damage_%`), and only when that misses, double damage. PoB CalcOffence does the same
 ("Triple Damage overrides Double Damage"), so a hit with both chances is tripled at the triple chance and doubled at
-(1 - triple) × double.
+(1 - triple) Ã— double.
 The double chance is the player's `chance_to_deal_double_damage_%` (influence, Synthesis and weapon mods, Kinetic
 Impacts, Force Multiplier) on every hit that rolls, plus, through `ForSkill`, the skill's own
 `chance_to_deal_double_damage_%` (Heavy Strike's 20-39%) and, for a spell, `spell_chance_to_deal_double_damage_%`.
@@ -72,7 +72,7 @@ The area, projectile and passive-granted spell paths pass their skill; the defau
 player's chance. Paths that skip the roll (minions, Rampage, warcries) get neither double nor triple damage.
 
 Penetration lowers the target's resistance before the damage is reduced. The server caps the monster's base
-resistance first (the 75 default, the 90 absolute maximum, the −200 floor) and subtracts the hit's penetration from
+resistance first (the 75 default, the 90 absolute maximum, the âˆ’200 floor) and subtracts the hit's penetration from
 that capped value with no second clamp, as Path of Building's `calcResistForType` and hit branch do (16de4b8, lines
 494..509 and 3490..3500): the effective resistance can go below the floor, so penetration against a negative
 resistance deals more than the raw damage. Penetration is read per hit from the player's and the skill's own stats
@@ -95,7 +95,7 @@ Each lasts 4 s, kept by element and magnitude; only the highest running one of a
 -10% and 4 s are its defaults). `MonsterHitResistance` takes it at the hit's time and `MonsterDotTaken` at the burn's;
 paths without a time (minions, Rampage, warcries) leave it out. The hit that inflicts it does not gain from it.
 With `keystone_elemental_equilibrium`, a hit that deals fire, cold or lightning then removes every Exposure of those
-elements on the monster and inflicts -25% Exposure of the others (poedb's keystone text), × (1 +
+elements on the monster and inflicts -25% Exposure of the others (poedb's keystone text), Ã— (1 +
 `elemental_equilibrium_effect_+%`/100) truncated, with the extra and minimum stats, for 4 s. The keystone names no
 duration, so that is Exposure's default. It runs after the hit's own Exposure, so it removes an on-hit Exposure of the
 hit's element, as PoB's calculation does (`CalcPerform` skips an element the enemy was hit by).
@@ -116,10 +116,10 @@ The stats the server reads (whole percents, this client's Stats.dat names):
 | `local_{fire,cold,lightning,chaos,elemental}_penetration_%` | attacks using the explicitly supplied, qualified active weapon only; spells exclude these inputs |
 | `reduce_enemy_{fire,cold,lightning}_resistance_with_weapons_%`, `reduce_enemy_elemental_resistance_with_weapons_%` | "Damage with Weapons Penetrates" (Lava Lash, Fangs of Frost, Arcing Blows, the wand and staff clusters, Galvanic Hammer, Piscator's Vigil): attacks with a weapon only, PoB's `ModFlag.Weapon`; unarmed attacks and spells take none |
 | `cold_penetration_%_vs_chilled_enemies` | cold, against a monster chilled at the hit's time (The Pandemonius, Blanketed Snow); `MonsterHitResistance` adds it beside Exposure |
-| `reduce_enemy_{fire,cold,lightning}_resistance_%_while_affected_by_{anger,hatred,wrath}` | Watcher's Eye: that element's `base_reduce_enemy_…_resistance_%` while the matching aura runs (`AuraCatalog.WhileAffectedPenetration`), not scaled by aura effect |
+| `reduce_enemy_{fire,cold,lightning}_resistance_%_while_affected_by_{anger,hatred,wrath}` | Watcher's Eye: that element's `base_reduce_enemy_â€¦_resistance_%` while the matching aura runs (`AuraCatalog.WhileAffectedPenetration`), not scaled by aura effect |
 | `cannot_penetrate_or_ignore_elemental_resistances` | a flag: every elemental penetration is off for the player's hits; chaos is not elemental |
 
-The derived `main_hand_…`/`off_hand_…` and per-element display aliases are not raw inputs to combat.
+The derived `main_hand_â€¦`/`off_hand_â€¦` and per-element display aliases are not raw inputs to combat.
 `WeaponIn` captures an immutable local-source dictionary with the weapon's damage. Ordinary melee uses that
 accepted weapon; ordinary bows freeze its penetration at release. Supported projectile/area attacks use their
 current main-hand weapon at contact, consistent with their existing damage path. Inactive-set items, shields and
@@ -166,8 +166,8 @@ stats apply; `DamageStats` reads the Stats.dat names:
 | gain as extra | `physical_damage_%_to_add_as_fire` |
 | non-chaos as chaos | `non_chaos_damage_to_add_as_chaos_damage_%` |
 
-`skill_…` stats use the skill-conversion table; `base_…`, `attack_…`, `spell_…` and the plain
-`…_damage_%_to_convert_to_…` names use the global table. Conditional variants ("while affected by Anger", "against
+`skill_â€¦` stats use the skill-conversion table; `base_â€¦`, `attack_â€¦`, `spell_â€¦` and the plain
+`â€¦_damage_%_to_convert_to_â€¦` names use the global table. Conditional variants ("while affected by Anger", "against
 frozen enemies", ...) are not read yet. Skill conversion takes precedence when skill and global conversion together
 exceed 100%, matching PoB's `buildConversionTable`.
 
@@ -276,7 +276,7 @@ stats below are read.
 The value is the percentage: both the added lightning minimum and maximum become that percent of `maximum_mana`
 from the same final stat dictionary, so spending mana and reserved mana never change the damage, while a pool
 change (level, equipment, passives) does.
-Path of Building pinned 16de4b82 (ModParser.lua lines 5636–5639) maps the node's value to both LightningMin and
+Path of Building pinned 16de4b82 (ModParser.lua lines 5636â€“5639) maps the node's value to both LightningMin and
 LightningMax as BASE with PercentStat Mana and ModFlag Attack; the packet agrees.
 At 6% of a 1000 mana pool (Whisperer "we know all", PassiveSkills.dat graph id 22720) the attack gets 60-60
 added lightning, not 1-60.
@@ -297,11 +297,11 @@ Spell hits and damage over time are untouched, and saved gem quality/experience 
 The node's separate mana-cost drawback (`base_mana_cost_-%`) is a mana-cost change outside this damage
 consumption's scope.
 Fourteen real-client stat checks used a fresh synthetic Witch and development overrides for these inputs.
-With the 6% grant, 56 maximum mana showed 3–3 added lightning and 1000 showed 60–60.
-Adding 50% increased lightning showed 90–90; 997 maximum mana showed 59–59 after the panel's existing floor.
-With 1000 mana, 50% increased attack damage showed 90–90; another 50% melee increase raised unarmed damage to 120–120.
-A wand stayed at 90–90 even with a club in the inactive set; switching to the club gave 120–120 and back gave 90–90.
-Clearing the attack increase left the ranged wand at 60–60 despite the melee input.
+With the 6% grant, 56 maximum mana showed 3â€“3 added lightning and 1000 showed 60â€“60.
+Adding 50% increased lightning showed 90â€“90; 997 maximum mana showed 59â€“59 after the panel's existing floor.
+With 1000 mana, 50% increased attack damage showed 90â€“90; another 50% melee increase raised unarmed damage to 120â€“120.
+A wand stayed at 90â€“90 even with a club in the inactive set; switching to the club gave 120â€“120 and back gave 90â€“90.
+Clearing the attack increase left the ranged wand at 60â€“60 despite the melee input.
 Clearing the grant removed the lightning rows' damage, and relog restored the baseline maximum mana and damage.
 These checks validate the generic damage consumer; ascendancy allocation remains in its separate lifecycle change.
 
@@ -310,12 +310,12 @@ so increases, effectiveness, conversion and support stages treat it like any oth
 
 | Stats (minimum / maximum) | Per | Source (3.29) |
 |---|---|---|
-| `attack_minimum/maximum_added_physical_damage_per_25_strength` | 25 Strength | Replica Iron Commander (`AddedDamagePerStrengthUnique__1`; `__2` adds 8–24) |
+| `attack_minimum/maximum_added_physical_damage_per_25_strength` | 25 Strength | Replica Iron Commander (`AddedDamagePerStrengthUnique__1`; `__2` adds 8â€“24) |
 | `attack_minimum/maximum_added_physical_damage_per_25_dexterity` | 25 Dexterity | Iron Commander |
 | `minimum/maximum_added_fire_damage_to_attacks_per_10_strength` | 10 Strength | Hyrri's Demise |
 | `minimum/maximum_added_cold_damage_to_attacks_per_10_dexterity` | 10 Dexterity | Hyrri's Demise |
 | `minimum/maximum_added_lightning_damage_to_attacks_per_10_intelligence` | 10 Intelligence | Hyrri's Demise |
-| `minimum/maximum_added_chaos_damage_to_attacks_per_50_strength` | **80** Strength | Replica Alberon's Warpath (1–80; its Divergent mod 1–30) |
+| `minimum/maximum_added_chaos_damage_to_attacks_per_50_strength` | **80** Strength | Replica Alberon's Warpath (1â€“80; its Divergent mod 1â€“30) |
 
 Each grant is the stat value times the complete groups of the final attribute in the same stat dictionary
 (`floor(attribute / N)`, none for a negative attribute), as PoB's `PerStat` tag (`ModStore.lua`,
@@ -323,7 +323,7 @@ Each grant is the stat value times the complete groups of the final attribute in
 description (`Metadata/StatDescriptions/stat_descriptions.txt`, "Adds {0} to {1} Chaos Damage to Attacks per 80
 Strength", and every one of its translations), PoB's unique text and parsed mod cache (`ModCache.lua`: `div=80`) and
 RePoE's mod text all say 80.
-At 11,833 Strength the boots add 147–11,760 chaos.
+At 11,833 Strength the boots add 147â€“11,760 chaos.
 The weapon-local "to Attacks with this Weapon per 10 <attribute>" stats
 (`attack_minimum_added_fire_damage_per_10_strength`, `attack_minimum_added_lightning_damage_per_10_dex/int`,
 `attacks_with_this_weapon_minimum_added_cold_damage_per_10_dexterity`) and the spell
@@ -429,7 +429,7 @@ Fourteen native checks on a fresh unascended Witch use raw development inputs ra
 Ten fixed-chaos cases read both panel ranges and actual monster life: 100 at 449 armour, 102 at 450/899 and 104 at 900.
 Generic 100% gives 204; another raw 10% attack increase gives 214, and a modifier value of 3 at 900 armour gives 106.
 Negative armour and modifier removal restore 100; maximum-mana lightning composes to a native 62-damage hit.
-Two additional panel-only checks show weapon physical 2–5 becoming 6–15 at 45000 armour.
+Two additional panel-only checks show weapon physical 2â€“5 becoming 6â€“15 at 45000 armour.
 Relog clears the development effect.
 Phrecia node admission and the rest of Behemoth remain separate work; this consumer does not enable a new chooser.
 
@@ -485,7 +485,7 @@ Mixed monster packets, suppression, block, ES, Fortification and DoT separation 
 The raw-source controls do not select Incorruptible or establish whole-class gameplay.
 The test records the exact embedded Git versions, DLL hash and process working directory.
 Recent-hit armour composition is covered below; other class mechanics remain separate work.
-Implemented local item defences feed the shared armour pool (see [13](13-items.md) §2 and §2c).
+Implemented local item defences feed the shared armour pool (see [13](13-items.md) Â§2 and Â§2c).
 
 A share of armour can apply to non-physical hits too (`PlayerHitMitigation.ArmourPercent`, PoB CalcDefence
 `percentOfArmourApplies`, the BASE sum capped at 100%): `armour_%_applies_to_fire_cold_lightning_damage` for fire, cold
@@ -618,7 +618,7 @@ Additional Accuracy's real flat/quality contributions update the selected rating
 raw commands replace all corresponding actor contributions, including Precision, and refresh pools.
 Decision: preserve the original base instead of reversing a floored final value, and apply support inputs before
 the final floor. The alternative would mis-scale flat support values and lose fractional boundaries.
-[Skills §4](11-skills.md) records source evidence and actual support/command tests.
+[Skills Â§4](11-skills.md) records source evidence and actual support/command tests.
 
 Area gem attacks now sample that profile at contact, including target Masteries/evasion/Blind and raw cannot-evade
 flags. `HitMonster` admits the action before evasion, block, critical confirmation and damage; rejected contacts
@@ -650,7 +650,7 @@ the very same contact chance before direct/return damage scaling. Gem owner inpu
 contact-time sampling; ordinary bows retain release snapshots. Decision: preserve those distinct lifecycles
 instead of freezing gem inputs without snapshot evidence; retain explicit miss continuation instead of a
 zero-damage collision. The forward exclusion is now allocated once per volley, matching its intended scope.
-[Skills §10](11-skills.md) records primary volley evidence, 24 added tests, the 29-case focused run and unresolved
+[Skills Â§10](11-skills.md) records primary volley evidence, 24 added tests, the 29-case focused run and unresolved
 projectile geometry/exception rules. Current build/tests do not certify those separate mechanics or native parity.
 
 [Mark_GGG's entropy explanation](https://www.pathofexile.com/forum/view-thread/11707/filter-account-type/staff/page/10)
@@ -675,7 +675,7 @@ target modifiers/Blind, source removal and noncritical impale storage.
 added damage, which for a hit is the maximum of every final component after conversion; minima and spells are unchanged
 (`MaximumAttackDamage`).
 It also scales the damaging ailments an attack inflicts (the wiki; PoB builds an ailment's base through the same
-`calcDamage`), so an attack's flat ailment packet must go through `MaximumAttackDamage.Apply` too (§3).
+`calcDamage`), so an attack's flat ailment packet must go through `MaximumAttackDamage.Apply` too (Â§3).
 PoB CalcOffence applies `MaxDamage` MORE to each type's own maximum and carries it through conversion, which is the same.
 It sits next to Rage's final multiplier at every attack site: the default attack and its panel rows, the native
 physical bounds, attack gems, `AttackSkillHit` and ordinary bow and wand shots (`OrdinaryRangedShot`).
@@ -724,12 +724,12 @@ Fire still uses its existing per-tick percentage-of-life burn; it is a fire DoT 
 **The player's ignites on monsters** (`MonsterIgnites.cs`, the wiki's Ignite): `IgniteFromHit` decides a landed hit's
 ignite. A critical strike always ignites; otherwise `base_chance_to_ignite_%`, `chance_to_ignite_%` and
 `chance_to_freeze_shock_ignite_%` give the chance, and the ignite prohibitions (`CannotInflict`, below) stop it. The base is the hit's flat fire damage
-(base and added, after conversion, before increases), 90% per second (`Ailments.Ignite`) × (1 + the ignite increases:
+(base and added, after conversion, before increases), 90% per second (`Ailments.Ignite`) Ã— (1 + the ignite increases:
 `damage_+%`, `damage_over_time_+%`, `elemental_damage_+%`, `fire_damage_+%`, `fire_damage_over_time_+%`,
-`burn_damage_+%`, `ignite_damage_+%`, `base_ailment_damage_+%`) × the Frenzy charges' more damage × (1 + the damage
+`burn_damage_+%`, `ignite_damage_+%`, `base_ailment_damage_+%`) Ã— the Frenzy charges' more damage Ã— (1 + the damage
 over time multipliers `dot_multiplier_+`, `fire_dot_multiplier_+`, `ignite_dot_multiplier_+`, and on a critical strike
 50 + `critical_ailment_dot_multiplier_+`). Hit-only modifiers (spell, area, attack damage, critical multiplier, lucky or
-triple damage, penetration) never reach it. It lasts 4 s × (1 + `ignite_duration_+%`) × (1 −
+triple damage, penetration) never reach it. It lasts 4 s Ã— (1 + `ignite_duration_+%`) Ã— (1 âˆ’
 `base_self_ignite_duration_-%` of the monster).
 The "deal Damage faster" modifiers (`faster_burn_%`, `damaging_ailments_deal_damage_+%_faster`) multiply its damage per
 second by (1 + their sum) and divide its duration by it.
@@ -737,7 +737,7 @@ The ignite goes onto the monster's one `MonsterIgnites` (`MonsterIgnites.Add`, t
 projectile hits add to (below), so every source shares one burn and one `ignited` buff.
 Only Abberath's Fury's footstep hits use `IgniteFromHit` ([Polytheist](../game/polytheist.md)); projectile hits use the
 panel rows captured at release (below); the default melee attack and melee or area gems do not ignite yet.
-An attack's flat packet will go through `MaximumAttackDamage.Apply` (§2i) before it. The ignites burn on while the
+An attack's flat packet will go through `MaximumAttackDamage.Apply` (Â§2i) before it. The ignites burn on while the
 player is dead (unverified), and a dead Hardcore character's kills make no progress. Shaper of Flames-style ignites from
 other damage types and ignite proliferation are not modelled.
 
@@ -758,7 +758,7 @@ more", support more multipliers, the moving bleed bonus, and the rows' native fo
 **Projectile ignite on monsters (`MonsterIgnites`, `Program.MonsterIgnites.cs`).** A gem projectile or ordinary bow/wand
 shot captures its ignite at release: chance `base_chance_to_ignite_%` + `chance_to_freeze_shock_ignite_%` from the caster
 and the skill (Burning Arrow's own 25%), the context's ignite rows above (main hand for attacks, spell for spells) as the
-damage-per-second range, and 4 s × (1 + `ignite_duration_+%` + `base_all_ailment_duration_+%`), with the "deal damage
+damage-per-second range, and 4 s Ã— (1 + `ignite_duration_+%` + `base_all_ailment_duration_+%`), with the "deal damage
 faster" factor above on both and the target's `base_self_ignite_duration_-%` on the duration. The ignite
 prohibitions and `never_damaging_ailments` stop it. An accepted hit that dealt fire damage and left the target alive ignites on a critical
 strike or a successful chance roll, then the monster's `avoid_ignite_%`; `immune_to_ignite` / `cannot_be_ignited` refuse
@@ -776,7 +776,7 @@ ignite, ignite proliferation, "as though dealing more", support more multipliers
 effect, spell-only effect, extra reflected hits and increased duration. The native spell-only effect name really is
 `impale_effect_+%_for_impales_inficted_by_spells` (the spelling is preserved). Critical spell hits also consume
 `spell_impale_on_crit_%_chance`; this is not an unconditional panel input. Actor and qualified own inputs sum in
-wide intermediates; chance clamps once to 0–100. The three selected virtual chance rows share raw source scope,
+wide intermediates; chance clamps once to 0â€“100. The three selected virtual chance rows share raw source scope,
 with each hand's local snapshot supplied separately. Attack-only chance no longer becomes a general raw stat.
 
 `ImpaleState` stores 10% of the actual physical roll, after conversion and source modifiers/critical multiplier but
@@ -838,7 +838,7 @@ Spells supply `h=1`. Ordinary/selected accuracy includes raw global/qualified lo
 main-hand normal/evasive chance aliases now agree with that bypass too. Final diagnostic chance replacements
 do not replace combat inputs, and target Masteries stay outside unconditional reference estimates.
 Decision: apply accuracy separately to landing and confirmation rather than once to the old critical mean,
-and keep luck on the critical roll rather than the accuracy draw. [Skills §14](11-skills.md) records pinned
+and keep luck on the critical roll rather than the accuracy draw. [Skills Â§14](11-skills.md) records pinned
 PoB lines, primary tooltip evidence, six reproduced failures and the 55-case focused run. Full integer-roll
 expectation, dual-hand/multi-hit/cooldown/DoT and native certification remain separate work.
 
@@ -866,7 +866,7 @@ mechanics remain open; source IDs, support lifecycle and parsed contact tests ar
   LifeOnBlock, ManaOnBlock and EnergyShieldOnBlock; the rounding is unverified), in `MonsterSwing` and `/blockhit`.
   A blocked hit counts (blocking does not stop the defender's when-hit effects); Life reservation is not modelled.
 - Player hits on monsters (default attack, gem projectile and area hits) roll each type once and reduce it by the
-  monster's base resistance: `MonsterTypes.Resistances` → `MonsterResistances`, the level's
+  monster's base resistance: `MonsterTypes.Resistances` â†’ `MonsterResistances`, the level's
   `DefaultMonsterStats.Difficulty` (1/2/3) picking the Normal/Cruel/Merciless columns (`MonsterResistanceCatalog`,
   `MonsterCatalog.BaseResistance`, the shared pass is `HitMitigation`). Without the extracted tables every type reads
   0 for the base input.
@@ -876,7 +876,7 @@ mechanics remain open; source IDs, support lifecycle and parsed contact tests ar
   Automated mixed fractional-hit, target-modifier, bow RNG and same-key player/skill cases cover the resolved paths.
   Native penetration checks belong to original head `0d800d1`; recheck the target-modifier and bow composition natively.
 - The hit's penetration (`Penetration.cs`) subtracts from the capped resistance with no second clamp: the general
-  per-element and elemental stats on every hit, the attack-only variants on attacks (§2), the
+  per-element and elemental stats on every hit, the attack-only variants on attacks (Â§2), the
   `cannot_penetrate_or_ignore_elemental_resistances` flag suppressing the elemental ones. Damage over time and the
   physical part take no penetration.
 - Critical elemental hits with `critical_strikes_ignore_elemental_resistances` use effective resistance zero,
@@ -901,7 +901,7 @@ mechanics remain open; source IDs, support lifecycle and parsed contact tests ar
   Rebuild after the final checkout and verify embedded Git versions, hashes and the running DLL before `-NoBuild`.
   See [native build provenance](../dev/client-control.md#build-provenance-for-native-verification).
 - The player's debuffs on a monster add to its damage taken (`SpawnedMonster.TakenFromPlayer`, kept by
-  `EnemyDebuffsTick`, [11](11-skills.md) §12): `taunted_enemies_damage_taken_+%` on every type while his taunt lasts,
+  `EnemyDebuffsTick`, [11](11-skills.md) Â§12): `taunted_enemies_damage_taken_+%` on every type while his taunt lasts,
   a passive enemy aura's `elemental_damage_taken_+%` on fire, cold and lightning. Both are increases that add to the
   monster's `base_damage_taken_+%` (PoB: DamageTaken and ElementalDamageTaken are INC), in `MonsterTakesMitigated`
   (every player hit) and `MonsterBurn` (Righteous Fire); Spell Resistant's less spell damage multiplies after them.
@@ -909,7 +909,7 @@ mechanics remain open; source IDs, support lifecycle and parsed contact tests ar
   rising linearly to 39% after 4 seconds in the aura. `MonsterDotTaken` applies the same factor to physical damage
   over time. 25% elemental, 20% taunted and 19% Pride: fire 145%, physical 142.8%.
   The player's Intimidate (attack hits) and Unnerve (spell hits) add 10% each to that increase, on hits only
-  ([11](11-skills.md) §12).
+  ([11](11-skills.md) Â§12).
 - `DamageModel.Mitigate(DamagePacket, ...)` applies each type's own capped resistance.
   Incoming hit commands and monster swings share `PlayerHitMitigation` after resistance.
   Righteous Fire keeps the single-value resistance-only DoT path.
@@ -917,7 +917,7 @@ mechanics remain open; source IDs, support lifecycle and parsed contact tests ar
 
 ## 5. Continuous resource updates (2026-10-24)
 
-The client Life handler for S→C 0x1b1 stores the current whole pool value; merely sending the
+The client Life handler for Sâ†’C 0x1b1 stores the current whole pool value; merely sending the
 regeneration stat does not make the visible life value advance between these updates. The former
 250 ms player tick therefore made /god recovery jump by roughly one quarter of maximum life.
 
@@ -962,10 +962,10 @@ recovery prohibition (`no_energy_shield_recharge_or_regeneration`, `cannot_recov
 and other regeneration conversions remain separate work.
 
 Life Recoup joins the same loop. Each monster hit the player takes (after block, mitigation and Fortification, before
-ward, energy shield and life absorb it; dev hits too) starts its own recovery in `RecoupRecovery`: the hit's damage ×
-`damage_taken_goes_to_life_over_4_seconds_%`, plus each type's damage × its own stat
+ward, energy shield and life absorb it; dev hits too) starts its own recovery in `RecoupRecovery`: the hit's damage Ã—
+`damage_taken_goes_to_life_over_4_seconds_%`, plus each type's damage Ã— its own stat
 (`physical_damage_taken_recouped_as_life_%`, `{fire,cold,lightning,chaos}_damage_taken_goes_to_life_over_4_seconds_%`),
-× (1 + `life_recovery_rate_+%`), paid evenly over 4 s (3 s with Nine Lives' `recoup_effects_apply_over_3_seconds_instead`
+Ã— (1 + `life_recovery_rate_+%`), paid evenly over 4 s (3 s with Nine Lives' `recoup_effects_apply_over_3_seconds_instead`
 or `recoup_life_effects_apply_over_3_seconds_instead`). poedb's Recoup page gives the rule ("Only Damage from Hits can be
 Recouped, over 4 seconds following the Hit") and PoB CalcDefence the recovery-rate scaling and the damage it counts.
 `cannot_recover_life` stops it, and death and area loading drop what is left. Damage over time is not recouped.
@@ -982,7 +982,7 @@ The isolated characters' inventories stayed unchanged; this does not verify ever
 Leech coefficients now include general/typed/elemental/attack/spell and qualified hand-local raw sources, including
 the missing physical/chaos ES aliases. Selected skills recompute all 24 coefficient and three recovery-speed
 aliases with their qualified supports. These are overlapping display scopes; do not sum them to compute a hit's
-leech. Combine raw actor/support per-hundred-thousand values before unit conversion. [Skills §14](11-skills.md)
+leech. Combine raw actor/support per-hundred-thousand values before unit conversion. [Skills Â§14](11-skills.md)
 records the pinned source descriptions, real support evidence and the decision to avoid derived-alias feedback.
 The ordinary direct-hit recovery path is now implemented below; publication alone does not certify native formatting.
 
@@ -1026,7 +1026,7 @@ remove matching instances; cannot-recover Life/ES suppress recovery without inve
 
 A kill by the player recovers its "on kill" amounts at once (`KillRecovery`, `RecoverOnKill`), from the ordinary
 death (`MonsterKilled`, including ignite kills) and the projectile commit (`CommitProjectileKill`); a minion's kill
-does not. The flat `base_*_gained_on_enemy_death` plus `*_gained_on_enemy_death_per_level` × character level, and
+does not. The flat `base_*_gained_on_enemy_death` plus `*_gained_on_enemy_death_per_level` Ã— character level, and
 `recover_%_maximum_life_on_kill`, `recover_%_maximum_mana_on_kill`, `maximum_mana_%_gained_on_kill` and
 `recover_energy_shield_%_on_kill` of the maximum pool, are summed and floored per pool, with no recovery-rate
 multiplier (PoB `CalcOffence.lua` "LifeOnKill"). Mana stops at unreserved Mana. The amounts are read when the player
@@ -1205,17 +1205,17 @@ mitigation are composed as described in the [projectile module](../game/projecti
 
 ## 6. Not modelled yet
 
-- Skill and aura Exposure (on-hit Exposure is in §2), full monster armour and specialized damage-taken modifiers; ordinary player Energy Shield and the
-  supported incoming shock path are implemented. The monsters' base resistances are in §4, with penetration.
+- Skill and aura Exposure (on-hit Exposure is in Â§2), full monster armour and specialized damage-taken modifiers; ordinary player Energy Shield and the
+  supported incoming shock path are implemented. The monsters' base resistances are in Â§4, with penetration.
 - Remaining skill-specific increased/more/effectiveness mechanics beyond the documented packet and support paths.
   Weapon-local and character flat ranges retain conversion history and their separate scopes.
-- Outgoing ailments beyond projectile and granted-skill ignite (§3) and chill, freeze and shock: melee/area attack
+- Outgoing ailments beyond projectile and granted-skill ignite (Â§3) and chill, freeze and shock: melee/area attack
   ignite, bleed, poison; alternative ailments (scorch, brittle, sap); the shatter visual and the on-death effects Shatter
   suppresses; bleed movement bonus; poison stacking.
   Supported incoming elemental ailments are bounded by [Gambler](../game/gambler.md#incoming-elemental-ailments).
 - Per-monster damage conversion and monster-specific mitigation.
 - Damage reflection, specialized leech conversions/conditions, conditional gain on hit, and Mana and Energy Shield
-  recoup. Ordinary leech and gain on hit are in §5b, Life Recoup in §5.
+  recoup. Ordinary leech and gain on hit are in Â§5b, Life Recoup in Â§5.
 - Party/minion damage and the full support-gem effect set.
 
 The next support-gem work (#64) can add its effects as packet operations: `Add` for added damage, `Scale` for
@@ -1293,12 +1293,12 @@ The narrow Life/Mana flags and the broad flags compose as described in [11](11-s
 automated cases cover exact native vectors, overlaps, whole-source zero overrides, command resource changes and retained
 item/slot/IR terms; all 4704 fresh full-suite cases pass. Native checks of these new flag inputs remain pending.
 
-Fourteen native controls at actual level 100 (A0–A6 in Standard and Ruthless) bind source `810d98b` to the
+Fourteen native controls at actual level 100 (A0â€“A6 in Standard and Ruthless) bind source `810d98b` to the
 current owned Player and its ordinary resources. The fixed state sequence is ES 103/104/124/135/124/113/135,
 EV 15/16/22/26/22/18/26, and current ES 103/102/103/123/124/113/135 in both modes.
 The fixture supplies a native 100 flat-ES vector, native 1/2 attribute coefficients and an in-range +100 qualifier;
 the historical out-of-range +200 qualifier stays parked throughout the numeric controls.
-After a literal one-ES hit, the six source increases preserve current 102/103/123 within 487–749 ms, below the fixed
+After a literal one-ES hit, the six source increases preserve current 102/103/123 within 487â€“749 ms, below the fixed
 2000 ms recharge-delay boundary. Removing sources from full 135/124 produces fresh pool 2 clamps to 124/113.
 Re-equipping both sources and completing logout/login/Play yields current/max 135 in each mode.
 Each accepted target also has a retained completed local World 0x1b3 call with an in-frame Stats setter, matching
@@ -1311,8 +1311,8 @@ separately and keeps one observer loaded across both modes; no original verdict 
 All fourteen defence3 verdicts were independently reproduced in memory from their frozen inputs and journal prefixes.
 The parent completed with 918 input hashes held; the stopped-child audit checked its distinct 917-file set unchanged.
 Both canonical inventories, exact item/gem IDs, full charges, empty host, saved bar intent, account, probes, stash and
-metadata payloads were preserved apart from both LastPlayed values and Ruthless current Mana 750→655.
-Its native trace shows a 700→650 clamp, higher capacity without refill, then recovery through 654; the later save is 655,
+metadata payloads were preserved apart from both LastPlayed values and Ruthless current Mana 750â†’655.
+Its native trace shows a 700â†’650 clamp, higher capacity without refill, then recovery through 654; the later save is 655,
 without a captured event for that final tick. Only the disposable child was used; normal `data/saves.db` was restored.
 The three live service stderr files are empty, but the Gateway stdout log retains one remote-closure IOException;
 this is not a fault-free-run claim. Earlier automated diagnostic faults above remain separate and preserved.
@@ -1328,13 +1328,13 @@ Aura effect scales and truncates its integer ES/recharge stats first, following 
 Gem quality changes area of effect, not those two stats.
 The existing 30% recharge increase is counted once through the raw aura stats and the shared recharge calculator.
 Toggling the aura updates capacity without healing current ES; removing it clamps current ES to the new maximum.
-See [11](11-skills.md) §13 for source ordering, reference scope and lifecycle checks.
+See [11](11-skills.md) Â§13 for source ordering, reference scope and lifecycle checks.
 The item's tooltip ES is retained even though its character contribution changes to Life.
 The hit-recovery ES guard uses the final pool and published ES values rather than raw equipment bases.
 `local_maximum_energy_shield_+%_if_item_corrupted` is a global ES increase gated by its source item's corruption.
 It affects character ES, including independent global ES, without scaling tooltip ES or converted Life.
 Native application and reload checks passed for the supported conversions, no-ES overrides and corrupted-item
-scaling; see [13](13-items.md) §2 for the verified scope and remaining mechanics.
+scaling; see [13](13-items.md) Â§2 for the verified scope and remaining mechanics.
 
 Character.ot supplies 2000% of maximum per minute: base recharge is one third per second, after a two-second delay.
 Faster start divides the delay by `1 + energy_shield_delay_-%/100`; recharge/regen recovery increases scale their rates.
@@ -1371,6 +1371,68 @@ second (3.7 at 185 ES); that regeneration correctly continues while recharge is 
 control recovered nothing during the recharge delay. See [recovery timing](../re/recovery-timing.md) for evidence and
 measurement limits. Recovery-cadence PR #159 is merged; this change extends its existing recovery loop.
 
+## Damage taken from hits
+
+The player's own stats change a monster's hit in three places (`PlayerDamageTaken`), in PoB `CalcDefence`'s order:
+before any mitigation the damage shift, after resistance and armour max(damage + flat, 0) Ã— the taken multipliers, and
+after ward and energy shield the share mana takes.
+
+The damage shift ("X% of Physical Damage from Hits taken as Fire Damage") comes after the enemy auras' conversion and
+Glacial Wave's less damage. The rules come from the wiki's "Damage taken as" page and PoB's `damageShiftTable`:
+
+- Every shift reads the hit's original amounts at once, so damage shifts only once and in any direction: The Rat Cage's
+  fire taken as physical works next to physical taken as fire.
+- The source keeps max(100 - total, 0)%. A total over 100% is not scaled down, so it adds damage.
+- Each part is mitigated only as its final type: physical taken as fire skips armour.
+- Chill, freeze and shock read the shifted damage taken, so physical taken as cold can chill. Ignite reads the damage
+  dealt, the unshifted hit, so fire taken as physical still ignites on a critical strike.
+- The "from Hits" stats shift hits only. The `hit_and_dot` stats also shift damage over time, which is not read yet.
+- `base_fire_hit_damage_taken_%_as_physical_value_negated` is stored as -10 and shown as 10%.
+
+Then each type taken may be avoided (wiki Avoidance): "X% chance to Avoid Fire Damage from Hits" and the other types',
+plus "... Avoid Damage of each Type from Hits", capped at 75%. Each type rolls once in the packet's order, and a type
+without a chance draws nothing, so the rolls after it keep their order. An avoided type deals nothing, but the hit still
+lands, so when-hit effects happen. An ailment needs damage of a type that can inflict it, so an avoided type inflicts
+none: no chill, freeze or shock, and ignite reads only the dealt damage that lands (`Landed`), so avoided fire cannot
+ignite. Fire taken as physical keeps, for ignite, the share whose physical is not avoided; the wiki does not cover that
+case. Dev hits roll it too, before block.
+
+After mitigation, each type of the hit takes:
+
+- the flat stats, "+X Fire Damage taken from Hits" and the other types', and for physical "... from Attack Hits"
+  (monster hits are attacks), only on a type the hit has;
+- "X% increased Damage taken", the type's own, for an element "Elemental Damage taken", and on a melee hit "Damage
+  taken from Melee Attacks" (a monster attack that is not ranged), added to the shock's increase, as PoB adds them to
+  its `takenInc`;
+- on a blocked hit, its share: "You take X% of Damage from Blocked Hits" and Glancing Blows' 65%, plus "of Elemental
+  Damage" for an element.
+  It is 0 by default and may pass 100%. A blocked hit still applies no ailments (wiki Blocking); Life Recoup reads the
+  share it deals.
+
+Of what is left after ward and energy shield, mana takes its share before Life (wiki "Mana before Life"): Mind Over
+Matter's `keystone_mana_shield`, which has no value (its 40% is the keystone's text), plus
+`base_damage_removed_from_mana_before_life_%` and the type's own share (physical, lightning, chaos), at most 100% for
+each type. The single resource writer retains each actual type through totem redirection, received Focus, Ward and
+ordered energy-shield absorption. Mana reads only the components that remain after those stages, rather than weighting
+their original proportions: physical40 + fire60, Ward10 then ES30 leaves fire60, so physical-only Mana takes0. Shared
+and typed Mana shares add and cap per type; their combined amount rounds up once and is capped by available Mana.
+The physical source is included once. Trial spikes and dev hits use the same writer. Life Recoup observes the mitigated
+blocked share; the existing Mana Recoup separately observes post-Focus/post-Ward damage before ES and defensive Mana.
+Elemental redirection/Focus scaling retains the earlier aggregate rounding, distributing the remainder in
+lightning/cold/fire order; Ward and ES then retain the actual residual types in that order.
+This is an explicit LocalExile rounding policy, not independent client confirmation of every mixed-type boundary.
+
+The dev `/hit`, `/spellhit` and `/blockhit` commands apply the same after-mitigation steps to their one type, and a
+ranged `/hit` now also takes the shock's increase.
+
+Not read: the conditional shift stats (while affected by a Purity, with four influenced items, during a flask), the
+ring-slot local stats, `physical_damage_from_hits_%_taken_as_random_element`, the Divine Flesh and Tempered by War
+keystones (their other effects, bypassing Energy Shield and less resistances, are not modelled), projectile and spell
+damage taken, the increased damage taken on damage over time (ignite ticks, Righteous Fire), and for Mana before Life:
+damage over time, Eldritch Battery's energy shield before it, the Focus and Clarity forms, and Mind Over Matter at
+maximum Power Charges; for avoidance: the per Frenzy Charge, while Phasing and soul gain prevention forms, and
+projectile avoidance.
+
 ## Incoming ordinary elemental ailments
 
 The Gateway's supported monster melee contact now calls `ApplyPlayerAilmentsLocked` after hit mitigation/block.
@@ -1396,13 +1458,13 @@ hit's damage with `MonsterHitDamage` (the target's shock and chill at the hit's 
 `AilmentsOnHitLocked` (`MonsterAilments.cs`) for every hit that landed, a killing one included, so a hit does
 not gain from its own shock. The older `MonsterDamage`, `MonsterTakes*` and `MonsterBurn` without a time leave the
 target's shock and chill out; a new player hit path needs both calls ([Surfcaster](../game/surfcaster.md), Hit paths).
-The damage per type is the resisted packet × the monster's damage taken × the critical multiplier on a critical
+The damage per type is the resisted packet Ã— the monster's damage taken Ã— the critical multiplier on a critical
 strike; the threshold is its maximum life (wiki: equal to it for most monsters). The attacker's stats are
 `CharacterPlayerStats` plus the skill's own, summed through the panel rows (`PanelStats.Of`).
 
 | Ailment | Applied by | Effect | Duration |
 |---|---|---|---|
-| Chill | every hit with cold damage, or another type's that can chill | floor(50 × (cold / threshold)^0.4 × modifiers), at most 30% (40% with Shaper of Winter); none under 5% | 2 s |
+| Chill | every hit with cold damage, or another type's that can chill | floor(50 Ã— (cold / threshold)^0.4 Ã— modifiers), at most 30% (40% with Shaper of Winter); none under 5% | 2 s |
 | Shock | a critical strike, `chance_to_shock_%` or `always_shock`, with lightning damage, or another type's that can shock | the same formula on that damage, at most 50%, 90% with Voltaxic Rift | 2 s |
 | Freeze | a critical strike or `chance_to_freeze_%`, with cold damage, or another type's that can freeze | the monster cannot act | 0.06 s per 1% of the threshold, at most 3 s; none under 0.3 s |
 
@@ -1412,9 +1474,9 @@ attacker's minimums (`chill_minimum_slow_%`, `shock_minimum_damage_taken_increas
 Storms) raise the base before the modifiers (wiki Shock), so a hit too weak for 5% still applies one, but
 only with the ailment's damage. Durations
 take the attacker's `virtual_*_duration_+%` and the monster's `base_self_*_duration_-%` (positive reduces, as on the
-player's jewels) added together, × (1 + (attacker − target) / 100), as PoB `CalcOffence` sums `Enemy…Duration` INC
-and the enemy's `Self…Duration` INC: 50% increased against 50% reduced on itself leaves the base duration. Of the
-Ice carries −80 of the freeze one in 3.29.3b Mods.dat; the wiki's text for it (Modifier:MonsterModResistantToCold) is
+player's jewels) added together, Ã— (1 + (attacker âˆ’ target) / 100), as PoB `CalcOffence` sums `Enemyâ€¦Duration` INC
+and the enemy's `Selfâ€¦Duration` INC: 50% increased against 50% reduced on itself leaves the base duration. Of the
+Ice carries âˆ’80 of the freeze one in 3.29.3b Mods.dat; the wiki's text for it (Modifier:MonsterModResistantToCold) is
 "80% increased Freeze Duration on you", which is that sign. `immune_to_*`, `cannot_be_*` and `base_cannot_be_*` on the
 monster's stats block each kind. On the attacker's side `MonsterElementalAilments.CannotInflict` stops them:
 Elemental Focus's `cannot_inflict_status_ailments` (poedb: "Supported Skills cannot inflict Elemental Ailments") and
@@ -1426,7 +1488,7 @@ hit that inflicts an elemental ailment counts as killing an affected enemy); it 
 
 - **Shock** adds to the mods' `base_damage_taken_+%` (PoB DamageTaken INC), before a spell's less damage taken, on
   the player's hits and Righteous Fire's burn (`MonsterDamageTaken`).
-- **Chill** divides the monster's attack time (`BusyUntil`, the swing's contact delay) by 1 − chill and re-times the
+- **Chill** divides the monster's attack time (`BusyUntil`, the swing's contact delay) by 1 âˆ’ chill and re-times the
   server's walk by the same factor.
 - **Freeze** stops its walk, chase and swings; a freeze that lands during a swing cancels it at contact.
 - Unstoppable (`action_speed_cannot_be_reduced_below_base`, `movement_speed_cannot_be_reduced_below_base`) keeps both
@@ -1444,7 +1506,7 @@ hit that inflicts an elemental ailment counts as killing an affected enemy); it 
   `always_shock` ("Hits always Shock", Shaper of Storms) shocks without the chance roll, so it draws no random number.
 - **As though dealing more damage.** "Shock/Chill/Freeze Enemies as though dealing X% more Damage" multiplies the
   damage the chill's and shock's magnitude and the freeze's duration read by 1 + X/100 per stat (PoB `CalcOffence`:
-  the ailment's damage × `<Ailment>AsThoughDealing` MORE). The stats read: Overcharge's
+  the ailment's damage Ã— `<Ailment>AsThoughDealing` MORE). The stats read: Overcharge's
   `support_pure_shock_shock_as_though_damage_+%_final`, the skills' `active_skill_shock_as_though_damage_+%_final`,
   `active_skill_chill_as_though_damage_+%_final`, `freeze_as_though_dealt_damage_+%` and Ice Nova's
   `ice_nova_freeze_as_though_damage_+%_final`, the Maven helmet mods `helmet_mod_shock/freeze_as_though_damage_+%_final`,
@@ -1461,7 +1523,7 @@ hit that inflicts an elemental ailment counts as killing an affected enemy); it 
   `..._deal_damage_lessened_by_chill_effect` as they were when it landed. While such a chill lasts, the monster takes
   increased damage by its strongest chill (any source, wiki Glacial Wave), added to shock and the mods' damage taken
   (PoB DamageTaken INC), and its swings deal less by half of it: `MonsterSwing` scales the rolled hit by
-  1 − chill / 200 after the monster mods and before the player's mitigation (PoB Damage MORE −chill / 2). Less damage
+  1 âˆ’ chill / 200 after the monster mods and before the player's mitigation (PoB Damage MORE âˆ’chill / 2). Less damage
   covers all of its damage, so the base its critical strike's ignite on the player starts from is scaled the same.
 - **Freeze minimum.** `freeze_minimum_duration_X_ms` (Brine Bound, 1000) lifts any freeze the attacker inflicts that
   passed the 0.3 s threshold to at least that long; no duration modifier changes the minimum (wiki Brine Bound).
@@ -1517,7 +1579,7 @@ hit that inflicts an elemental ailment counts as killing an affected enemy); it 
   `spread_freeze_to_nearby_enemies`, `gloves_freeze_proliferation_radius` (19 mods), the ascendancy's and
   `amulet_freeze_proliferation_radius`. Chill (`0x142828c00`): the elemental aura radius and the ascendancy's.
   Nothing else in the client reads the three radii. The calculators scale none of them by area of effect; the server
-  grows the radius by the area modifier like a skill's area (`SpreadRadius`: × the square root of
+  grows the radius by the area modifier like a skill's area (`SpreadRadius`: Ã— the square root of
   `SkillArea.Modifier`, truncated to two places), because the wiki's Elemental proliferation page says modifiers to
   area of effect affect proliferation. A hit's ailments use the hitting skill's area stats over the player's; a
   kill's shock, a block's chill or shock and Brine Bound's freeze use the player's own. Whether the game scales
@@ -1533,7 +1595,7 @@ hit that inflicts an elemental ailment counts as killing an affected enemy); it 
   spreading from the player. A shattered monster spreads nothing.
 
 Presentation runs on the AI tick (`MonsterAilmentChangesLocked`), so with `/ai off` the server still applies the
-effects but sends nothing, and nothing spreads. A kind is re-sent only when its strongest magnitude changes: S→C
+effects but sends nothing, and nothing spreads. A kind is re-sent only when its strongest magnitude changes: Sâ†’C
 0x1c2 for the old buff, then 0x1c1 with BuffDefinitions 1 chilled, 2 frozen or 3 shocked (BuffVisuals 3, 4, 5), the
 player as source. Chill and shock have no duration; freeze carries its remaining time (flag 0x02, f32 +0x68), because
 without a duration or a value the client draws no icon under the monster's life bar (live 2026-10-30). Each kind always uses the same instance on its monster, 0xfffd, 0xfffe or 0xffff
@@ -1541,13 +1603,13 @@ without a duration or a value the client draws no icon under the monster's life 
 one, `0x141e11fb0` removes by instance, both skip one already being removed), and the connection's `NextBuff` wraps
 back to 1 below that range, so ailment changes take none of its instances and cannot meet another buff's. 0x1c2
 removes a buff at expiry, so a pause cannot desync it. All three rows have the +0xff bool, so 0x1c1 carries a u16 at
-+0x82 ([11](11-skills.md) §12); chilled and shocked are `IsRecovery` and carry their one GrantedStats value
++0x82 ([11](11-skills.md) Â§12); chilled and shocked are `IsRecovery` and carry their one GrantedStats value
 (`action_speed_-%_from_chill`, `base_damage_taken_+%_from_shock`), the magnitude. The buff shows that value increased
 by +0x82 percent (15 with +0x82 15 showed 17%, live 2026-11-03), so the Gateway sends 0 there. The player's own
 chill, freeze and shock use the same rows and instances on the player
-(`PlayerAilmentBuffs`, sent by the player tick when its ailments change), so they show in the buff bar. The chill is also sent as 0x1b3 `virtual_action_speed_+%` (−chill), which the native
-walk `0x141e7c0b0` and the action clips read; network stats run no calculators ([04](04-player-entity.md) §4.1a). A
-freeze is not sent there (−100 would divide the native clip by zero); the server stops the monster instead.
+(`PlayerAilmentBuffs`, sent by the player tick when its ailments change), so they show in the buff bar. The chill is also sent as 0x1b3 `virtual_action_speed_+%` (âˆ’chill), which the native
+walk `0x141e7c0b0` and the action clips read; network stats run no calculators ([04](04-player-entity.md) Â§4.1a). A
+freeze is not sent there (âˆ’100 would divide the native clip by zero); the server stops the monster instead.
 
 Not modelled: the shatter visual, unique and boss thresholds and their reduced effects, immunities from the monster's
 variety (.ot), Glacial Wave's chill reflected onto the player by Mirrored (wiki: it then acts on the player too), and the
