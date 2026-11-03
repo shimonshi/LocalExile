@@ -174,8 +174,9 @@ static partial class Game
         if (!plan.CanHit) return (DamagePacket.Empty, DamagePacket.Empty, stats, context);
         var conversion = DamageStats.Conversion(stats, Stats, attack: false);
         double effectiveness = AddedEffectiveness(conn, effect, level);
-        var hit = SpellDamage.Packet(plan.SpellBase, Get, effectiveness).Convert(conversion);
-        var flat = DamageStats.RawAdded(plan.SpellBase, Get, spell: true, effectiveness: effectiveness).Convert(conversion);
+        var spellBase = plan.SpellBase.Add(InquisitorOffense.WeaponDamage(InquisitorMainHand(conn), Get).Scale(effectiveness));
+        var hit = SpellDamage.Packet(spellBase, Get, effectiveness).Convert(conversion);
+        var flat = DamageStats.RawAdded(spellBase, Get, spell: true, effectiveness: effectiveness).Convert(conversion);
         return (context.Hit(hit), flat, stats, context);
     }
 
@@ -236,7 +237,8 @@ static partial class Game
             double igniteMore = ChargeDamageMore(merged);
             var pen = Penetration.Of(player, Stats, attack: false, own);
             var mods = HitResistMods(player, own);
-            int baseChance = (SkillsFor(conn).SpellCritChance(skill.Effect, skill.Level) ?? 0) + Own("additional_base_critical_strike_chance");
+            int baseChance = InquisitorOffense.SpellBase(SkillsFor(conn).SpellCritChance(skill.Effect, skill.Level),
+                InquisitorLocalCritical(conn), Player) ?? 0;
             int chance = SpellCriticalStrike.Chance(baseChance, Player, Own, conn.Pools.SpellCriticalStrikeChancePct);
             int? vsBlinded = Player(VsBlindedCriticalStat) is not 0 and var extra
                 ? SpellCriticalStrike.Chance(baseChance, Player, Own, conn.Pools.SpellCriticalStrikeChancePct + (long)extra) : null;
@@ -258,7 +260,7 @@ static partial class Game
                 var rolled = (gambler with { DamageMorePct = 0 }).ForSkill(Own, spell: true).RollOutgoingHit(hit, Random.Shared);
                 bool critical = RollCriticalStrike(conn, CriticalChanceOn(conn, id, chance, vsBlinded, vsProfane), own, attack: false);
                 double hitAt = ProjectileWorldTime(conn);
-                var (damage, _, mitigated) = MonsterHitDamage(m, rolled, critical, attack: false, hitAt, mods, pen,
+                var (damage, _, mitigated) = MonsterHitDamage(conn, m, rolled, critical, attack: false, hitAt, mods, pen,
                     gambler.InvertsResistance(Random.Shared));
                 if (critical) damage = DamageModel.CriticalDamage(damage, CriticalMultiplierOn(m, multiplier));
                 var applied = ApplyMonsterHitLocked(conn, m, damage);

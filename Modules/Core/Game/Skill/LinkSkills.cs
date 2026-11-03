@@ -64,6 +64,7 @@ static partial class Game
                 SourceBuff = conn.NextBuff++, TargetBuff = conn.NextBuff++,
             };
             conn.Links.Add(link);
+            InquisitorAcceptedUse(conn, gem.Effect);
             uint duration = BitConverter.SingleToUInt32Bits((float)seconds);
             bytes.AddRange(InstanceEntities.AddBuff(PlayerId, link.SourceBuff, rows.Source, PlayerId, skillId, u68: duration));
             bytes.AddRange(InstanceEntities.AddBuff(target, link.TargetBuff, rows.Target, PlayerId, skillId, u68: duration));

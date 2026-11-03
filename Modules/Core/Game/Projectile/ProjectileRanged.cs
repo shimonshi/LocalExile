@@ -47,7 +47,7 @@ static partial class Game
                 var captured = OrdinaryRangedShot.Capture(WeaponFor(conn), character, SkillsFor(conn).EffectStats(effect, 1), Stats,
                     PlayerAccuracy(conn, character), criticalChance, conn.Pools.CriticalStrikeMultiplier);
                 bool wand = projectileId == OrdinaryRangedAttack.Wand;
-                var shot = new ProjectileOffense(captured.Hit, false, captured.Accuracy, captured.CriticalChance,
+                var shot = new ProjectileOffense(captured.Hit.Scale(InquisitorRead(conn, character).AttackDamageFactor), false, captured.Accuracy, captured.CriticalChance,
                     captured.CriticalMultiplier, wand ? "ordinary wand" : "ordinary bow")
                 { SkillStats = SkillsFor(conn).EffectStats(effect, 1).ToDictionary(s => s.Item1, s => s.Item2),
                     VsBlindedCriticalChance = AttackCriticalChanceVsBlinded(conn, character, release: true),

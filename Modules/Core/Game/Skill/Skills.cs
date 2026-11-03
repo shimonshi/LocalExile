@@ -116,7 +116,8 @@ static partial class Game
     internal static List<(uint, int)> WeaponStats(ClientState conn, SkillCatalog.Unarmed weapon, IReadOnlyDictionary<uint, int> stats)
     {
         var conversion = DamageStats.Conversion(stats, Stats, attack: true);
-        var mainHit = AttackHitConverted(weapon, stats, MeleeAttack(conn), conversion);
+        double inquisitorMore = InquisitorRead(conn, stats).AttackDamageFactor;
+        var mainHit = AttackHitConverted(weapon, stats, MeleeAttack(conn), conversion).Scale(inquisitorMore);
         var accuracy = OrdinaryAccuracy(conn, stats, weapon.LocalSources);
         double damageFactor = CriticalStrikePolicy.DamageFactor(CriticalProhibitedBy(stats, attack: true, own: null)
             ? 0 : conn.Pools.AttackCriticalStrikeChance, AttackCriticalMultiplier(conn, stats), CriticalExtraRollsFor(conn, stats),
@@ -125,7 +126,7 @@ static partial class Game
         AddHand(mainHit, "main_hand");
         if (OffhandWeaponFor(conn) is { } off)
         {
-            var offHit = AttackHitConverted(off, stats, MeleeAttack(conn), conversion);
+            var offHit = AttackHitConverted(off, stats, MeleeAttack(conn), conversion).Scale(inquisitorMore);
             list.AddRange(off.OffStats(stats, offHit));
             AddHand(offHit, "off_hand");
             // The hands alternate: the panel's per-use, per-second and attacks-per-second rows average both, each hand
@@ -206,6 +207,11 @@ static partial class Game
         var devSet = rawOverrides.Keys.ToHashSet();
         foreach (var (k, v) in BaseStats(conn)) stats.TryAdd(k, v);
         EnsureFortificationPools(conn);
+        int ProvidenceSource(string name) => Stats.Key(name) is uint key ? stats.GetValueOrDefault(key) : 0;
+        if (Stats.Key("critical_strike_chance_+%") is uint providenceKey)
+            stats[providenceKey] = (int)Math.Clamp((long)stats.GetValueOrDefault(providenceKey)
+                + InquisitorProvidence(ProvidenceSource, conn.Pools.Strength, conn.Pools.Intelligence), int.MinValue, int.MaxValue);
+        InquisitorApplyCurrent(conn, stats);
         // The overcapped lightning resistance's increased crit (PoolsFor derived it once into Pools): the spell
         // consumers read the raw increased stats here (SpellCriticalStrike), while the attack and panel chances
         // already fold the same value into the pools. Additive with whatever won above, as a derived stat source.
@@ -220,6 +226,7 @@ static partial class Game
         stats[StatKeys.MainHandAttackSpeedPct] = conn.Pools.AttackSpeedPct + devAttackSpeed;
         // The utility flasks' plain stats (UtilityFlasks.RawStats: maximum resistances, crit, damage, cast speed), with
         // Mageblood's permanent flasks deduplicated against the running ones, plus the flask grounds.
+        InquisitorGroundSources(conn, stats);
         int FlaskGet(string name) => Stats.Key(name) is uint k ? stats.GetValueOrDefault(k) : 0;
         UtilityFlasks.AddRawStats(stats, UtilityStats(conn, FlaskGet)
             .Concat(conn.FlaskGrounds.PlayerStats(FlaskGet("consecrated_ground_effect_+%"))), Stats);
@@ -257,6 +264,7 @@ static partial class Game
                 stats[regen] = (int)Math.Clamp((long)stats.GetValueOrDefault(regen)
                     + value.LifeRegenerationPerMinutePercent(session.RegenPerStack), int.MinValue, int.MaxValue);
         }
+        InquisitorRecoverySources(conn, Get);
         var (_, lifeRegenerationToEnergyShield) = PanelStats.LifeRegeneration(Get, conn.Pools.Life);
         var (mainLocal, offLocal) = HandLocalStats(conn);
         // Capture only for a skill publication. Recovery-only callers avoid these extra immutable copies.
@@ -471,6 +479,11 @@ static partial class Game
             int level = supported.Level;
             var own = supported.Stats;
             var stats = MergeSkillStats(playerStats, own);
+            var fanatic = InquisitorModifiers(conn, effect, stats);
+            if (Stats.Key("mana_cost") is uint costKey && stats.TryGetValue(costKey, out int costBasis))
+                stats[costKey] = InquisitorSkillCost(own.GetValueOrDefault(costKey), playerStats, fanatic);
+            if (Stats.Key("spell_area_of_effect_+%") is uint fanaticAreaKey)
+                stats[fanaticAreaKey] = stats.GetValueOrDefault(fanaticAreaKey) + fanatic.AreaIncreasePct;
             // A shield attack swings the shield in the off hand, which OffStats leaves out (not a weapon): the client then
             // read off_hand_total_base_weapon_attack_duration_ms 0, and Shield Charge's end-of-charge attack never finished
             // (Frida 2026-11-01, 11-skills.md "Shield Charge"). Its base time is the gem's own AttackTime.

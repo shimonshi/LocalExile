@@ -47,6 +47,8 @@ Items keep the Roadmap's priority groups, and are in rough priority order within
   Slayer/Deadeye hit, leech and owner Gale hooks have a [private candidate](../docs/game/ordinary-slayer-deadeye-migration.md).
   Complete mark/Mirage actors and remaining lifecycle adapters before claiming whole-class gameplay.
   **Next:** parent integrates its shared hooks after actual #333 and #339, then verifies the combined client behavior.
+  Ordinary Inquisitor has a [private wired integration](../docs/game/inquisitor-candidate.md).
+  **Next:** parent reconciles final Harbinger and actual #333/#339 heads, then verifies the combined native checklist.
 - **Known:** Antiquarian's complete supported node consumers and three legal builds have native acceptance (#98).
   Whaletooth scales actual Enduring Cry recovery; paid refunds, transient effects and durable class progress pass.
   See [Status](../status/progression.md) and the [model/evidence audit](../docs/game/antiquarian.md).

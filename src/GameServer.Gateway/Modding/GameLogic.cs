@@ -6,6 +6,7 @@ using GameServer.Modding;
 /// connections, the state and the saves, and the module the rules. Agents/docs/dev/modules.md.</summary>
 interface IGameLogic
 {
+    void ObservePlayerMotion(ClientState conn, double at, bool after) { }
     /// <summary>Claim this already active area's player updates after entry or game replacement.</summary>
     void ResumePlayerUpdates(ClientState conn) { }
     /// <summary>One read's client messages, in order, on the connection's handler task.</summary>
