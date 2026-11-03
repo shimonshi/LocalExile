@@ -39,5 +39,3 @@ Slayer's full shared leech cap, instant/ES/Mana recovery, bleed and DoT/proxy pr
 Deadeye's full native peer, equipment-removal, projectile inventory and finite Mark death-transfer timing
 matrix remains partial, as does complete Ruthless coverage.
 Bounded client controls do not establish whole-class or official-server parity.
-Exact ordered revisions, automated checks and client receipts are recorded in
-[PR #2](https://github.com/shimonshi/LocalExile/pull/2).
