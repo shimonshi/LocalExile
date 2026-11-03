@@ -305,6 +305,7 @@ static partial class Game
         var own = skillId == 0 ? new Dictionary<uint, int>() : SupportedSkill(conn, skillId).Stats;
         var player = CharacterPlayerStats(conn);
         int speed = CastSpeedPct(player);
+        if (MarkCatalog.Find(effect) is not null) speed += MarkStat(MergeSkillStats(player, own), "mark_skill_cast_speed_+%");
         if (Stats.Key("base_cast_speed_+%") is uint k) speed += own.GetValueOrDefault(k);
         speed = FinalCastSpeedPct(conn, MergeSkillStats(player, own), speed);
         if (SpellCastTiming.ForSkill(SkillsFor(conn), effect, speed)?.DurationMilliseconds is not int duration) return null;

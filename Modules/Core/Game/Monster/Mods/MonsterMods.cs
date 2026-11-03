@@ -92,21 +92,22 @@ static partial class Game
     /// chill, the Intimidate or Unnerve on it at <paramref name="now"/>; without a time those do not count). Blocking is rolled before
     /// (<see cref="MonsterBlocks"/>).
     /// </summary>
-    internal static int MonsterTakesMitigated(SpawnedMonster m, DamagePacket mitigated, bool spell, double now = double.NaN)
+    internal static int MonsterTakesMitigated(SpawnedMonster m, DamagePacket mitigated, bool spell, double now = double.NaN,
+        int increasedTaken = 0, int physicalReduction = 0)
     {
         var e = m.Mods.Effects;
         double physical = mitigated[DamageType.Physical].Min;
-        double physicalTaken = physical * Math.Max(0, 1 - e.PhysicalReduction / 100.0);
+        double physicalTaken = physical * Math.Max(0, 1 - (e.PhysicalReduction + physicalReduction) / 100.0);
         double total = mitigated.MinTotal - physical + physicalTaken;
         // The player's debuffs on it add to its own increased damage taken (MonsterDamageTaken): his enemy auras' elemental
         // increase on fire, cold and lightning only, his Withered on chaos only, and Pride's more Physical Damage on the
         // physical part.
-        double factor = MonsterDamageTaken(m, spell, now, hit: true);
+        double factor = MonsterDamageTaken(m, spell, now, hit: true, increasedTaken: increasedTaken);
         double withered = m.Withered.Count == 0 ? 0
-            : mitigated[DamageType.Chaos].Min * (MonsterDamageTaken(m, spell, now, hit: true, chaos: true) - factor);
+            : mitigated[DamageType.Chaos].Min * (MonsterDamageTaken(m, spell, now, hit: true, chaos: true, increasedTaken: increasedTaken) - factor);
         double elementalDamage = mitigated[DamageType.Fire].Min + mitigated[DamageType.Cold].Min + mitigated[DamageType.Lightning].Min;
         double elementalFactor = m.TakenFromPlayer.Elemental == 0 ? factor
-            : MonsterDamageTaken(m, spell, now, elemental: true, hit: true);
+            : MonsterDamageTaken(m, spell, now, elemental: true, hit: true, increasedTaken: increasedTaken);
         double physicalFactor = 1 + Math.Max(0, m.PridePhysicalMore) / 100.0;
         return (int)Math.Round((total - elementalDamage) * factor + elementalDamage * elementalFactor + withered
             + physicalTaken * factor * (physicalFactor - 1));

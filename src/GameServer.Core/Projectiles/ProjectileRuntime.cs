@@ -237,6 +237,8 @@ public sealed partial class ProjectileRuntime(IProjectileWorld world)
         if (c.Interaction is { } interaction) { Interact(p, interaction, actors); return; }
         if (c.Target is { } target)
         {
+            int previousSplit = p.Split;
+            if (!p.Profile.CannotSplit) p.Split = Math.Max(p.Split, world.TargetSplit(p, target.Key));
             p.Contacts.Add(target.Key);
             if (p.Phase > 0) p.ReturnContacts++;
             else p.OutboundContacts++;
@@ -244,7 +246,7 @@ public sealed partial class ProjectileRuntime(IProjectileWorld world)
                 && !CanContinue(p, actors) && ReturnAnchor(p, ProjectileEndReason.Enemy) is null ? endArea : null;
             var result = Damage(p, target, terminal?.Stage ?? "direct", multiplier: terminal?.Multiplier ?? 1,
                 admissionStage: "direct", isArea: terminal is not null);
-            if (result == ProjectileHitResult.Miss) return;
+            if (result == ProjectileHitResult.Miss) { p.Split = previousSplit; return; }
             if ((p.Phase == 0 || p.Profile.ContactAreaOnReturn) && p.Profile.ContactArea is { } area)
                 Area(p, area, area.ExcludeContactTarget ? target.Key : null);
             if (result == ProjectileHitResult.Hit && p.Profile.ContactTargets is { } strikes)

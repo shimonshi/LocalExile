@@ -243,6 +243,8 @@ static partial class Game
         {
             // Child stages and release specialization can introduce areas after this root is resolved.
             AreaHit = SupportedProjectileHit(conn, skillId, area: true),
+            MarkSource = CaptureMarkHitSource(conn, skillId, false),
+            MarkAreaSource = CaptureMarkHitSource(conn, skillId, true),
             VsBlindedCriticalChance = SupportedCriticalChanceVsBlinded(conn, skillId, release: true),
             VsProfaneCriticalChance = SupportedCriticalChanceVsProfane(conn, skillId, release: true),
             Effect = gem.Effect, Level = gem.Level, Quality = gem.Quality,

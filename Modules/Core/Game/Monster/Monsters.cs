@@ -776,7 +776,7 @@ static partial class Game
                     if (!MonsterPresent(conn, id, m) || conn.Paused) return null;
                     checkedAtGate = true;
                     double now = conn.Clock.Elapsed.TotalSeconds;
-                    if (HitReaction.TryFlinch(m, damage, now, Random.Shared) is not { } clip) return null;
+                    if (MarkFlinch(conn, m, damage, now, Random.Shared) is not { } clip) return null;
                     float seconds = (float)(m.FlinchUntil - now);
                     if (log) Console.WriteLine($"[gateway] {remote} => 0x01d1 monster 0x{id:x} TakeHit recovery {seconds:0.000} s " +
                         $"(clip profile {clip.Index}), action {m.ActionGeneration}, recovery until {m.FlinchUntil:0.000}");
@@ -991,7 +991,7 @@ static partial class Game
         int damage = 0, chaosDamage = 0, physicalDamage = 0;
         var ailmentTaken = DamagePacket.Empty;
         double shockFactor = conn.ElementalAilments.DamageTakenFactor(now, DamageTakenFromBlindedPct(conn, id, stats) + StatOf("damage_taken_+%"))
-            * OrdinaryIncomingHit(conn, stats, now);
+            * OrdinaryIncomingHit(conn, stats, now) * MarkIncoming(conn, id, m, stats);
         foreach (var (type, range) in mitigated.Components)
         {
             int value = immune.Contains(type) ? 0 : (int)Math.Round(range.Min);

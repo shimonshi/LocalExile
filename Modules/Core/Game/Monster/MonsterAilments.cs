@@ -11,10 +11,10 @@ static partial class Game
     /// Withered on <paramref name="chaos"/> damage), added together (PoB DamageTaken, ElementalDamageTaken and
     /// ChaosDamageTaken INC), then a spell's less damage taken.</summary>
     internal static double MonsterDamageTaken(SpawnedMonster m, bool spell, double now, bool elemental = false, bool hit = false,
-        bool chaos = false) =>
+        bool chaos = false, int increasedTaken = 0) =>
         m.Mods.Effects.DamageTaken(spell, m.Ailments.Magnitude(Kind.Shock, now) + m.Ailments.ChillDamageTakenPct(now)
             + m.TakenFromPlayer.All + (elemental ? m.TakenFromPlayer.Elemental : 0) + (hit ? HitDebuffTaken(m, spell, now) : 0)
-            + (chaos ? WitheredTaken(m, now) : 0));
+            + (chaos ? WitheredTaken(m, now) : 0) + increasedTaken);
 
     /// <summary>Within the Tempest (enemy_shock_on_kill): a monster the player just killed (its life reached 0 from a hit
     /// or Righteous Fire) is shocked through the player's modifiers, and its corpse spreads that shock by the player's own

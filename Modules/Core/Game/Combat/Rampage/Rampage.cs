@@ -38,6 +38,7 @@ static partial class Game
         {
             RampageOnKillLocked(conn, m, rampageSource, player);
             CommitOrdinaryKillLocked(conn, m, player);
+            MarkDeath(conn, m);
         }
         return result;
     }

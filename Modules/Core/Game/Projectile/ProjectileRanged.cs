@@ -50,6 +50,7 @@ static partial class Game
                 var shot = new ProjectileOffense(captured.Hit, false, captured.Accuracy, captured.CriticalChance,
                     captured.CriticalMultiplier, wand ? "ordinary wand" : "ordinary bow")
                 { SkillStats = SkillsFor(conn).EffectStats(effect, 1).ToDictionary(s => s.Item1, s => s.Item2),
+                    MarkSource = CaptureOrdinaryMarkHitSource(conn, false),
                     VsBlindedCriticalChance = AttackCriticalChanceVsBlinded(conn, character, release: true),
                     VsProfaneCriticalChance = AttackCriticalChanceVsProfane(conn, character, release: true),
                     Penetration = captured.Penetration, ResistanceMods = captured.ResistanceMods, ImpaleChance = captured.ImpaleChance,

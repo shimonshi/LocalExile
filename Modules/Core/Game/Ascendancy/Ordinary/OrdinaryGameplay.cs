@@ -81,6 +81,7 @@ static partial class Game
 
     internal static void ClearOrdinary(ClientState conn)
     {
+        MarkSessions.Remove(conn);
         OrdinarySessions.Remove(conn); conn.OrdinaryResidualPayload = null;
     }
 
@@ -143,7 +144,7 @@ static partial class Game
             if (state.Gale.Tailwind) bytes.AddRange(InstanceEntities.AddBuff(PlayerId, conn.OrdinaryTailwindBuff, 1094, PlayerId));
         }
         conn.OrdinaryResidualPayload = state.Capture(now);
-        return [.. bytes];
+        return [.. bytes, .. MarkPresentation(conn)];
     }
 
     internal static void CommitOrdinaryKillLocked(ClientState conn, SpawnedMonster target,
@@ -170,7 +171,7 @@ static partial class Game
     internal static MonsterIgnites.Settings OrdinaryIgniteAt(ClientState conn, SpawnedMonster target,
         ProjectileOffense release, double distance, IReadOnlyDictionary<uint, int> player)
     {
-        var ignite = release.OrdinaryDistance.IgniteAt(release.Ignite, distance);
+        var ignite = release.OrdinaryDistance.IgniteAt(MarkIgnite(conn, target, release.Ignite, release.MarkSource), distance);
         double more = OrdinaryTargetMore(conn, target, player);
         return ignite with { Min = ignite.Min * more, Max = ignite.Max * more,
             CriticalMin = ignite.CriticalMin * more, CriticalMax = ignite.CriticalMax * more };

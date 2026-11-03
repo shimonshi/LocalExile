@@ -36,6 +36,103 @@ public sealed partial class WhispererRuntimeTests
         Assert.Equal(1, Game.CaptureGemProjectile(c, session, gem.Id, gem, (170, 100),
             Game.CaptureSkillCriticalRoll(c, gem.Id)).Payload is ProjectileOffense next
                 ? next.OrdinaryDistance.HitMultiplier(70, false) : 0);
+        MarkGameplayTransactions(h);
+    }
+
+    static void MarkGameplayTransactions(Harness h)
+    {
+        var c = h.Conn;
+        var runtime = Game.ProjectilesFor("marks", h.Wire, h.Ciphers, c).Runtime;
+        void Advance(double seconds) { h.Time.At += seconds; runtime.AdvanceTo((long)(h.Time.At * 120000)); }
+        c.PlayerStats[Key("virtual_dexterity_for_requirements")] = 1000;
+        c.PlayerStats[Key("virtual_strength_for_requirements")] = 1000;
+        var target = new SpawnedMonster("mark", new(105, 100, 0), 0, 0, 1000) { Hostile = true };
+        var nearby = new SpawnedMonster("nearby", new(110, 100, 0), 0, 0, 1000) { Hostile = true };
+        c.Monsters[42] = target; c.Monsters[43] = nearby;
+        foreach (var metadata in Game.MarkCatalog.All)
+        {
+            c.PlayerStats.Remove(Key(DeadeyeMarkRules.NearbyTaken));
+            c.PlayerStats.Remove(Key(DeadeyeMarkRules.MarkedTaken));
+            var type = Program.Items.All.Single(t => Program.Items.Gem(t) is { IsSupport: false } g
+                && g.Variants.Any(v => v.Effect == metadata.Effect));
+            foreach (var old in h.Items.Items(PlayerInventories.Weapon1).ToArray()) h.Items.Remove(PlayerInventories.Weapon1, old.Id);
+            h.Items.Add(PlayerInventories.Weapon1, 0, 0, ItemCatalog.Create(Program.Items.Find("Driftwood Wand")!) with
+                { Sockets = [new(SocketColour.White, ItemCatalog.Create(type))], Links = [1] });
+            var skill = Game.GemSkillEffects(c).Single(g => g.Effect == metadata.Effect);
+            bool Cast(uint id) => Game.CastGemSkill("marks", h.Wire, h.Ciphers, c, skill.Id,
+                (100, 100), (105, 100), id).GetAwaiter().GetResult();
+            c.PlayerMana = 1000; uint before = c.PlayerMana;
+            Assert.False(Cast(0)); Assert.Equal(before, c.PlayerMana);
+            c.Monsters[44] = new("friendly", new(105, 100, 0), 0, 0, 1000) { Hostile = false }; Assert.False(Cast(44));
+            c.PlayerMana = 0; Assert.False(Cast(42)); Assert.Null(Game.MarksOf(c).Pending);
+            c.PlayerMana = before;
+            Assert.True(Cast(42)); uint paid = c.PlayerMana; Assert.True(paid < before);
+            Assert.False(Cast(42)); Assert.Equal(paid, c.PlayerMana);
+            Advance(2);
+            var mark = Assert.IsType<Game.MarkTarget>(Game.CurrentMark(c));
+            Assert.Equal(42u, mark.Id); Assert.True(double.IsPositiveInfinity(mark.Clock.Remaining));
+            Assert.NotEmpty(Game.MarkPresentation(c)); Assert.Empty(Game.MarkPresentation(c));
+            c.PlayerStats[Key("curse_effect_+%")] = 50;
+            foreach (uint key in metadata.BuffKeys)
+            {
+                string name = Program.Stats.Name(key)!;
+                int own = Game.SupportedSkill(c, skill.Id).Stats.GetValueOrDefault(key);
+                Assert.Equal((int)Math.Truncate(own * 1.5), Game.MarkAmount(c, mark, name));
+            }
+            c.PlayerStats.Remove(Key("curse_effect_+%"));
+            foreach (bool ruthless in new[] { false, true })
+            {
+                c.LeagueModule = new(new League("marks", "Standard", false, false)
+                    { DataSet = ruthless ? "HardMode" : null }, new HashSet<string>(["Game"]));
+                c.MainAscendancy = new(h.Definition.Identity, [5443], []); c.StatSourcesCacheState = null;
+                var focal = Game.CharacterPlayerStats(c);
+                Assert.Equal(ruthless ? 1.1 : .75, Game.MarkIncoming(c, 43, nearby, focal), 8);
+                Assert.Equal(ruthless ? .8 : 1, Game.MarkIncoming(c, 42, target, focal), 8);
+                Assert.Equal(ruthless ? 0 : 75, focal.GetValueOrDefault(Key("mark_skills_curse_effect_+%")));
+                // The actual incoming writer consumes Focal before typed resource routing and block handling.
+                c.Pools = c.Pools with { Life = 1000, Armour = 0, Evasion = 0, BlockChance = 0 };
+                c.PlayerLife = 1000; c.Ward.SetMaximum(0); c.EnergyShield.SetMaximum(0, false);
+                c.IncomingHitRandom = new HighDraw();
+                var attack = new MonsterAttack(0x102, .4, 10, DamagePacket.Of(DamageType.Physical, 100, 100));
+                var incoming = Game.CommitMonsterHitLocked("marks", c, 43, nearby, attack,
+                    c.Clock.Elapsed.TotalSeconds, (100, 100), (110, 100), false)!;
+                Assert.Equal(ruthless ? 890u : 925u, incoming.Life);
+                c.MainAscendancy = new(h.Definition.Identity, [], []); c.StatSourcesCacheState = null;
+                Assert.Equal(1, Game.MarkIncoming(c, 43, nearby, Game.CharacterPlayerStats(c)));
+                Assert.Same(mark, Game.CurrentMark(c)); // Focal refund does not remove an independently paid mark.
+            }
+            c.LeagueModule = new(new League("Standard", "Standard", false, false), new HashSet<string>(["Game"]));
+            c.StatSourcesCacheState = null;
+            c.PlayerStats[Key(DeadeyeMarkRules.NearbyTaken)] = -25;
+            c.PlayerStats[Key(DeadeyeMarkRules.MarkedTaken)] = -10;
+            var stats = Game.CharacterPlayerStats(c);
+            Assert.Equal(.75, Game.MarkIncoming(c, 43, nearby, stats), 8);
+            Assert.Equal(1, Game.MarkIncoming(c, 42, target, stats), 8); // Standard excludes marked attacker.
+            nearby.Walk.Teleport(200, 100, h.Time.At);
+            Assert.Equal(1, Game.MarkIncoming(c, 43, nearby, stats));
+            nearby.Walk.Teleport(110, 100, h.Time.At);
+            c.PlayerStats[Key("your_marks_transfer_to_nearby_enemies_on_death_%_chance")] = 100;
+            var clock = new OrdinaryEffectClock(10, h.Time.At);
+            Game.MarksOf(c).Active = mark with { Clock = clock };
+            Advance(2);
+            uint afterDeathMana = (uint)Math.Min(Game.UnreservedMana(c), (long)paid
+                + Math.Max(0, Game.MarkAmount(c, mark, "mana_granted_when_killed")));
+            Assert.Equal(0u, Game.ApplyMonsterHitLocked(c, target, 2000)!.Value.Life);
+            var transferred = Assert.IsType<Game.MarkTarget>(Game.CurrentMark(c));
+            Assert.Equal(43u, transferred.Id); Assert.Same(clock, transferred.Clock);
+            Assert.Equal(8, clock.Remaining, 8); Assert.Equal(afterDeathMana, c.PlayerMana);
+            Assert.Null(Game.ApplyMonsterHitLocked(c, target, 2000)); Assert.Same(transferred, Game.CurrentMark(c));
+            Advance(9); Assert.Null(Game.CurrentMark(c)); Assert.NotEmpty(Game.MarkPresentation(c));
+            target = new("mark next", new(105, 100, 0), 0, 0, 1000) { Hostile = true }; c.Monsters[42] = target;
+            Assert.True(Cast(42)); Advance(2); Assert.NotNull(Game.CurrentMark(c));
+            // Same numeric id with a different object cannot inherit the old mark or its native removal.
+            c.Monsters[42] = new("reused", new(105, 100, 0), 0, 0, 1000) { Hostile = true };
+            Assert.Null(Game.CurrentMark(c)); Game.MarkPresentation(c); c.Monsters[42] = target;
+            Assert.True(Cast(42)); Advance(2); Assert.NotNull(Game.CurrentMark(c));
+            h.Items.Remove(PlayerInventories.Weapon1, h.Items.Items(PlayerInventories.Weapon1).Single().Id);
+            Assert.Null(Game.CurrentMark(c)); Game.MarkPresentation(c);
+            Assert.Equal(afterDeathMana - (before - paid) * 2, c.PlayerMana);
+        }
     }
 
     internal static void OrdinaryGameplayTransactions()
@@ -95,5 +192,28 @@ public sealed partial class WhispererRuntimeTests
         Assert.False(OrdinaryResidualTransfers.Tickets.ContainsKey(987));
         Game.ClearOrdinary(c);
         Assert.Equal(1, Game.OrdinaryTargetMore(c, target, player));
+        // Ordinary marks remain usable without Deadeye and still use the common requirements/payment backstop.
+        var markGem = ItemCatalog.Create(Program.Items.All.Single(t => Program.Items.Gem(t) is { IsSupport: false } g
+            && g.Variants.Any(v => v.Effect == Game.MarkCatalog.All.Single(m => m.Id == "AssassinsMark").Effect)));
+        foreach (var old in h.Items.Items(PlayerInventories.Weapon1).ToArray()) h.Items.Remove(PlayerInventories.Weapon1, old.Id);
+        h.Items.Add(PlayerInventories.Weapon1, 0, 0, ItemCatalog.Create(Program.Items.Find("Driftwood Wand")!) with
+            { Sockets = [new(SocketColour.White, markGem)], Links = [1] });
+        var markSkill = Game.GemSkillEffects(c).Single(g => Game.SkillsFor(c).EffectId(g.Effect) == "AssassinsMark");
+        c.PlayerStats[Key("virtual_dexterity_for_requirements")] = 1000;
+        c.Monsters[45] = new("ordinary mark", new(105, 100, 0), 0, 0, 1000) { Hostile = true };
+        bool Cast() => Game.CastGemSkill("ordinary marks", h.Wire, h.Ciphers, c, markSkill.Id,
+            (100, 100), (105, 100), 45).GetAwaiter().GetResult();
+        c.PlayerStats[Key("your_spells_are_disabled")] = 1;
+        uint mana = c.PlayerMana; Assert.False(Cast()); Assert.Equal(mana, c.PlayerMana);
+        c.PlayerStats.Remove(Key("your_spells_are_disabled"));
+        Assert.True(Cast()); Assert.True(c.PlayerMana < mana);
+        var pendingMark = Assert.IsType<Game.PendingMark>(Game.MarksOf(c).Pending);
+        var runtime = Game.ProjectilesFor("ordinary marks", h.Wire, h.Ciphers, c).Runtime;
+        runtime.AdvanceTo((long)((pendingMark.At + 1) * 120000));
+        Assert.NotNull(Game.CurrentMark(c)); Assert.NotEmpty(Game.MarkPresentation(c));
+        Game.ClearOrdinary(c); // Replacement/retirement loses Game-local identities, retaining only host cleanup receipts.
+        Assert.Null(Game.CurrentMark(c)); Assert.NotEmpty(Game.MarkPresentation(c)); Assert.Empty(Game.MarkPresentation(c));
+        Assert.True(Cast()); c.PlayerLife = 0;
+        Assert.Null(Game.CurrentMark(c)); Assert.Null(Game.MarksOf(c).Pending);
     }
 }

@@ -6,6 +6,11 @@ sealed partial class ClientState
     internal double OrdinaryMovementDeadline, OrdinaryAttackDeadline;
     internal (int Movement, int Attack, int Area, int Taken, bool Stun, bool Bleed) OrdinaryStats;
     internal bool OrdinaryStatsDirty;
+    internal ushort OrdinaryMarkBuff;
+    internal uint OrdinaryMarkTarget;
+    internal SpawnedMonster? OrdinaryMarkMonster;
+    internal double OrdinaryMarkDeadline;
+    internal uint[] OrdinaryMarkValues = [];
 }
 
 static class OrdinaryResidualTransfers
