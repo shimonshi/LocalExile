@@ -93,7 +93,7 @@ static partial class Game
         {
             // The session's limits, periodic stats and conversion flags follow every change of the character's stats
             // from here, so the ticker never polls them.
-            session.Observe(Get);
+            session.Observe(Get, name => Stats.Key(name) is uint k && dev.TryGetValue(k, out int value) ? value : null);
             foreach (var type in Charges.Types)
             {
                 limits[type] = session.Limits(type);
@@ -329,7 +329,9 @@ static partial class Game
                         name => Stats.Key(name) is uint k ? recipient.GetValueOrDefault(k) : 0));
                     step = session.Step(now, stats, () => weapon, alive: conn.PlayerLife > 0, moving: conn.Walk.Moving(now),
                         inTown: InTown(conn), Random.Shared);
-                    presentationPending = ChargePresentationPending(session);
+                    if (RefreshOrdinaryStatsLocked(conn)) step = step with { CountsChanged = true };
+                    presentationPending = ChargePresentationPending(session) || conn.OrdinaryResidualPayload is not null
+                        || conn.OrdinaryMovementBuff != 0 || conn.OrdinaryAttackBuff != 0 || conn.OrdinaryTailwindBuff != 0;
                     if (step.CountsChanged)
                     {
                         conn.Pools = PoolsFor(conn, conn.Pools.Level);

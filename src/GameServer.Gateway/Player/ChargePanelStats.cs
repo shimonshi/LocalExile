@@ -21,20 +21,27 @@ static class ChargePanelStats
 
     /// <summary>The three panel rows, from the stats as the server holds them (<paramref name="get"/>: by Stats.dat Id,
     /// 0 when absent). Reductions that would take a maximum below zero show zero instead.</summary>
-    public static List<(string Stat, int Value)> Compute(Func<string, int> get)
+    public static List<(string Stat, int Value)> Compute(Func<string, int> get, Func<string, int?>? replacement = null)
     {
         int powerAndEndurance = get("maximum_power_and_endurance_charges_+");
         int powerAndFrenzy = get("maximum_power_and_frenzy_charges_+");
         int all = get("maximum_frenzy_power_endurance_charges");
         static int Maximum(long value) => (int)Math.Clamp(value, 0, int.MaxValue);
+        int frenzy = Maximum(replacement?.Invoke("virtual_maximum_frenzy_charges")
+            ?? ((long)BaseMaximumCharges + get("max_frenzy_charges") + powerAndFrenzy + all));
+        int endurance = Maximum((long)BaseMaximumCharges + get("max_endurance_charges") + powerAndEndurance + all);
+        if (get("maximum_endurance_charges_is_equal_to_maximum_frenzy_charges") != 0)
+            endurance = frenzy;
+        endurance = Maximum(replacement?.Invoke("virtual_maximum_endurance_charges") ?? endurance);
         return
         [
             ("virtual_maximum_endurance_charges",
-                Maximum((long)BaseMaximumCharges + get("max_endurance_charges") + powerAndEndurance + all)),
+                endurance),
             ("virtual_maximum_frenzy_charges",
-                Maximum((long)BaseMaximumCharges + get("max_frenzy_charges") + powerAndFrenzy + all)),
+                frenzy),
             ("virtual_maximum_power_charges",
-                Maximum((long)BaseMaximumCharges + get("max_power_charges") + powerAndEndurance + powerAndFrenzy + all)),
+                Maximum(replacement?.Invoke("virtual_maximum_power_charges")
+                    ?? ((long)BaseMaximumCharges + get("max_power_charges") + powerAndEndurance + powerAndFrenzy + all))),
         ];
     }
 

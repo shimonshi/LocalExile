@@ -146,6 +146,23 @@ public sealed class InquisitorCandidateTests
         c.PlayerStats[K("global_cannot_crit")] = 1;
         Assert.Equal(0, Game.SupportedCriticalChance(c, h.Skill));
         c.PlayerStats.Remove(K("global_cannot_crit"));
+        var flat = new DamageRange(10, 20);
+        var beforeMarks = new[] { true, false }.Select(melee => Game.CaptureOrdinaryMarkHitSource(c, melee)).ToArray();
+        Game.InquisitorAcceptedUse(c, Game.GemSkillEffects(c).Single(g => g.Id == h.Skill).Effect);
+        double factor = Game.InquisitorRead(c, Game.CharacterPlayerStats(c)).AttackDamageFactor;
+        Assert.True(factor > 1);
+        var afterMarks = new[] { true, false }.Select(melee => Game.CaptureOrdinaryMarkHitSource(c, melee)).ToArray();
+        Game.ClearInquisitor(c); // The released mark source retains the admitted Virtue factor.
+        for (int i = 0; i < afterMarks.Length; i++)
+        {
+            var expected = beforeMarks[i].Hit(flat).Scale(factor);
+            var actual = afterMarks[i].Hit(flat);
+            foreach (var type in Enum.GetValues<DamageType>())
+            {
+                Assert.Equal(expected[type].Min, actual[type].Min, 8);
+                Assert.Equal(expected[type].Max, actual[type].Max, 8);
+            }
+        }
         int refund = c.MainAscendancy.Allocated.Count * 5;
         Assert.Null(await Game.ChangePassives("Inquisitor", h.Stream, h.Ciphers, c, c.MainAscendancy.Allocated.ToArray(), false, "refund branch", refundPoints: true));
         Assert.Equal((ushort)(200 - refund), c.RefundPoints);

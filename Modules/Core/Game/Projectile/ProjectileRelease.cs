@@ -72,7 +72,7 @@ static partial class Game
     internal static Task ScheduleGemProjectile(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn,
         ushort skillId, (ushort Id, int Effect, string Name, int Level, int Quality, uint Gem) gem,
         (int X, int Y) aim, int action, int recoveryGeneration, CooldownUseTicket? ticket, SkillCriticalRoll criticalRoll,
-        ushort sequence = 0)
+        ushort sequence = 0, DeadeyeMirageLifecycle.Release? mirageAdmission = null)
     {
         var session = ProjectilesFor(remote, stream, ciphers, conn);
         session.Advance();
@@ -108,7 +108,7 @@ static partial class Game
             int left = repeats - repeat;
             session.Schedule(ProjectileRuntime.Time(acceptedAt + repeat * cast.Value / 1000d + delay), Valid,
                 () => ClientDrawnVolley(conn, session, skillId, gem,
-                    CaptureGemProjectile(conn, session, skillId, gem, aim, criticalRoll, sequence, (uint)left),
+                    PaidMirageRelease(conn, mirageAdmission, skillId, CaptureGemProjectile(conn, session, skillId, gem, aim, criticalRoll, sequence, (uint)left)),
                     sequence, (uint)left));
         }
         return Task.CompletedTask;
@@ -264,6 +264,8 @@ static partial class Game
         {
             // Child stages and release specialization can introduce areas after this root is resolved.
             AreaHit = SupportedProjectileHit(conn, skillId, area: true),
+            MarkSource = CaptureMarkHitSource(conn, skillId, false),
+            MarkAreaSource = CaptureMarkHitSource(conn, skillId, true),
             VsBlindedCriticalChance = SupportedCriticalChanceVsBlinded(conn, skillId, release: true),
             VsProfaneCriticalChance = SupportedCriticalChanceVsProfane(conn, skillId, release: true),
             Effect = gem.Effect, Level = gem.Level, Quality = gem.Quality,
@@ -280,6 +282,8 @@ static partial class Game
             AccuracyMoreUnique = conn.Pools.AccuracyMoreVsUniquePct,
             AccuracyMoreClose = conn.Pools.AccuracyMoreInCloseRangePct,
             AlwaysHits = Get("global_always_hit") != 0, FarShot = Get("player_far_shot") != 0,
+            OrdinaryDistance = DeadeyeProjectileDamage.Capture(Get) with { PointBlank = false },
+            OrdinaryResidual = DeadeyeResidualProjectile.Capture(Get),
             PointBlank = Get("keystone_point_blank") != 0,
             ReturnMultiplier = ProjectileReturn.DamageMore(Get), Blind = BlindInputs(player, own),
             // A spell's action spawns its projectiles itself, every one of a volley, from where it stands (Frida
@@ -294,6 +298,9 @@ static partial class Game
         var use = new ProjectileUse(profile, new(PlayerId, conn.ProjectileEpoch), new(PlayerId, conn.ProjectileEpoch), 1, origin, target)
             { Payload = shot, ReturnAnchor = new(PlayerId, conn.ProjectileEpoch), Sequence = sequence, RepeatsLeft = repeatsLeft };
         var context = new ProjectileReleaseContext(conn, session, skillId, gem, variation, Get, Player, Own);
-        return definition.SpecializeRelease?.Invoke(context, use) ?? use;
+        use = definition.SpecializeRelease?.Invoke(context, use) ?? use;
+        return use with { Profile = shot.OrdinaryResidual.ApplySpread(use.Profile,
+            SkillsFor(conn).EffectId(gem.Effect) is "Barrage" or "BarrageAltX" or "BarrageAltY"
+                || Get("projectiles_barrage") != 0) };
     }
 }

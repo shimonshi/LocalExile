@@ -98,10 +98,11 @@ static class Charges
     /// Path of Building floors the result to whole seconds for its display; the game counts milliseconds, so this
     /// floors to milliseconds.
     /// </summary>
-    public static Limits LimitsOf(ChargeType type, Func<string, int> get, int held = 0)
+    public static Limits LimitsOf(ChargeType type, Func<string, int> get, int held = 0,
+        Func<string, int?>? replacement = null)
     {
         string virtualMaximum = VirtualMaximums[Index(type)];
-        int maximum = ChargePanelStats.Compute(get).First(r => r.Stat == virtualMaximum).Value;
+        int maximum = ChargePanelStats.Compute(get, replacement).First(r => r.Stat == virtualMaximum).Value;
         int minimum = Math.Clamp(get(BaseMinimums[Index(type)]) + get("minimum_frenzy_power_endurance_charges"), 0, maximum);
         int increased = get("charge_duration_+%") + get("base_charge_duration_+%") + type switch
         {
@@ -128,6 +129,9 @@ static class Charges
     /// </summary>
     public sealed class State
     {
+        // Neutral host-owned timer progress survives replacement of the Game assembly, like the charges themselves.
+        internal readonly Dictionary<string, double> PeriodicElapsed = [];
+        internal double LastPeriodicStep = double.NaN;
         internal readonly Shown[] Presented = new Shown[3];
         private readonly int[] held = new int[3];
         private readonly double[] expiresAt = [double.NegativeInfinity, double.NegativeInfinity, double.NegativeInfinity];

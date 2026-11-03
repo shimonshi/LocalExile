@@ -816,7 +816,7 @@ static partial class Game
                     if (!MonsterPresent(conn, id, m) || conn.Paused) return null;
                     checkedAtGate = true;
                     double now = conn.Clock.Elapsed.TotalSeconds;
-                    if (HitReaction.TryFlinch(m, damage, now, Random.Shared) is not { } clip) return null;
+                    if (MarkFlinch(conn, m, damage, now, Random.Shared) is not { } clip) return null;
                     float seconds = (float)(m.FlinchUntil - now);
                     if (log) Console.WriteLine($"[gateway] {remote} => 0x01d1 monster 0x{id:x} TakeHit recovery {seconds:0.000} s " +
                         $"(clip profile {clip.Index}), action {m.ActionGeneration}, recovery until {m.FlinchUntil:0.000}");
@@ -1064,7 +1064,7 @@ static partial class Game
             hitDamage = hitDamage.Scale(1 + 0.1 * conn.KingPortentStacks);
         var rolled = gambler.RollIncomingHit(hitDamage, conn.IncomingHitRandom);
         rolled = MonsterModHit(m, rolled, conn.PlayerLife, conn.PlayerMaxLife, conn.IncomingHitRandom, out bool monsterCritical,
-            () => SelfCriticalReduction(conn));   // its crit, Executioner's
+            () => SelfCriticalReduction(conn) + OrdinaryEnemyCriticalReduction(conn, m, now));   // its crit, Executioner's
         // The player's passive enemy auras (Born under Fire): the hit and its ailment base convert alike, so ignite
         // sees the converted damage. Converting does not remove stun, so the hit recovery below reads a.Damage.
         var baseHit = a.Damage;
@@ -1098,6 +1098,7 @@ static partial class Game
         int damage = 0, chaosDamage = 0, physicalDamage = 0;
         var ailmentTaken = DamagePacket.Empty;
         int blindedPct = DamageTakenFromBlindedPct(conn, id, stats);
+        double ordinaryFactor = OrdinaryIncomingHit(conn, stats, now) * MarkIncoming(conn, id, m, stats);
         foreach (var (type, range) in mitigated.Components)
         {
             int value = immune.Contains(type) ? 0 : (int)Math.Round(range.Min);
@@ -1111,7 +1112,8 @@ static partial class Game
             if (type == DamageType.Physical)
                 value = AntiquarianEffects.RangedPhysical(value, a.Ranged, StatOf);
             value = (int)Math.Round(value * conn.ElementalAilments.DamageTakenFactor(now,
-                    blindedPct + PlayerDamageTaken.IncreasedPct(type, melee: !a.Ranged, StatOf))
+                    blindedPct + StatOf("damage_taken_+%") + PlayerDamageTaken.IncreasedPct(type, melee: !a.Ranged, StatOf))
+                * ordinaryFactor
                 * (blocked ? PlayerDamageTaken.BlockedPct(type, StatOf) / 100.0 : 1));
             ailmentTaken = ailmentTaken.Add(type, new(value, value));
             if (type == DamageType.Chaos) chaosDamage += value;

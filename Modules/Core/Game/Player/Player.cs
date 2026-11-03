@@ -141,6 +141,7 @@ static partial class Game
             FortificationOf(conn).Clear();
             LeechOf(conn).Clear(conn.Clock.Elapsed.TotalSeconds);
             ClearRageOnDeath(conn);
+            ClearOrdinary(conn);
             conn.Rampage.Clear();
             ClearInquisitor(conn);
             conn.RetireOwnedCombat();
@@ -330,6 +331,7 @@ static partial class Game
         var own = skillId == 0 ? new Dictionary<uint, int>() : SupportedSkill(conn, skillId).Stats;
         var player = CharacterPlayerStats(conn);
         int speed = CastSpeedPct(player);
+        if (MarkCatalog.Find(effect) is not null) speed += MarkStat(MergeSkillStats(player, own), "mark_skill_cast_speed_+%");
         if (Stats.Key("base_cast_speed_+%") is uint k) speed += own.GetValueOrDefault(k);
         speed = FinalCastSpeedPct(conn, MergeSkillStats(player, own), speed);
         if (SpellCastTiming.ForSkill(SkillsFor(conn), effect, speed)?.DurationMilliseconds is not int duration) return null;
@@ -1057,6 +1059,7 @@ static partial class Game
         var (layout, name, classRow, pools) = (conn.Layout, conn.Character, conn.ClassRow, conn.Pools);
         var cls = SkillsFor(conn).ClassFor(classRow);
         // Keep the ticket's remaining Rage timers frozen while the destination loads (before 0x7d).
+        RestoreOrdinary(conn);
         RestoreInquisitor(conn);
         RestoreRage(conn);
         RestoreRampage(conn);

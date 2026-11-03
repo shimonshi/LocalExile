@@ -42,7 +42,11 @@ static partial class Game
             // new buff blocks recovery and the real rate when it does not.
             conn.AuraStatsDirty = true;
             CharacterSaves.SetPetrifiedBlood(CharacterName(conn), started);
-            if (started) InquisitorAcceptedUse(conn, effect);
+            if (started)
+            {
+                InquisitorAcceptedUse(conn, effect);
+                OrdinaryAcceptedUse(conn, -(++conn.OrdinaryUtilitySequence));
+            }
             Console.WriteLine($"[gateway] {remote} skill 0x{skillId:x4} {name}: {(started ? "on" : "off")}, " +
                 $"{required} mana reserved, Low Life threshold {conn.PetrifiedBlood.LowLifeThresholdPct}%");
         }

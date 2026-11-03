@@ -8,7 +8,11 @@ sealed record ProjectileOffense(DamagePacket Hit, bool Spell, int Accuracy, int 
     /// <summary>An optional encounter owner; expired owners cannot commit further contacts.</summary>
     public object? Owner { get; init; }
     public Func<bool>? Valid { get; init; }
+    public Game.MirageReceipt? MirageRelease { get; init; }
+    public Game.MirageBody? Mirage { get; init; }
     public DamagePacket? AreaHit { get; init; }
+    public Game.MarkHitSource? MarkSource { get; init; }
+    public Game.MarkHitSource? MarkAreaSource { get; init; }
     public Penetration.PerType Penetration { get; init; }
     public HitResistances.Mods ResistanceMods { get; init; }
     public int ImpaleChance { get; init; }
@@ -27,6 +31,8 @@ sealed record ProjectileOffense(DamagePacket Hit, bool Spell, int Accuracy, int 
     public int AccuracyMoreUnique { get; init; }
     public int AccuracyMoreClose { get; init; }
     public bool AlwaysHits { get; init; }
+    public DeadeyeProjectileDamage OrdinaryDistance { get; init; }
+    public DeadeyeResidualProjectile.Frozen OrdinaryResidual { get; init; }
     public bool FarShot { get; init; }
     public bool PointBlank { get; init; }
     public double ReturnMultiplier { get; init; } = 1;
