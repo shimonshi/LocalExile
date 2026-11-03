@@ -195,6 +195,34 @@ public sealed class InquisitorCandidateTests
         Assert.Equal(1m, Game.InquisitorModifiers(c, Game.SupportedSkill(c, h.Skill).Effect, selfCast).CostFactor);
         Assert.Equal((int)cost, Game.PlayerSkills(c).Single(g => g.Id == h.Skill).Stats!.Single(p => p.Key == K("mana_cost")).Value);
         Assert.NotEmpty(Game.InquisitorPresentation(c));
+        // Release specialization must retain a linked support's own base-area increase as well as Fanaticism.
+        var equipment = Game.ItemsOf(c);
+        var originalWand = equipment.Items(PlayerInventories.Weapon1).Single();
+        equipment.Remove(PlayerInventories.Weapon1, originalWand.Id);
+        var areaSupport = ItemCatalog.Create(Program.Items.Find("Metadata/Items/Gems/SupportGemIncreasedAreaOfEffect")!);
+        var supportedWand = equipment.Add(PlayerInventories.Weapon1, 0, 0, originalWand.Item with
+        { Sockets = [originalWand.Item.Sockets[0], new(SocketColour.White, areaSupport)], Links = [2] });
+        c.PlayerStats[K("virtual_intelligence_for_requirements")] = 1000;
+        var areaSession = new Game.ProjectileSession("supported area", h.Stream, h.Ciphers, c);
+        foreach (int playerArea in new[] { 0, 100 })
+        {
+            c.PlayerStats[K(SkillArea.BaseIncreased)] = playerArea;
+            var gem = Game.GemSkillEffects(c).Single(g => g.Id == h.Skill);
+            var own = Game.SupportedSkill(c, h.Skill).Stats;
+            Assert.Equal(30, own.GetValueOrDefault(K(SkillArea.BaseIncreased)));
+            var expectedArea = Game.MergeSkillStats(Game.AreaPlayerStats(c), own);
+            expectedArea[K("spell_area_of_effect_+%")] = expectedArea.GetValueOrDefault(K("spell_area_of_effect_+%"))
+                + Game.InquisitorModifiers(c, gem.Effect, expectedArea).AreaIncreasePct;
+            int GetArea(string name) => expectedArea.GetValueOrDefault(K(name));
+            int expectedRadius = SkillArea.Radius(SkillArea.BaseRadius("Fireball", GetArea), GetArea, spell: true);
+            var released = Game.CaptureGemProjectile(c, areaSession, h.Skill, gem, (150, 100),
+                Game.CaptureSkillCriticalRoll(c, h.Skill));
+            Assert.Equal(expectedRadius, released.Profile.EndArea!.Radius);
+        }
+        equipment.Remove(PlayerInventories.Weapon1, supportedWand.Id);
+        equipment.Add(PlayerInventories.Weapon1, 0, 0, originalWand.Item);
+        c.PlayerStats.Remove(K(SkillArea.BaseIncreased));
+        c.PlayerStats.Remove(K("virtual_intelligence_for_requirements"));
         Game.CarryInquisitor(c, 907);
         var arrival = h.NewConnection(907, c.Character); arrival.MainAscendancy = c.MainAscendancy; h.Time.At = 100;
         Game.RestoreInquisitor(arrival);
