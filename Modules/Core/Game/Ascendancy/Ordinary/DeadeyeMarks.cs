@@ -126,23 +126,33 @@ static partial class Game
     internal static byte[] MarkPresentation(ClientState c)
     {
         var mark = CurrentMark(c); var bytes = new List<byte>();
-        uint[] values = mark is null ? [] : [.. MarkCatalog.Find(mark.Source.Effect)!.BuffKeys
+        uint[] keys = mark is null ? [] : MarkCatalog.Find(mark.Source.Effect)!.BuffKeys;
+        uint[] values = mark is null ? [] : [.. keys
             .Select(k => unchecked((uint)MarkAmount(c, mark, Stats.Name(k) ?? "")))];
         double deadline = mark?.Clock.Deadline ?? 0;
         if (ReferenceEquals(c.OrdinaryMarkMonster, mark?.Monster) && c.OrdinaryMarkDeadline == deadline
             && c.OrdinaryMarkSkill == (mark?.Source.Skill ?? 0) && c.OrdinaryMarkGem == (mark?.Source.Gem ?? 0)
-            && c.OrdinaryMarkValues.SequenceEqual(values)) return [];
+            && c.OrdinaryMarkKeys.SequenceEqual(keys) && c.OrdinaryMarkValues.SequenceEqual(values)) return [];
         if (c.OrdinaryMarkBuff != 0 && c.Monsters.TryGetValue(c.OrdinaryMarkTarget, out var old)
             && ReferenceEquals(old, c.OrdinaryMarkMonster))
+        {
             bytes.AddRange(InstanceEntities.RemoveBuff(c.OrdinaryMarkTarget, c.OrdinaryMarkBuff));
+            if (c.OrdinaryMarkKeys.Length > 0)
+                bytes.AddRange(InstanceEntities.StatsUpdate(c.OrdinaryMarkTarget, c.OrdinaryMarkKeys
+                    .Select(k => (k, old.Mods.Effects[Stats.Name(k) ?? ""])).ToArray()));
+        }
         c.OrdinaryMarkBuff = 0; c.OrdinaryMarkMonster = mark?.Monster;
         c.OrdinaryMarkSkill = mark?.Source.Skill ?? 0; c.OrdinaryMarkGem = mark?.Source.Gem ?? 0;
-        c.OrdinaryMarkDeadline = deadline; c.OrdinaryMarkValues = values;
+        c.OrdinaryMarkDeadline = deadline; c.OrdinaryMarkKeys = keys; c.OrdinaryMarkValues = values;
         if (mark is not null)
         {
             c.OrdinaryMarkTarget = mark.Id; c.OrdinaryMarkBuff = c.NextBuff++;
+            bytes.AddRange(InstanceEntities.StatsUpdate(mark.Id, keys.Select((key, i) =>
+                (key, (int)Math.Clamp((long)mark.Monster.Mods.Effects[Stats.Name(key) ?? ""]
+                    + unchecked((int)values[i]), int.MinValue, int.MaxValue))).ToArray()));
+            // Mark rows are non-recovery: their values belong to Stats, never the buff's trailing list count.
             bytes.AddRange(InstanceEntities.AddBuff(mark.Id, c.OrdinaryMarkBuff,
-                MarkCatalog.Find(mark.Source.Effect)!.Buff, PlayerId, mark.Source.Skill, values,
+                MarkCatalog.Find(mark.Source.Effect)!.Buff, PlayerId, mark.Source.Skill,
                 u68: double.IsFinite(mark.Clock.Remaining) ? BitConverter.SingleToUInt32Bits((float)mark.Clock.Remaining) : null,
                 f6c: (float)mark.Clock.Rate));
         }

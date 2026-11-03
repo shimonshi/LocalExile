@@ -21,6 +21,7 @@ sealed partial class ClientState
     internal SpawnedMonster? OrdinaryMarkMonster;
     internal double OrdinaryMarkDeadline;
     internal uint[] OrdinaryMarkValues = [];
+    internal uint[] OrdinaryMarkKeys = [];
 }
 
 static class OrdinaryResidualTransfers

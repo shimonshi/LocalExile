@@ -79,7 +79,9 @@ The following requested behavior remains unimplemented or uncertified:
   The four extracted ordinary gem identities use shared requirements, cooldown/payment and manual-use acceptance.
   Target admission rejects ground, friendly, dead, distant and reused objects before payment.
   Cast completion rechecks the action, source gem and target object; cancellation retains the paid cost.
-  Native rows74/77/78/80 carry ordered qualified values, source skill and recipient-rate finite clocks.
+  Native rows74/77/78/80 are non-recovery buffs: qualified values publish on target Stats, never inline in the buff.
+  Revaluation/removal restores the target's modifier baseline before applying the current mark contribution.
+  Buffs carry the source skill and recipient-rate finite clocks.
   Source removal, death and Game retirement clear identities; neutral area/reload payloads never carry marks.
   Accepted lethal transfer selects a living nearby hostile only when the current source grants transfer.
   It keeps the original clock and never repeats payment; Standard and Ruthless use their separate Focal vectors.

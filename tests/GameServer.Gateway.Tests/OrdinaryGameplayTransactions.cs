@@ -241,7 +241,8 @@ public sealed partial class WhispererRuntimeTests
         }
         c.PlayerStats[Key("virtual_dexterity_for_requirements")] = 1000;
         c.PlayerStats[Key("virtual_strength_for_requirements")] = 1000;
-        var target = new SpawnedMonster("mark", new(105, 100, 0), 0, 0, 1000) { Hostile = true };
+        var target = new SpawnedMonster("mark", new(105, 100, 0), 0, 0, 1000) { Hostile = true,
+            Mods = new([], [], new(new Dictionary<string, int> { ["projectile_damage_taken_+%"] = 11 })) };
         var nearby = new SpawnedMonster("nearby", new(110, 100, 0), 0, 0, 1000) { Hostile = true };
         c.Monsters[42] = target; c.Monsters[43] = nearby;
         foreach (var metadata in Game.MarkCatalog.All)
@@ -276,7 +277,12 @@ public sealed partial class WhispererRuntimeTests
             }
             var mark = Assert.IsType<Game.MarkTarget>(Game.CurrentMark(c));
             Assert.Equal(42u, mark.Id); Assert.True(double.IsPositiveInfinity(mark.Clock.Remaining));
-            Assert.NotEmpty(Game.MarkPresentation(c)); Assert.Empty(Game.MarkPresentation(c));
+            var shown = Game.MarkPresentation(c);
+            Assert.True(shown.AsSpan().IndexOf(InstanceEntities.AddBuff(42, c.OrdinaryMarkBuff,
+                metadata.Buff, Program.PlayerId, skill.Id, f6c: (float)mark.Clock.Rate)) >= 0);
+            Assert.True(shown.AsSpan().IndexOf(InstanceEntities.StatsUpdate(42, metadata.BuffKeys.Select(k =>
+                (k, target.Mods.Effects[Program.Stats.Name(k)!] + Game.MarkAmount(c, mark, Program.Stats.Name(k)!))).ToArray())) >= 0);
+            Assert.Empty(Game.MarkPresentation(c));
             c.PlayerStats[Key("curse_effect_+%")] = 50;
             foreach (uint key in metadata.BuffKeys)
             {
@@ -284,6 +290,9 @@ public sealed partial class WhispererRuntimeTests
                 int own = Game.SupportedSkill(c, skill.Id).Stats.GetValueOrDefault(key);
                 Assert.Equal((int)Math.Truncate(own * 1.5), Game.MarkAmount(c, mark, name));
             }
+            var revalued = Game.MarkPresentation(c);
+            Assert.True(revalued.AsSpan().IndexOf(InstanceEntities.StatsUpdate(42, metadata.BuffKeys
+                .Select(k => (k, target.Mods.Effects[Program.Stats.Name(k)!])).ToArray())) >= 0);
             c.PlayerStats.Remove(Key("curse_effect_+%"));
             foreach (bool ruthless in new[] { false, true })
             {
