@@ -27,7 +27,15 @@ static class OrdinaryGameplayChecks
         Game.OrdinaryAcceptedUse(c, c.ActionCount); // Same admitted action cannot grant twice.
         Assert.Equal(16, Game.OrdinaryTailwindSpeed(c));
         var player = Game.CharacterPlayerStats(c);
-        Assert.Equal(.6, Game.OrdinaryIncomingHit(c, player, 0), 8);
+        c.Pools = c.Pools with { Life = 1000, Armour = 0, Evasion = 0, BlockChance = 0 };
+        c.PlayerLife = 1000; c.Ward.SetMaximum(0); c.EnergyShield.SetMaximum(0, false);
+        c.IncomingHitRandom = new HighDraw();
+        var mixed = new MonsterAttack(0x102, .4, 10,
+            DamagePacket.Of(DamageType.Physical, 100, 100).Add(DamagePacket.Of(DamageType.Fire, 100, 100)));
+        var enemy = new SpawnedMonster("mixed hit", new(110, 100, 0), 0, 0, 1000) { Hostile = true };
+        var incoming = Game.CommitMonsterHitLocked("mixed Gale", c, 42, enemy, mixed,
+            c.Clock.Elapsed.TotalSeconds, (100, 100), (110, 100), false)!;
+        Assert.Equal(880u, incoming.Life); // Both types receive the one hit's 40% less, before Gale is cleared.
         Assert.Equal(8, Game.OrdinaryTailwindSpeed(c));
         Game.OrdinaryAcceptedUse(c, ++c.ActionCount);
         var native = Game.OrdinaryPresentation(c);
