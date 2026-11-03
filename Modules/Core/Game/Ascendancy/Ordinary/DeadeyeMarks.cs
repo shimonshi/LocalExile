@@ -130,11 +130,13 @@ static partial class Game
             .Select(k => unchecked((uint)MarkAmount(c, mark, Stats.Name(k) ?? "")))];
         double deadline = mark?.Clock.Deadline ?? 0;
         if (ReferenceEquals(c.OrdinaryMarkMonster, mark?.Monster) && c.OrdinaryMarkDeadline == deadline
+            && c.OrdinaryMarkSkill == (mark?.Source.Skill ?? 0) && c.OrdinaryMarkGem == (mark?.Source.Gem ?? 0)
             && c.OrdinaryMarkValues.SequenceEqual(values)) return [];
         if (c.OrdinaryMarkBuff != 0 && c.Monsters.TryGetValue(c.OrdinaryMarkTarget, out var old)
             && ReferenceEquals(old, c.OrdinaryMarkMonster))
             bytes.AddRange(InstanceEntities.RemoveBuff(c.OrdinaryMarkTarget, c.OrdinaryMarkBuff));
         c.OrdinaryMarkBuff = 0; c.OrdinaryMarkMonster = mark?.Monster;
+        c.OrdinaryMarkSkill = mark?.Source.Skill ?? 0; c.OrdinaryMarkGem = mark?.Source.Gem ?? 0;
         c.OrdinaryMarkDeadline = deadline; c.OrdinaryMarkValues = values;
         if (mark is not null)
         {

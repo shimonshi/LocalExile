@@ -7,6 +7,8 @@ sealed partial class ClientState
     internal (int Movement, int Attack, int Area, int Taken, bool Stun, bool Bleed) OrdinaryStats;
     internal bool OrdinaryStatsDirty;
     internal ushort OrdinaryMarkBuff;
+    internal ushort OrdinaryMarkSkill;
+    internal uint OrdinaryMarkGem;
     internal uint OrdinaryMarkTarget;
     internal SpawnedMonster? OrdinaryMarkMonster;
     internal double OrdinaryMarkDeadline;

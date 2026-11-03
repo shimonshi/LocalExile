@@ -97,7 +97,8 @@ static partial class Game
     {
         var e = m.Mods.Effects;
         double physical = mitigated[DamageType.Physical].Min;
-        double physicalTaken = physical * Math.Max(0, 1 - (e.PhysicalReduction + physicalReduction) / 100.0);
+        double reduction = physicalReduction == 0 ? e.PhysicalReduction : Math.Max(0, e.PhysicalReduction + physicalReduction);
+        double physicalTaken = physical * Math.Max(0, 1 - reduction / 100.0);
         double total = mitigated.MinTotal - physical + physicalTaken;
         // The player's debuffs on it add to its own increased damage taken (MonsterDamageTaken): his enemy auras' elemental
         // increase on fire, cold and lightning only, his Withered on chaos only, and Pride's more Physical Damage on the
