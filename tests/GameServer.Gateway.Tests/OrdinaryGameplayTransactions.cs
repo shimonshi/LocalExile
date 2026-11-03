@@ -391,11 +391,28 @@ static class OrdinaryGameplayChecks
             _ = Game.CharacterPlayerStats(c);
             Assert.Equal(7, Game.ChargesOf(c).Limits(ChargeType.Frenzy).Maximum);
             Assert.Equal(7, Game.ChargesOf(c).Limits(ChargeType.Endurance).Maximum);
+            Set("gain_X_endurance_charges_per_second", -1);
+            _ = Game.CharacterPlayerStats(c);
+            var charges = Game.ChargesOf(c);
+            charges.Die();
+            charges.Step(0, _ => 0, () => Game.WeaponProfileFor(c), true, false, false, new Random(1));
+            charges.Enqueue(new ChargeEvent.Grant(ChargeType.Endurance, 7, "Masterful gain"));
+            charges.Step(.1, _ => 0, () => Game.WeaponProfileFor(c), true, false, false, new Random(1));
+            Assert.Equal(7, charges.State.Held(ChargeType.Endurance));
+            Assert.Equal(7, charges.Limits(ChargeType.Endurance).Maximum);
+            charges.Step(1.1, _ => 0, () => Game.WeaponProfileFor(c), true, false, false, new Random(1));
+            Assert.Equal(6, charges.State.Held(ChargeType.Endurance));
+            Assert.Equal(7, charges.Limits(ChargeType.Endurance).Maximum);
             Set("virtual_maximum_endurance_charges", 2);
             _ = Game.CharacterPlayerStats(c);
             Assert.Equal(2, Game.ChargesOf(c).Limits(ChargeType.Endurance).Maximum);
+            charges.Enqueue(new ChargeEvent.Grant(ChargeType.Endurance, 10, "Explicit maximum gain"));
+            charges.Step(1.2, _ => 0, () => Game.WeaponProfileFor(c), true, false, true, new Random(1));
+            Assert.Equal(2, charges.State.Held(ChargeType.Endurance));
+            Assert.Equal(2, charges.Limits(ChargeType.Endurance).Maximum);
             c.PlayerStats.Remove(Key("virtual_maximum_endurance_charges"));
             c.PlayerStats.Remove(Key("virtual_maximum_frenzy_charges"));
+            c.PlayerStats.Remove(Key("gain_X_endurance_charges_per_second"));
         }
         c.LeagueModule = new(new League("Standard", "Standard", false, false), new HashSet<string>(["Game"]));
         c.MainAscendancy = new(definition.Identity, [], []); c.StatSourcesCacheState = null;
