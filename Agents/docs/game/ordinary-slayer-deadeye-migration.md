@@ -105,6 +105,9 @@ real projectile release freezing across refund, and accepted neutral transfer wi
 The bounded adapter build and required suites are recorded against the private committed candidate in ignored
 `logs/ordinary-finish/`, including `source.txt`, `build.log`, `core.log`, `data.log`, `gateway.log`.
 The earlier mark-wiring candidate's logs remain separate in `logs/ordinary-wiring/` in its originating checkout.
+The exact starting base reproduces an Inquisitor `WiredTiming` failure at line171: ranged admission expects one
+Fanatic charge but produces zero (`logs/ordinary-finish/base-inquisitor.log`).
+That predecessor assertion is outside the two ordinary Facts; this candidate preserves it for root reconciliation.
 No Core/Data tests, sleeps, production catalog path changes or per-test working-directory changes were added.
 Prepared nonsecret data is physically copied from `t3-f62fbadf`; the existing vendor-stock file is present.
 The predecessor graph-admission tests also require its nonsecret `game-files.zip` fixture.
