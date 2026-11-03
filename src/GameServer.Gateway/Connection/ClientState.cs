@@ -231,6 +231,7 @@ sealed class SpawnedMonster(string label, PlayerWalk walk, int aggroRange, int s
     public (int X, int Y)? FleeTo;
     public string Label => label;
     public PlayerWalk Walk { get; set; } = walk;
+    internal WeakReference<ClientState>? InquisitorOwner;
     public int AggroRange => aggroRange;
     public int StopRange => stopRange;
     public uint MaxLife { get; } = maxLife;
@@ -391,6 +392,8 @@ sealed partial class ClientState(AreaLayout layout, uint ticket, uint seed)
         lock (Monsters)
         {
             ResourceEffectsState?.Resume(Clock.Elapsed.TotalSeconds);
+            if (RampageTransferAt is double frozen)
+                InquisitorObservedAt += Math.Max(0, Clock.Elapsed.TotalSeconds - frozen);
             LeavingArea = false;
         }
     }
@@ -477,7 +480,8 @@ sealed partial class ClientState(AreaLayout layout, uint ticket, uint seed)
         var l = Layout;
         Func<int, int, bool>? walkable = l.Walkable is { } w ? (cx, cy) => w(cx, cy) && !Barrier.Contains((cx, cy)) : null;
         return new(l.SpawnX, l.SpawnY, Program.WalkSpeed, walkable, l.GridW > 0 ? l.GridW : 4096, l.GridH > 0 ? l.GridH : 4096,
-            () => Blockers) { FrameOf = LockstepFrameOf };
+            () => Blockers) { FrameOf = LockstepFrameOf,
+                MotionChanged = (at, after) => Program.GameLogicOrNull?.ObservePlayerMotion(this, at, after) };
     }
     public bool PlayerSent;
     // Server frames ended so far (0x2b5).
@@ -701,6 +705,7 @@ sealed partial class ClientState(AreaLayout layout, uint ticket, uint seed)
                 {
                     VaalSouls.ClearBalance(); VaalPreventionUntil = 0; VaalUseState = null;
                     Rage.Clear(); Rampage.Clear(); RetireOwnedCombat(); RetireResourceEffects();
+                    ClearInquisitorState();
                 }
                 playerLife = value;
             }

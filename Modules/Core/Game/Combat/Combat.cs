@@ -50,6 +50,7 @@ static partial class Game
             conn.Walk.Order(x, y, requestedAt);
             conn.ChannelSkill = skill;
             conn.ChannelSkillSequence = sequence;
+            InquisitorRead(conn, CharacterPlayerStats(conn), new(true, false, false, false, false));
             started = (action, x, y, CaptureSkillCriticalRoll(conn, skill));
             return true;
         }
@@ -222,13 +223,15 @@ static partial class Game
         (stop, arrive) = swing;
         now = conn.Clock.Elapsed.TotalSeconds;
         SkillCriticalRoll criticalRoll;
+        bool admitted;
         lock (conn.Monsters)
         {
             target = m.Walk.Position(now);
             conn.NextAttackAt = AttackTiming.After(now, conn.NextAttackAt, duration);
             criticalRoll = CaptureSkillCriticalRoll(conn, SkillCatalog.FirstSkillId);
+            admitted = AcceptDefaultSwingUse(conn, m, stop, target, weapon.Range + 2, action);
         }
-        if (!SwingInReach(m, stop, target, weapon.Range + 2))
+        if (!admitted)
         {
             Console.WriteLine($"[gateway] {remote} attack on 0x{use.TargetId:x} out of reach: {Dist(stop, target):0.0} > {weapon.Range}");
             return;
@@ -322,7 +325,7 @@ static partial class Game
                 var pen = Penetration.Of(player, Stats, attack: true, ownPenetration, weapon.LocalSources);
                 var resistanceMods = HitResistMods(player, ownPenetration);
                 var hit = AttackHitConverted(weapon, player, WeaponProfileFor(conn, activeSet: true).Melee,
-                    ConversionFor(conn, attackEffect, 1, attack: true));
+                    ConversionFor(conn, attackEffect, 1, attack: true)).Scale(InquisitorRead(conn, player).AttackDamageFactor);
                 if (WeaponProfileFor(conn, activeSet: true).Melee)
                     hit = WithMeleeProximityLocked(conn, player, ownPenetration, m, hit, contactAt);
                 var gambler = GamblerFor(player);
@@ -333,7 +336,7 @@ static partial class Game
                 int sourceCriticalMultiplier = AttackCriticalMultiplier(conn, player);
                 int criticalMultiplier = CriticalMultiplierOn(m, sourceCriticalMultiplier);
                 double at = ProjectileWorldTime(conn);
-                (damage, resistance, var mitigated) = MonsterHitDamage(m, ownRolled, critical, attack: true, at, resistanceMods, pen,
+                (damage, resistance, var mitigated) = MonsterHitDamage(conn, m, ownRolled, critical, attack: true, at, resistanceMods, pen,
                     gambler.InvertsResistance(Random.Shared));
                 if (critical) damage = DamageModel.CriticalDamage(damage, criticalMultiplier);
                 LeechOnHitLocked(conn, m, MonsterTakenComponents(m, mitigated, spell: false), damage,
@@ -390,6 +393,16 @@ static partial class Game
             if (m.ThresholdReached) await QuestThreshold(remote, stream, ciphers, conn, targetId, m);
             return true;
         }
+    }
+
+    // The follow timeout may return a stop that still cannot reach its moving target.
+    // Only an admitted swing feeds Inquisitor's accepted-use history.
+    internal static bool AcceptDefaultSwingUse(ClientState conn, SpawnedMonster target,
+        (int X, int Y) stop, (int X, int Y) contact, double reach, int action)
+    {
+        if (!SwingInReach(target, stop, contact, reach)) return false;
+        InquisitorRead(conn, CharacterPlayerStats(conn), new(true, false, false, false, false));
+        return true;
     }
 
     // A gem skill used on a monster (C→S 0x24 with a skill id other than the default attack's). A spell stops and casts from
@@ -621,7 +634,7 @@ static partial class Game
             {
                 if (!Current()) return false;
                 paid = PayMana(conn, skillId, out cost, out lifeCost);
-                if (paid) criticalRoll = CaptureSkillCriticalRoll(conn, skillId);
+                if (paid) { InquisitorAcceptedUse(conn, gem.Effect); criticalRoll = CaptureSkillCriticalRoll(conn, skillId); }
                 if (paid && Supports.Of(gem.Effect)?.Types.Contains(47) == true)
                 {
                     channelGeneration = ++conn.ChannelGeneration;
@@ -836,6 +849,7 @@ static partial class Game
             conn.ApplyMovementSpeed();
             conn.AuraStatsDirty = true;
             CharacterSaves.SetAuraActive(CharacterName(conn), effectId, started is not null);
+            if (started is not null) InquisitorAcceptedUse(conn, effect);
         }
 
         await SendOwnAuraChanges(remote, stream, ciphers, conn);
@@ -955,6 +969,8 @@ static partial class Game
     internal static int SkillRadius(ClientState conn, IReadOnlyDictionary<uint, int> skillStats, bool spell, int effect)
     {
         var areaStats = MergeSkillStats(AreaPlayerStats(conn), skillStats);
+        if (spell && Stats.Key("spell_area_of_effect_+%") is uint area)
+            areaStats[area] = areaStats.GetValueOrDefault(area) + InquisitorModifiers(conn, effect, areaStats).AreaIncreasePct;
         int Get(string name) => Stats.Key(name) is uint k ? areaStats.GetValueOrDefault(k) : 0;
         return SkillArea.Radius(SkillArea.BaseRadius(SkillsFor(conn).EffectId(effect), Get), Get, spell);
     }
@@ -1156,7 +1172,7 @@ static partial class Game
                     && (spell || GameServer.Core.World.EvasionEntropy.ConfirmsCritical(hitChance, conn.AttackAccuracyRandom));
                 int multiplier = CriticalMultiplierOn(m, sweepMultiplier);
                 double at = ProjectileWorldTime(conn);
-                (damage, resistance, var mitigated) = MonsterHitDamage(m, rolled, critical, attack: !spell, at, mods, pen,
+                (damage, resistance, var mitigated) = MonsterHitDamage(conn, m, rolled, critical, attack: !spell, at, mods, pen,
                     gambler.InvertsResistance(Random.Shared));
                 var taken = MonsterTakenComponents(m, mitigated, spell);
                 if (critical) damage = DamageModel.CriticalDamage(damage, multiplier);
@@ -1275,6 +1291,14 @@ static partial class Game
 
     // A player's hit as MonsterDamage, with the target's damage taken at now (its shock, Glacial Wave's chill) and the
     // resisted packet that AilmentsOnHitLocked needs: every player hit path calls both (surfcaster.md, Hit paths).
+    internal static (int Damage, string? Resistance, DamagePacket Mitigated) MonsterHitDamage(ClientState owner, SpawnedMonster m, DamagePacket rolled,
+        bool critical, bool attack, double now, HitResistances.Mods mods, Penetration.PerType pen = default,
+        bool invertElemental = false)
+    {
+        m.InquisitorOwner = new(owner);
+        return MonsterHitDamage(m, rolled, critical, attack, now, mods, pen, invertElemental);
+    }
+
     internal static (int Damage, string? Resistance, DamagePacket Mitigated) MonsterHitDamage(SpawnedMonster m, DamagePacket rolled,
         bool critical, bool attack, double now, HitResistances.Mods mods, Penetration.PerType pen = default,
         bool invertElemental = false)

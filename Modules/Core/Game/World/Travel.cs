@@ -411,6 +411,7 @@ static partial class Game
         }
         lock (conn.Monsters) conn.TransferAccepted = true;
         foreach (var resolved in GameEvents.TransferResolved.For(conn)) await resolved(conn, t, r);
+        CarryInquisitor(conn, r.Ticket);
         CarryCharges(conn, r.Ticket);
         CarryFortification(conn, r.Ticket);
         CarryRampage(conn, r.Ticket);

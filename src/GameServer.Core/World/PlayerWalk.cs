@@ -46,6 +46,13 @@ public sealed class PlayerWalk
     }
 
     public double Speed => _speed;
+    public Action<double, bool>? MotionChanged { get; init; }
+    IDisposable Changing(double now)
+    {
+        MotionChanged?.Invoke(now, false);
+        return new MotionScope(() => MotionChanged?.Invoke(now, true));
+    }
+    sealed class MotionScope(Action done) : IDisposable { public void Dispose() => done(); }
 
     /// <summary>The frame a time's messages take effect in on this client, if it runs on frames: a lockstep client applies
     /// them at the frame's start, and its walkers only move on frames.</summary>
@@ -90,6 +97,7 @@ public sealed class PlayerWalk
     /// 0x141e7bc20). The steps before stay, so a position asked for an earlier time is still the walked cell.</summary>
     public void StopAt(double at)
     {
+        using var motion = Changing(at);
         var here = At(at - 1e-9, out _);
         var kept = new List<Segment>();
         foreach (var s in _segments)
@@ -113,6 +121,7 @@ public sealed class PlayerWalk
     /// at the new pace, at once (a held walk when its hold ends), and the following segments are set up at the new speed.</summary>
     public void SetSpeed(double speed, double now)
     {
+        using var motion = Changing(now);
         if (speed <= 0) throw new ArgumentOutOfRangeException(nameof(speed));
         _speed = speed;
         var here = At(now, out double fraction);
@@ -152,6 +161,7 @@ public sealed class PlayerWalk
     /// <summary>Puts the walker at a cell (a teleport, e.g. S→C 0x1b7): no walk in progress.</summary>
     public void Teleport(int x, int y, double now)
     {
+        using var motion = Changing(now);
         _segments = [];
         _rest = (x, y);
         _restSince = now;
@@ -163,6 +173,7 @@ public sealed class PlayerWalk
     /// after a hit's recovery. A hold already running that lasts longer keeps its end.</summary>
     public void Pause(double now, double seconds)
     {
+        using var motion = Changing(now);
         // As a stop: the hold starts after the frame's steps.
         if (FrameOf?.Invoke(now) is { } frame) (now, seconds) = (frame.End, seconds - (frame.End - frame.Start));
         var here = At(now, out double fraction);
@@ -245,6 +256,7 @@ public sealed class PlayerWalk
     /// </summary>
     public (int X, int Y) Charge(int targetX, int targetY, int range, double now)
     {
+        using var motion = Changing(now);
         var here = At(now, out double fraction);
         double length = Math.Sqrt((double)(targetX - here.X) * (targetX - here.X) + (double)(targetY - here.Y) * (targetY - here.Y));
         (int X, int Y) end = (targetX, targetY);
@@ -261,6 +273,7 @@ public sealed class PlayerWalk
 
     private (int X, int Y) Walk((int X, int Y) target, int maxRange, int tolerance, double now)
     {
+        using var motion = Changing(now);
         now = Frame(now);
         var here = At(now, out double fraction);
         var bodies = _blockers();

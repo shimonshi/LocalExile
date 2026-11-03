@@ -107,8 +107,7 @@ static partial class Game
         double withered = m.Withered.Count == 0 ? 0
             : mitigated[DamageType.Chaos].Min * (MonsterDamageTaken(m, spell, now, hit: true, chaos: true) - factor);
         double elementalDamage = mitigated[DamageType.Fire].Min + mitigated[DamageType.Cold].Min + mitigated[DamageType.Lightning].Min;
-        double elementalFactor = m.TakenFromPlayer.Elemental == 0 ? factor
-            : MonsterDamageTaken(m, spell, now, elemental: true, hit: true);
+        double elementalFactor = MonsterDamageTaken(m, spell, now, elemental: true, hit: true);
         double physicalFactor = 1 + Math.Max(0, m.PridePhysicalMore) / 100.0;
         return (int)Math.Round((total - elementalDamage) * factor + elementalDamage * elementalFactor + withered
             + physicalTaken * factor * (physicalFactor - 1));

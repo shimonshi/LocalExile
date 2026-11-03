@@ -1068,6 +1068,12 @@ static partial class Game
         // The player's passive enemy auras (Born under Fire): the hit and its ailment base convert alike, so ignite
         // sees the converted damage. Converting does not remove stun, so the hit recovery below reads a.Damage.
         var baseHit = a.Damage;
+        bool augury = InquisitorAugury(conn, m, now);
+        if (augury)
+        {
+            rolled = rolled.Select((type, range) => range.Scale(InquisitorNearby.IncomingFactor(type, true)));
+            baseHit = baseHit.Select((type, range) => range.Scale(InquisitorNearby.IncomingFactor(type, true)));
+        }
         if (EnemyAuraConversionLocked(conn, m, here, now) is { } auraConversion)
             (rolled, baseHit) = (rolled.Convert(auraConversion), baseHit.Convert(auraConversion));
         // Glacial Wave: less damage dealt is all of it (PoB Damage MORE), so the ignite its crit puts on you too.

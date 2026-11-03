@@ -82,7 +82,8 @@ static partial class Game
                     enemyAuras = [.. auras, new PassiveBuffAuras.Aura(0, "Pride", AuraCatalog.PrideBuffRow,
                         prideRadius, [3], [])];
                 }
-                var bytes = new List<byte>();
+                InquisitorGroundStep(conn, now);
+                var bytes = new List<byte>(InquisitorPresentation(conn));
                 int added = 0, removed = 0;
                 // One timed debuff on a monster: its buff shown for the time left, shown again when that changes, taken
                 // off when it ends or the monster or the player dies. Whether it is on.
