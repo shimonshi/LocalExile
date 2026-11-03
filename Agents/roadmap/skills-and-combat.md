@@ -492,6 +492,9 @@ remaining native checks are recorded in [the port record](../docs/dev/issue75-po
 
 ### Skill projectiles
 
+- **Open:** Lightning Arrow's native secondary-target radius at baseline and with area modifiers.
+  Automated fallback/scaling coverage does not establish the client boundary.
+  See [projectile radius limits](../docs/game/projectile-skills.md#radius-damage-and-presentation).
 - **Client-contract research:** use the frozen [delivery matrix](../docs/re/projectiles/delivery-matrix.md)
   before extending the simulator or changing phase prediction ownership.
   Recovered count/layout, random contexts, motion/contact/history and selected continuation/skill rules are available.

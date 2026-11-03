@@ -669,6 +669,8 @@ Part of [Status](../Status.md); what to build next in this area is in
   Automated test covers Tornado Shot with level-1 Lifetap: 9 Mana becomes 27 Life, the first use grants the buff,
   and the hit and flask bonuses apply. Code: `Combat/Lifetap.cs`, `Player.cs`, `ConditionalSupportDamage.cs`;
   docs: [25](../docs/protocol/25-gem-supports.md).
+- Lightning Arrow contact-target radius has automated fallback, explicit-base and area-scaling coverage.
+  Native target-boundary comparison remains pending; see [projectile skills](../docs/game/projectile-skills.md).
 - Bow projectile counts: actual bow attacks now read `number_of_additional_arrows` and
   `number_of_additional_arrows_while_main_hand_accuracy_is_3000_or_more` on top of the generic projectile additions, so
   bow/quiver modifiers and passives such as Master Fletcher add primary arrows. The arrow inputs are gated to a real

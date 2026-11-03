@@ -68,6 +68,10 @@ The generic damage adapter captures separate direct/area packets, including area
 KB applies `active_skill_area_damage_+%_final` only at the explosion stage. Skill-owned Arcane Might and Clustering's
 maximum-mana physical addition enter the common attack damage construction, before stage multipliers.
 
+Lightning Arrow's contact-target search uses an eighteen-cell server-model fallback when the exported base radius
+is absent.
+That fallback is not a native boundary measurement; baseline and modified target-boundary comparisons remain pending.
+
 Each group chooses a random initial rotation and divides the circle into N equal sectors for its resolved explosion
 count. One angle is sampled independently inside each sector, visited counter-clockwise. Centers lie on the fixed
 placement circle: 20 cells for normal KB and 28 for Clustering before area scaling. Blast and placement radii scale

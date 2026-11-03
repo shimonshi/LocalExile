@@ -169,7 +169,7 @@ static class GatewayProjectileSkillProfiles
         }
         if (IsLightningArrow(effect) && p.ContactTargets is { } targets)
         {
-            int radius = SkillArea.Radius(SkillArea.BaseRadius(effect, get), get, spell);
+            int radius = SkillArea.Radius(Value("active_skill_base_area_of_effect_radius", 18), get, spell);
             return p with { ContactTargets = targets with { Radius = radius } };
         }
         if (p.EndArea is { } terminal)
