@@ -256,6 +256,13 @@ public sealed partial class WhispererRuntimeTests
         c.Monsters[42] = target; c.Monsters[43] = nearby;
         foreach (var metadata in Game.MarkCatalog.All)
         {
+            if (metadata.Id == "PoachersMark")
+            {
+                target = new("armoured mark", new(105, 100, 0), 0, 0, 1000) { Hostile = true,
+                    Mods = new([], [], new(new Dictionary<string, int>
+                        { ["projectile_damage_taken_+%"] = 11, ["base_additional_physical_damage_reduction_%"] = 20 })) };
+                c.Monsters[42] = target;
+            }
             c.PlayerStats.Remove(Key(DeadeyeMarkRules.NearbyTaken));
             c.PlayerStats.Remove(Key(DeadeyeMarkRules.MarkedTaken));
             var type = Program.Items.All.Single(t => Program.Items.Gem(t) is { IsSupport: false } g
@@ -303,6 +310,18 @@ public sealed partial class WhispererRuntimeTests
             Assert.True(revalued.AsSpan().IndexOf(InstanceEntities.StatsUpdate(42, metadata.BuffKeys
                 .Select(k => (k, target.Mods.Effects[Program.Stats.Name(k)!])).ToArray())) >= 0);
             c.PlayerStats.Remove(Key("curse_effect_+%"));
+            if (metadata.Id == "PoachersMark")
+            {
+                // A genuinely paid, current mark changes the physical basis for both the hit and all-damage shock.
+                Assert.Equal(-20, Game.MarkOn(c, target, "base_additional_physical_damage_reduction_%"));
+                var physical = DamagePacket.Of(DamageType.Physical, 100, 100);
+                double at = Game.ProjectileWorldTime(c);
+                Assert.Equal(100, Game.MonsterHitDamage(c, target, physical, false, true, at, default).Damage);
+                Game.AilmentsOnHitLocked(c, target, physical, false, false, 100,
+                    new Dictionary<uint, int> { [Key("all_damage_can_shock")] = 1, [Key("always_shock")] = 1 },
+                    null, at, new Random(1));
+                Assert.Equal(19, target.Ailments.Magnitude(MonsterElementalAilments.Kind.Shock, at));
+            }
             foreach (bool ruthless in new[] { false, true })
             {
                 c.LeagueModule = new(new League("marks", "Standard", false, false)
