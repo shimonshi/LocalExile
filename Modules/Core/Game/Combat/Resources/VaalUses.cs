@@ -104,6 +104,7 @@ static partial class Game
         }
         ManaSpentLocked(conn, plan.Mana, stats);
         InquisitorAcceptedUse(conn, plan.Effect);
+        OrdinaryAcceptedUse(conn, -(++conn.OrdinaryUtilitySequence));
         if (attackDeadline is double next) conn.NextAttackAt = next;
         conn.VaalPreventionUntil = Math.Max(conn.VaalPreventionUntil, now + plan.PreventionSeconds);
         conn.VaalUse = plan with { Action = conn.ActionCount, Epoch = conn.ProjectileEpoch,

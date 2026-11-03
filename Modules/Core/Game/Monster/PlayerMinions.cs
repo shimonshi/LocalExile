@@ -57,6 +57,11 @@ static partial class Game
     {
         var rules = CombatLifetime;
         bool Current() => CurrentGameWork && ReferenceEquals(CombatLifetime, rules);
+        using (ProjectileMutation(conn))
+            if (Current() && !conn.Closed && !conn.LeavingArea
+                && (conn.ProjectileRuntimeState is ProjectileSession { Active: true }
+                    || conn.Minions.All.Any(m => m.Kind == MirageKind)))
+                MirageStep(ProjectilesFor(remote, stream, ciphers, conn), now);
         foreach (var tick in GameEvents.CompanionTick.For(conn))
         {
             if (!Current()) return;

@@ -54,7 +54,8 @@ static partial class Game
         var packets = session.Presentation(now, () => conn.NextBuff++).SelectMany(b => ChargeBuffs.Packets(b, PlayerId)).ToArray();
         foreach (var (packet, label) in packets)
             Console.WriteLine($"[gateway] {remote} => {label}: {Convert.ToHexString(packet.AsSpan(0, Math.Min(packet.Length, 96)))}");
-        return (packets.Length > 0 ? packets.SelectMany(p => p.Packet).ToArray() : null, step.CountsChanged);
+        var ordinary = OrdinaryPresentation(conn);
+        return (packets.Length > 0 || ordinary.Length > 0 ? packets.SelectMany(p => p.Packet).Concat(ordinary).ToArray() : null, step.CountsChanged);
     }
 
     static void CommitAcceptedCritFlasksLocked(ClientState conn, IReadOnlyDictionary<uint, int> player, double at)
