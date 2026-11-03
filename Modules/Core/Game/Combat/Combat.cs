@@ -532,6 +532,7 @@ static partial class Game
         int action = actionToken ?? conn.ActionCount;
         int recoveryGeneration = 0;
         int? channelGeneration = null;
+        DeadeyeMirageLifecycle.Release? mirageAdmission = null;
         VaalUseReservation? vaalUse = null;
         lock (conn.Monsters)
             if (actionToken is not null && (conn.ActionCount != action || conn.ElementalAilments.ActionFactor(conn.Clock.Elapsed.TotalSeconds) == 0 || conn.HitRecovery.Active(conn.Clock.Elapsed.TotalSeconds))) return false;
@@ -566,6 +567,8 @@ static partial class Game
             Console.WriteLine($"[gateway] {remote} skill 0x{skillId:x4} {gem.Name}: no executable paid Vaal admission");
             return false;
         }
+        if (vaalUse is not null && SkillsFor(conn).IsAttack(gem.Effect))
+            lock (conn.Monsters) mirageAdmission = PaidMirageAdmission(conn, vaalUse.Action);
         // Eligible uses arrive with their one original preflight reservation. Never reserve again after an await.
         if (cooldownUse is not null)
         {
@@ -646,6 +649,7 @@ static partial class Game
                     criticalRoll = CaptureSkillCriticalRoll(conn, skillId);
                     OrdinaryAcceptedUse(conn, cooldownUse?.Instant == true || locationInstant || ordinaryInstantUse
                         ? -(++conn.OrdinaryUtilitySequence) : action);
+                    if (SkillsFor(conn).IsAttack(gem.Effect)) mirageAdmission = PaidMirageAdmission(conn, action);
                     if (markCast) AdmitPaidMark(conn, skillId, targetId, action);
                 }
                 if (paid && Supports.Of(gem.Effect)?.Types.Contains(47) == true)
@@ -715,7 +719,8 @@ static partial class Game
             await ActivateRighteousFire(remote, stream, ciphers, conn, skillId, gem.Effect, gem.Level, gem.Quality, gem.Gem);
         else
             await LaunchProjectile(remote, stream, ciphers, conn, skillId, from, to, recoveryGeneration, targetId, sequence: sequence,
-                actionToken: actionToken, cooldownUse: cooldownUse, criticalRoll: criticalRoll, channelGeneration: channelGeneration);
+                actionToken: actionToken, cooldownUse: cooldownUse, criticalRoll: criticalRoll,
+                channelGeneration: channelGeneration, mirageAdmission: mirageAdmission);
         return true;
     }
 
@@ -884,7 +889,7 @@ static partial class Game
     internal static Task LaunchProjectile(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn,
         ushort skillId, (int X, int Y) from, (int X, int Y) to, int recoveryGeneration, uint targetId = 0, ushort sequence = 0,
         int? actionToken = null, CooldownUseTicket? cooldownUse = null, SkillCriticalRoll? criticalRoll = null,
-        int? channelGeneration = null)
+        int? channelGeneration = null, DeadeyeMirageLifecycle.Release? mirageAdmission = null)
     {
         var gem = GemSkillEffects(conn).FirstOrDefault(g => g.Id == skillId);
         if (gem.Name is null) return Task.CompletedTask;
@@ -894,7 +899,7 @@ static partial class Game
         if (UsesProjectileRuntime(gem.Effect))
             return ScheduleGemProjectile(remote, stream, ciphers, conn, skillId, gem, to,
                 actionToken ?? cooldownUse?.ActionToken ?? conn.ActionCount, recoveryGeneration, cooldownUse, criticalRoll,
-                sequence);
+                sequence, mirageAdmission);
         // A channelled skill (Cyclone, ActiveSkillType 47) hits as it starts: its spin is already in motion, and the later
         // sweeps follow on the attack timer (RunChannel).
         bool channelled = Supports.Of(gem.Effect)?.Types.Contains(47) == true;

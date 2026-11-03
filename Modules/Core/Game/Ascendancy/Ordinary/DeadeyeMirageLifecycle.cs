@@ -12,17 +12,28 @@ sealed class DeadeyeMirageLifecycle
         public long Attack { get; set; }
     }
     readonly List<Actor> actors = [];
-    readonly HashSet<(long Area, long Release)> releases = [];
+    public sealed class Release(long area, long identity)
+    {
+        public long Area { get; } = area;
+        public long Identity { get; } = identity;
+        bool claimed;
+        internal bool TryClaim()
+        {
+            if (claimed) return false;
+            claimed = true;
+            return true;
+        }
+    }
     long next;
     public IReadOnlyList<Actor> Actors => actors;
 
     // Called once on a qualifying direct owner bow hit tied to an accepted paid release. Parent reserves an
     // object id only after this succeeds. A proxy hit can never recurse or grant owner on-hit/leech resources.
-    public Actor? OwnerHit(double now, long area, long release, bool paidRelease, bool ownerDirect, long gameGeneration,
+    public Actor? OwnerHit(double now, Release release, bool paidRelease, bool ownerDirect, long gameGeneration,
         string signature, ushort skill, ProjectileVector position, Func<string, int> qualified)
     {
         Advance(now, gameGeneration);
-        if (!paidRelease || !ownerDirect || !releases.Add((area, release))) return null;
+        if (!paidRelease || !ownerDirect || !release.TryClaim()) return null;
         bool detached = qualified("mirage_archers_do_not_attach") != 0;
         int radius = Math.Max(0, qualified("cannot_summon_mirage_archer_if_near_mirage_archer_radius"));
         if (detached && actors.Any(a => (a.Position - position).Length <= radius)) return null;
@@ -78,5 +89,5 @@ sealed class DeadeyeMirageLifecycle
 
     public bool Current(Actor actor, long attack, long generation) =>
         actor.GameGeneration == generation && actors.Contains(actor) && actor.Attack == attack;
-    public void Clear() { actors.Clear(); releases.Clear(); }
+    public void Clear() => actors.Clear();
 }
