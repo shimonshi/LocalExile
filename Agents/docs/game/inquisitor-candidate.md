@@ -5,6 +5,17 @@ The pinned 3.29.3b stat description gives Fanaticism five seconds despite the le
 containing `for_4_seconds`.
 Native buff rows are 1719 for Fanaticism and 1700 for its charges.
 
+## Skill area sources
+
+Projectile release and Righteous Fire retain the skill's own support/quality base-area bonus.
+The player's base-area bonus is already folded into `skill_area_of_effect_+%` by the panel calculation;
+only that player contribution is excluded from the remaining base-area input.
+Dropping the combined base-area key also drops Increased Area of Effect Support.
+Fanaticism's separate spell-area multiplier remains applied once.
+Grouped release regressions cover a real linked support with player base area zero and 100 percent.
+A bounded Lightning Arrow control in the later radius integration observes baseline, support and removal contacts;
+it does not independently measure the official client's radius formula.
+
 ## Admission and lifetime boundaries
 
 A default attack can finish following while its target remains out of reach.

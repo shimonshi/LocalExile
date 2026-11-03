@@ -95,15 +95,24 @@ static partial class Game
     }
 
     internal static Dictionary<uint, int> SupportedStats(ClientState conn, ushort skillId)
+        => SupportedStatsFor(conn, skillId, area: false);
+
+    internal static Dictionary<uint, int> SupportedAreaStats(ClientState conn, ushort skillId)
+        => SupportedStatsFor(conn, skillId, area: true);
+
+    static Dictionary<uint, int> SupportedStatsFor(ClientState conn, ushort skillId, bool area)
     {
         var player = FinalPlayerStats(conn).ToDictionary(kv => kv.Item1, kv => kv.Item2);
         var gem = SupportedSkill(conn, skillId);
         var result = MergeSkillStats(player, gem.Stats);
+        // The panel already includes the player's base area; the skill/support's own base must remain.
+        if (area && Stats.Key(SkillArea.BaseIncreased) is uint baseArea)
+            result[baseArea] = gem.Stats.GetValueOrDefault(baseArea);
         var fanatic = InquisitorModifiers(conn, gem.Effect, result);
         if (Stats.Key("mana_cost") is uint cost && result.TryGetValue(cost, out int basis))
             result[cost] = InquisitorSkillCost(gem.Stats.GetValueOrDefault(cost), player, fanatic);
-        if (Stats.Key("spell_area_of_effect_+%") is uint area)
-            result[area] = result.GetValueOrDefault(area) + fanatic.AreaIncreasePct;
+        if (Stats.Key("spell_area_of_effect_+%") is uint spellArea)
+            result[spellArea] = result.GetValueOrDefault(spellArea) + fanatic.AreaIncreasePct;
         return result;
     }
 
