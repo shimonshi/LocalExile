@@ -263,6 +263,7 @@ static partial class Game
                 double hitAt = ProjectileWorldTime(conn);
                 var (damage, _, mitigated) = MonsterHitDamage(conn, m, rolled, critical, attack: false, hitAt, mods, pen,
                     gambler.InvertsResistance(Random.Shared));
+                double ailmentReduction = AilmentPhysicalReduction(conn, m);
                 if (critical) damage = DamageModel.CriticalDamage(damage, CriticalMultiplierOn(m, multiplier));
                 var applied = ApplyMonsterHitLocked(conn, m, damage);
                 if (applied is { StageStarts: true } staged)
@@ -271,7 +272,8 @@ static partial class Game
                     applied = staged with { StageStarts = false };
                 }
                 if (applied is not null)
-                    AilmentsOnHitLocked(conn, m, mitigated, spell: true, critical, multiplier, player, own, hitAt, Random.Shared, reflected);
+                    AilmentsOnHitLocked(conn, m, mitigated, spell: true, critical, multiplier, player, own, hitAt, Random.Shared,
+                        reflected, physicalReduction: ailmentReduction);
                 if (applied is not null) InflictMonsterBlind(conn, id, m, hitAt, BlindInputs(player, own));
                 if (applied is not null && !rageGranted) rageGranted = RageOnHitLocked(conn, attack: false, melee: false, critical, own);
                 // shortcut: the ignite's flat fire is rolled apart from the hit (the game takes the hit's own roll; the

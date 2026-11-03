@@ -359,7 +359,23 @@ public sealed partial class WhispererRuntimeTests
             Advance(2);
             uint afterDeathMana = (uint)Math.Min(Game.UnreservedMana(c), (long)paid
                 + Math.Max(0, Game.MarkAmount(c, mark, "mana_granted_when_killed")));
-            Assert.Equal(0u, Game.ApplyMonsterHitLocked(c, target, 2000)!.Value.Life);
+            bool poacher = metadata.Id == "PoachersMark";
+            double deathAt = Game.ProjectileWorldTime(c);
+            double ailmentReduction = Game.AilmentPhysicalReduction(c, target);
+            if (poacher)
+            {
+                target.Life = 50;
+                Assert.Equal(0, target.Ailments.Magnitude(MonsterElementalAilments.Kind.Shock, deathAt));
+            }
+            Assert.Equal(0u, Game.ApplyMonsterHitLocked(c, target, poacher ? 100 : 2000)!.Value.Life);
+            if (poacher)
+            {
+                Assert.Equal(0, Game.MarkOn(c, target, "base_additional_physical_damage_reduction_%"));
+                Game.AilmentsOnHitLocked(c, target, DamagePacket.Of(DamageType.Physical, 100, 100), false, false, 100,
+                    new Dictionary<uint, int> { [Key("all_damage_can_shock")] = 1, [Key("always_shock")] = 1 },
+                    null, deathAt, new Random(1), physicalReduction: ailmentReduction);
+                Assert.Equal(19, target.Ailments.Magnitude(MonsterElementalAilments.Kind.Shock, deathAt));
+            }
             var transferred = Assert.IsType<Game.MarkTarget>(Game.CurrentMark(c));
             Assert.Equal(43u, transferred.Id); Assert.Same(clock, transferred.Clock);
             Assert.InRange(clock.Remaining, 8 - 1d / ProjectileRuntime.QuantaPerSecond,

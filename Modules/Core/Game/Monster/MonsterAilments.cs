@@ -90,6 +90,10 @@ static partial class Game
         m.Mods.Effects["action_speed_cannot_be_reduced_below_base"] > 0 || m.ReceivedActionFloor ? 1
             : m.Ailments.ActionFactor(now) * (now < m.ReceivedActionUntil ? m.ReceivedActionFactor : 1);
 
+    // Capture before committing a lethal hit: death can clear or transfer the qualified mark.
+    internal static double AilmentPhysicalReduction(ClientState conn, SpawnedMonster m) =>
+        Math.Max(0, m.Mods.Effects.PhysicalReduction + MarkOn(conn, m, "base_additional_physical_damage_reduction_%"));
+
     /// <summary>
     /// A player hit that landed inflicts its ailments (MonsterElementalAilments.Inflict) from the damage the monster took
     /// per type: the mitigated packet × its damage taken × the critical multiplier on a critical strike. The threshold is
@@ -104,16 +108,16 @@ static partial class Game
     /// </summary>
     internal static void AilmentsOnHitLocked(ClientState conn, SpawnedMonster m, DamagePacket mitigated, bool spell,
         bool critical, int criticalMultiplier, IReadOnlyDictionary<uint, int> player, IReadOnlyDictionary<uint, int>? skill,
-        double now, Random random, List<MonsterElementalAilments.Effect>? reflected = null, bool reflectToPlayer = true)
+        double now, Random random, List<MonsterElementalAilments.Effect>? reflected = null, bool reflectToPlayer = true,
+        double? physicalReduction = null)
     {
         double factor = MonsterDamageTaken(m, spell, now, hit: true) * (critical ? criticalMultiplier / 100.0 : 1);
         int Player(string name) => Stats.Key(name) is uint key ? player.GetValueOrDefault(key) : 0;
         int Skill(string name) => skill is not null && Stats.Key(name) is uint key ? skill.GetValueOrDefault(key) : 0;
         // Qualified Poacher's Mark changes the same physical reduction used by the landed hit.
-        double physicalReduction = Math.Max(0, m.Mods.Effects.PhysicalReduction
-            + MarkOn(conn, m, "base_additional_physical_damage_reduction_%"));
+        double reduction = physicalReduction ?? AilmentPhysicalReduction(conn, m);
         var taken = mitigated.Select((type, range) => range.Scale(factor
-            * (type == DamageType.Physical ? Math.Max(0, 1 - physicalReduction / 100.0) : 1)));
+            * (type == DamageType.Physical ? Math.Max(0, 1 - reduction / 100.0) : 1)));
         var added = m.Ailments.Inflict(taken, critical, m.MaxLife, now, name => Player(name) + PanelStats.Of(name, Skill),
             name => m.Mods.Effects[name], random, AilmentArea(Player, Skill, spell));
         if (m.Dead || m.Life == 0)

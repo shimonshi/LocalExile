@@ -317,6 +317,7 @@ static partial class Game
                 + MarkOn(Conn, target, "enemy_additional_critical_strike_multiplier_against_self"));
             var (damage, _, mitigated) = MonsterHitDamage(Conn, target, rolled, critical, !shot.Spell, at, shot.ResistanceMods,
                 shot.Penetration, gambler.InvertsResistance(random), projectile: true);
+            double ailmentReduction = AilmentPhysicalReduction(Conn, target);
             if (critical) damage = DamageModel.CriticalDamage(damage, multiplier);
             bool immune = target.Invulnerable;
             if (mirage is null)
@@ -338,7 +339,8 @@ static partial class Game
             if (!immune && damage > 0 && shot.MirageRelease is { } receipt) MirageOwnerHit(this, receipt, target);
             if (!immune)
                 AilmentsOnHitLocked(Conn, target, mitigated, shot.Spell, critical, multiplier, player, shot.SkillStats,
-                    at, contact.Projectile.ReactionRandomSource, reflectToPlayer: mirage is null);
+                    at, contact.Projectile.ReactionRandomSource, reflectToPlayer: mirage is null,
+                    physicalReduction: ailmentReduction);
             if (!immune && hit.Value.Life > 0 && rolled[DamageType.Fire].Max > 0) IgniteOnHitLocked(this, contact.Target.Id, target,
                 OrdinaryIgniteAt(Conn, target, shot, contact.Projectile.Distance, player), critical, at);
             InflictMonsterBlind(Conn, contact.Target.Id, target, at, shot.Blind, contact.Projectile.ReactionRandomSource);

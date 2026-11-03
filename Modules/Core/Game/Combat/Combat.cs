@@ -342,6 +342,7 @@ static partial class Game
                 double at = ProjectileWorldTime(conn);
                 (damage, resistance, var mitigated) = MonsterHitDamage(conn, m, ownRolled, critical, attack: true, at, resistanceMods, pen,
                     gambler.InvertsResistance(Random.Shared));
+                double ailmentReduction = AilmentPhysicalReduction(conn, m);
                 if (critical) damage = DamageModel.CriticalDamage(damage, criticalMultiplier);
                 LeechOnHitLocked(conn, m, MonsterTakenComponents(m, mitigated, spell: false), damage,
                     HitLeechSources(player, true, ownPenetration, weapon.LocalSources));
@@ -363,7 +364,7 @@ static partial class Game
                 conn.LastEnemyHitAt = m.PlayerHitAt = conn.Clock.Elapsed.TotalSeconds;
                 if (life == 0) { m.Aggro = false; m.Dead = true; CollectVaalSoulAtDeathLocked(conn, m); }
                 AilmentsOnHitLocked(conn, m, mitigated, spell: false, critical, criticalMultiplier, player, ownPenetration,
-                    at, Random.Shared);
+                    at, Random.Shared, physicalReduction: ailmentReduction);
                 TriggerElementalRelicLocked(conn, m, hit: damage > 0, killed: life == 0);
                 if (!raged) raged = RageOnHitLocked(conn, attack: true, melee: WeaponProfileFor(conn, activeSet: true).Melee, critical);
                 InflictMonsterBlind(conn, targetId, m, ResourceEffectsTime(conn), BlindInputs(player));
@@ -1202,6 +1203,7 @@ static partial class Game
                 double at = ProjectileWorldTime(conn);
                 (damage, resistance, var mitigated) = MonsterHitDamage(conn, m, rolled, critical, attack: !spell, at, mods, pen,
                     gambler.InvertsResistance(Random.Shared));
+                double ailmentReduction = AilmentPhysicalReduction(conn, m);
                 var taken = MonsterTakenComponents(m, mitigated, spell);
                 if (critical) damage = DamageModel.CriticalDamage(damage, multiplier);
                 double more = damageMore * bloodMore;
@@ -1219,7 +1221,7 @@ static partial class Game
                 {
                     landed++;
                     AilmentsOnHitLocked(conn, m, mitigated, spell, critical, multiplier, player, skillStats, at, Random.Shared,
-                        reflected);
+                        reflected, physicalReduction: ailmentReduction);
                 }
                 if (applied is { StageStarts: true } staged)
                 {
