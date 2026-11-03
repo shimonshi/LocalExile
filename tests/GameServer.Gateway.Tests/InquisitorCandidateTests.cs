@@ -167,7 +167,7 @@ public sealed class InquisitorCandidateTests
         Game.ClearInquisitor(c);
         h.Time.At = .1;
         Assert.True(Game.TryBeginRangedAttack(c, .1, 1, SkillCatalog.FirstSkillId, 0, out _));
-        h.Time.At = 1;
+        h.Time.At = 1.1; // This fresh session's first full one-second period starts at .1.
         Assert.Equal(1, Game.InquisitorRead(c, Game.CharacterPlayerStats(c)).FanaticCharges);
         Game.ClearInquisitor(c);
         h.Time.At = 0;
