@@ -29,6 +29,9 @@ The bounded native observer confirms the actor and autonomous target damage, but
 observe every RemoveObject or certify attachment art, equipment or animation timing.
 Detached actor lifetime validation is per captured skill/source signature; a different valid detached
 skill must not retire another actor merely because its equipment signature differs.
+Paid attack windups can survive newer owner actions, so their admission is carried by a per-use receipt
+through scheduled release and impact.
+Its once-only Mirage claim avoids retaining every past release in the area's session or reload payload.
 
 ## Remaining limits
 

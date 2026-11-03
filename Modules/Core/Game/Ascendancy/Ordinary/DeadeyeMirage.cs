@@ -5,7 +5,10 @@ using GameServer.Core.World;
 
 static partial class Game
 {
-    internal sealed record MirageReceipt(int Epoch, int Action, ushort Skill, string Signature);
+    internal sealed record MirageReceipt(DeadeyeMirageLifecycle.Release Admission, ushort Skill, string Signature)
+    {
+        internal int Epoch => (int)Admission.Area;
+    }
     internal sealed class MirageBody(uint id, SpawnedMonster monster, DeadeyeMirageLifecycle.Actor actor)
     {
         internal readonly uint Id = id;
@@ -37,11 +40,15 @@ static partial class Game
             + MarkStat(stats, "cannot_summon_mirage_archer_if_near_mirage_archer_radius");
     }
 
-    internal static ProjectileUse PaidMirageRelease(ClientState c, int action, ushort skill, ProjectileUse use)
+    internal static DeadeyeMirageLifecycle.Release? PaidMirageAdmission(ClientState c, int action) =>
+        OrdinaryOf(c, _ => 0).Accepted(c.ProjectileEpoch, action) ? new(c.ProjectileEpoch, action) : null;
+
+    internal static ProjectileUse PaidMirageRelease(ClientState c, DeadeyeMirageLifecycle.Release? admission,
+        ushort skill, ProjectileUse use)
     {
-        if (use.Payload is not ProjectileOffense shot || MirageSignature(c, skill) is not { } signature
-            || !OrdinaryOf(c, _ => 0).Accepted(c.ProjectileEpoch, action)) return use;
-        return use with { Payload = shot with { MirageRelease = new(c.ProjectileEpoch, action, skill, signature) } };
+        if (admission is null || admission.Area != c.ProjectileEpoch || use.Payload is not ProjectileOffense shot
+            || MirageSignature(c, skill) is not { } signature) return use;
+        return use with { Payload = shot with { MirageRelease = new(admission, skill, signature) } };
     }
 
     internal static MirageBody? MirageOwnerHit(ProjectileSession session, MirageReceipt receipt, SpawnedMonster target)
@@ -49,8 +56,7 @@ static partial class Game
         var c = session.Conn;
         if (!session.Active || c.PlayerLife == 0 || c.Paused || InTown(c) || !target.Hostile
             || target.Invulnerable || receipt.Epoch != c.ProjectileEpoch
-            || MirageSignature(c, receipt.Skill) != receipt.Signature
-            || !OrdinaryOf(c, _ => 0).Accepted(receipt.Epoch, receipt.Action)) return null;
+            || MirageSignature(c, receipt.Skill) != receipt.Signature) return null;
         var variety = Monsters.Find(MirageVariety);
         if (variety is not { Supported: true }) return null;
         double now = session.Runtime.Now / (double)ProjectileRuntime.QuantaPerSecond;
@@ -58,7 +64,7 @@ static partial class Game
         var world = MirageWorlds.GetValue(session, _ => new());
         var stats = SupportedStats(c, receipt.Skill);
         int Get(string n) => MarkStat(stats, n);
-        var actor = world.Life.OwnerHit(now, receipt.Epoch, receipt.Action, true, true, receipt.Epoch,
+        var actor = world.Life.OwnerHit(now, receipt.Admission, true, true, receipt.Epoch,
             receipt.Signature, receipt.Skill, ProjectileSession.Vector(c.Walk.Position(now)), Get);
         RetireMirageBodies(session, world);
         if (actor is null) return null;

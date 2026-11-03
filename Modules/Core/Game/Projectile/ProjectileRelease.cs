@@ -72,7 +72,7 @@ static partial class Game
     internal static Task ScheduleGemProjectile(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn,
         ushort skillId, (ushort Id, int Effect, string Name, int Level, int Quality, uint Gem) gem,
         (int X, int Y) aim, int action, int recoveryGeneration, CooldownUseTicket? ticket, SkillCriticalRoll criticalRoll,
-        ushort sequence = 0)
+        ushort sequence = 0, DeadeyeMirageLifecycle.Release? mirageAdmission = null)
     {
         var session = ProjectilesFor(remote, stream, ciphers, conn);
         session.Advance();
@@ -101,7 +101,7 @@ static partial class Game
             int left = repeats - repeat;
             session.Schedule(ProjectileRuntime.Time(acceptedAt + repeat * cast.Value / 1000d + delay), Valid,
                 () => ClientDrawnVolley(conn, session, skillId, gem,
-                    PaidMirageRelease(conn, action, skillId, CaptureGemProjectile(conn, session, skillId, gem, aim, criticalRoll, sequence, (uint)left)),
+                    PaidMirageRelease(conn, mirageAdmission, skillId, CaptureGemProjectile(conn, session, skillId, gem, aim, criticalRoll, sequence, (uint)left)),
                     sequence, (uint)left));
         }
         return Task.CompletedTask;

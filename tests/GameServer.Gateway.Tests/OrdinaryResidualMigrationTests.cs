@@ -81,6 +81,33 @@ public class OrdinaryResidualMigrationTests
     [Fact]
     public void DeadeyeReleaseDistanceAcceptedUsesMarksAndActorsKeepTheirScopes()
     {
+        var bounded = new OrdinaryResidualSession(1);
+        int Neutral(string _) => 0;
+        bounded.Use(0, new(1, 1, true, true));
+        bounded.Kill(0, new(1, 1, OrdinaryResidualSession.Credit.OwnerDirect, true, false, false, 1, 1), Neutral);
+        int initialLength = bounded.Capture(10).Length;
+        for (int i = 2; i <= 2048; i++)
+        {
+            bounded.Use(i, new(1, i, true, true));
+            bounded.Use(i, new(1, -i, true, true));
+            bounded.Kill(i, new(1, i, OrdinaryResidualSession.Credit.OwnerDirect, true, false, false, 1, 1), Neutral);
+        }
+        string boundedCarry = bounded.Capture(2060);
+        Assert.True(boundedCarry.Length < initialLength + 128, "Reload payload must not grow with area action/kill history.");
+        var boundedRestored = OrdinaryResidualSession.Restore(boundedCarry, 2, 2060, false, Neutral);
+        Assert.False(boundedRestored.Use(2060, new(1, 1, true, true)));
+        Assert.False(boundedRestored.Use(2060, new(1, -1, true, true)));
+        Assert.False(boundedRestored.Kill(2060, new(1, 1, OrdinaryResidualSession.Credit.OwnerDirect,
+            true, false, false, 1, 1), Neutral).Recorded);
+        var legacy = JsonSerializer.Deserialize<OrdinaryResidualSession.Payload>(boundedCarry)! with
+        {
+            Kills = Enumerable.Range(1, 2048).Select(i => new long[] { 1, i }).ToArray(),
+            Uses = Enumerable.Range(1, 2048).SelectMany(i => new[] { new long[] { 1, i }, new long[] { 1, -i } }).ToArray(),
+        };
+        var compacted = OrdinaryResidualSession.Restore(JsonSerializer.Serialize(legacy), 3, 2060, false, Neutral);
+        Assert.True(compacted.Capture(2060).Length < initialLength + 128);
+        Assert.False(compacted.Use(2060, new(1, 1, true, true)));
+        Assert.False(compacted.Use(2060, new(1, -1, true, true)));
         WhispererRuntimeTests.DeadeyeGameplayTransactions();
         foreach (bool ruthless in new[] { false, true })
         {
@@ -129,10 +156,11 @@ public class OrdinaryResidualMigrationTests
             // Real support source duration, with equipment/signature and generation supplied by its release.
             int Mirage(string name) => name == "support_mirage_archer_base_duration" ? 4000 : Get(name);
             var at = new ProjectileVector(0, 0);
-            Assert.Null(state.Mirages.OwnerHit(0, 1, 1, false, true, 4, "bow/gem", 1, at, Mirage));
-            var actor = state.Mirages.OwnerHit(0, 1, 1, true, true, 4, "bow/gem", 1, at, Mirage)!;
+            var release = new DeadeyeMirageLifecycle.Release(1, 1);
+            Assert.Null(state.Mirages.OwnerHit(0, release, false, true, 4, "bow/gem", 1, at, Mirage));
+            var actor = state.Mirages.OwnerHit(0, release, true, true, 4, "bow/gem", 1, at, Mirage)!;
             Assert.NotNull(actor);
-            Assert.Null(state.Mirages.OwnerHit(0, 1, 1, true, true, 4, "bow/gem", 1, at, Mirage));
+            Assert.Null(state.Mirages.OwnerHit(0, release, true, true, 4, "bow/gem", 1, at, Mirage));
             Assert.True(state.Mirages.TryAttack(actor, 0, 4, "bow/gem", 1, out long attack));
             Assert.True(state.Mirages.Current(actor, attack, 4));
             Assert.False(state.Mirages.TryAttack(actor, .5, 4, "bow/gem", 1, out _));
@@ -144,8 +172,8 @@ public class OrdinaryResidualMigrationTests
                 "additional_max_mirage_archers" => 2,
                 _ => Mirage(name),
             };
-            var first = state.Mirages.OwnerHit(2, 2, 1, true, true, 5, "bow/first", 1, at, Detached)!;
-            var second = state.Mirages.OwnerHit(2, 2, 2, true, true, 5, "bow/second", 2, new(100, 0), Detached)!;
+            var first = state.Mirages.OwnerHit(2, new(2, 1), true, true, 5, "bow/first", 1, at, Detached)!;
+            var second = state.Mirages.OwnerHit(2, new(2, 2), true, true, 5, "bow/second", 2, new(100, 0), Detached)!;
             Assert.NotNull(first); Assert.NotNull(second); Assert.Equal(2, state.Mirages.Actors.Count);
             Assert.True(state.Mirages.TryAttack(first, 2, 5, "bow/first", 1, out _));
             Assert.True(state.Mirages.TryAttack(second, 2, 5, "bow/second", 1, out _));
