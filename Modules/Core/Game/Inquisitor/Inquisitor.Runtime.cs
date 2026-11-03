@@ -53,7 +53,9 @@ static partial class Game
         var value = InquisitorRead(conn, stats);
         int buff = Stats.Key("buff_effect_on_self_+%") is uint key ? stats.GetValueOrDefault(key) : 0;
         return InquisitorOffense.Fanaticism(value.Fanaticism(InquisitorNow(conn)),
-            SkillsFor(conn).IsSpell(effect) && !SkillsFor(conn).IsAttack(effect), buff);
+            SkillsFor(conn).IsSpell(effect) && !SkillsFor(conn).IsAttack(effect)
+                && (Stats.Key("is_not_hand_cast") is not uint proxy || stats.GetValueOrDefault(proxy) == 0)
+                && (Stats.Key("is_totem") is not uint totem || stats.GetValueOrDefault(totem) == 0), buff);
     }
 
     internal static void InquisitorAcceptedUse(ClientState conn, int effect, bool repeat = false)

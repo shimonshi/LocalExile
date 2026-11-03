@@ -333,7 +333,7 @@ static partial class Game
         if (increased <= -100) return increased;
         static float Factor(int value, float scale = 100) => Math.Max(0, (value + scale) / scale);
         float Final(string name) => Factor(get(name));
-        bool totem = get("is_totem") != 0, handCast = get("casting_spell") != 0 && get("is_not_hand_cast") == 0;
+        bool totem = get("is_totem") != 0, handCast = !totem && get("casting_spell") != 0 && get("is_not_hand_cast") == 0;
         int fishing = get("cast_speed_+%_final_while_holding_fishing_rod");
         float final = Final("active_skill_cast_speed_+%_final") * 100 * Final("righteous_fire_cast_speed_+%_final")
             * Final("suppressing_fire_debuff_cast_speed_+%_final") * Final("support_multicast_cast_speed_+%_final")

@@ -830,6 +830,7 @@ static partial class Game
             conn.ApplyMovementSpeed();
             conn.AuraStatsDirty = true;
             CharacterSaves.SetAuraActive(CharacterName(conn), effectId, started is not null);
+            if (started is not null) InquisitorAcceptedUse(conn, effect);
         }
 
         await SendOwnAuraChanges(remote, stream, ciphers, conn);
@@ -950,7 +951,7 @@ static partial class Game
     {
         var areaStats = MergeSkillStats(AreaPlayerStats(conn), skillStats);
         if (spell && Stats.Key("spell_area_of_effect_+%") is uint area)
-            areaStats[area] = areaStats.GetValueOrDefault(area) + InquisitorModifiers(conn, effect).AreaIncreasePct;
+            areaStats[area] = areaStats.GetValueOrDefault(area) + InquisitorModifiers(conn, effect, areaStats).AreaIncreasePct;
         int Get(string name) => Stats.Key(name) is uint k ? areaStats.GetValueOrDefault(k) : 0;
         return SkillArea.Radius(SkillArea.BaseRadius(SkillsFor(conn).EffectId(effect), Get), Get, spell);
     }

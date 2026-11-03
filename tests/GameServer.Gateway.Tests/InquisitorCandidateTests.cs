@@ -170,6 +170,10 @@ public sealed class InquisitorCandidateTests
         Assert.True(Game.InquisitorRead(c, Game.CharacterPlayerStats(c)).Fanaticism(max));
         Assert.True(Game.PayMana(c, h.Skill, out uint cost, out _));
         Assert.Equal(1u, cost);
+        var selfCast = Game.CharacterPlayerStats(c);
+        Assert.Equal(.25m, Game.InquisitorModifiers(c, Game.SupportedSkill(c, h.Skill).Effect, selfCast).CostFactor);
+        selfCast[K("is_totem")] = 1;
+        Assert.Equal(1m, Game.InquisitorModifiers(c, Game.SupportedSkill(c, h.Skill).Effect, selfCast).CostFactor);
         Assert.Equal((int)cost, Game.PlayerSkills(c).Single(g => g.Id == h.Skill).Stats!.Single(p => p.Key == K("mana_cost")).Value);
         Assert.NotEmpty(Game.InquisitorPresentation(c));
         Game.CarryInquisitor(c, 907);
@@ -209,6 +213,18 @@ public sealed class InquisitorCandidateTests
         Assert.False(c.InquisitorOwnerInside);
         Assert.Equal(104, c.InquisitorOwnerUntil, 6);
         Game.InquisitorGroundStep(c, 104);
+        Assert.Empty(c.FlaskGrounds.PlayerStats());
+        // Late observation clips a finite own ground's linger to its actual deadline.
+        h.Time.At = 104;
+        c.PlayerStats[K("consecrated_ground_while_stationary_radius")] = 0;
+        Game.CharacterPlayerStats(c);
+        c.Walk.Teleport(100, 100, 104);
+        c.FlaskGrounds.Add(new(FlaskGrounds.Kind.ConsecratedGround, 100, 100, 18, 105));
+        Game.InquisitorGroundStep(c, 104);
+        Assert.True(c.InquisitorOwnerInside);
+        h.Time.At = 110;
+        Game.InquisitorGroundStep(c, 110);
+        Assert.Equal(109, c.InquisitorOwnerUntil, 8);
         Assert.Empty(c.FlaskGrounds.PlayerStats());
         Assert.Null(await Game.ChangePassives("Inquisitor", h.Stream, h.Ciphers, c, [(ushort)32816], false, "refund", refundPoints: true));
         c.PlayerLife = 0; Game.InquisitorRead(c, Game.CharacterPlayerStats(c));

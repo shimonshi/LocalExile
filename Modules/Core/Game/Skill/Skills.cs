@@ -478,7 +478,7 @@ static partial class Game
             int level = supported.Level;
             var own = supported.Stats;
             var stats = MergeSkillStats(playerStats, own);
-            var fanatic = InquisitorModifiers(conn, effect, playerStats);
+            var fanatic = InquisitorModifiers(conn, effect, stats);
             if (Stats.Key("mana_cost") is uint costKey && stats.TryGetValue(costKey, out int costBasis))
                 stats[costKey] = InquisitorSkillCost(own.GetValueOrDefault(costKey), playerStats, fanatic);
             if (Stats.Key("spell_area_of_effect_+%") is uint fanaticAreaKey)

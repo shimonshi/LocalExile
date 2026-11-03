@@ -99,7 +99,7 @@ static partial class Game
         var player = FinalPlayerStats(conn).ToDictionary(kv => kv.Item1, kv => kv.Item2);
         var gem = SupportedSkill(conn, skillId);
         var result = MergeSkillStats(player, gem.Stats);
-        var fanatic = InquisitorModifiers(conn, gem.Effect, player);
+        var fanatic = InquisitorModifiers(conn, gem.Effect, result);
         if (Stats.Key("mana_cost") is uint cost && result.TryGetValue(cost, out int basis))
             result[cost] = InquisitorSkillCost(gem.Stats.GetValueOrDefault(cost), player, fanatic);
         if (Stats.Key("spell_area_of_effect_+%") is uint area)

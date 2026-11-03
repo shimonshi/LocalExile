@@ -12,6 +12,8 @@ sealed partial class ClientState
     internal int InquisitorShownCharges, InquisitorShownMore;
     internal readonly Dictionary<uint, double> InquisitorEnemyUntil = [];
     internal readonly HashSet<uint> InquisitorEnemyInside = [];
+    internal readonly Dictionary<uint, double> InquisitorEnemyCoverageUntil = [];
+    internal double InquisitorOwnerCoverageUntil = double.NegativeInfinity;
     internal double InquisitorOwnerUntil = double.NegativeInfinity;
     internal bool InquisitorOwnerInside;
     internal Dictionary<string, int> InquisitorGroundSources = [];
@@ -27,8 +29,8 @@ sealed partial class ClientState
 
     internal void ClearInquisitorState()
     {
-        InquisitorCombat.Clear(); InquisitorEnemyInside.Clear(); InquisitorEnemyUntil.Clear();
-        InquisitorOwnerInside = false; InquisitorOwnerUntil = double.NegativeInfinity;
+        InquisitorCombat.Clear(); InquisitorEnemyInside.Clear(); InquisitorEnemyUntil.Clear(); InquisitorEnemyCoverageUntil.Clear();
+        InquisitorLoading = false; InquisitorOwnerInside = false; InquisitorOwnerUntil = double.NegativeInfinity;
         InquisitorOwnerEntered = double.PositiveInfinity;
         InquisitorMirrorPending = InquisitorMirrorRate = 0; InquisitorMirrorSegments.Clear();
     }
