@@ -166,7 +166,7 @@ static partial class Game
             conn.OrdinaryTailwindSource = receipt.Source; conn.OrdinaryTailwindAmount = receipt.Amount;
             conn.OrdinaryTailwindBuff = receipt.Source != 0 ? conn.NextBuff++ : (ushort)0;
             if (receipt.Source != 0) bytes.AddRange(InstanceEntities.AddBuff(PlayerId, conn.OrdinaryTailwindBuff,
-                1094, receipt.Source, values: [unchecked((uint)-receipt.Amount)]));
+                1094, receipt.Source));
         }
         // Each Gale grant has its own recipient clock. Do not give the oldest nine the newest stack's deadline.
         double[] deadlines = state.Gale.Stacks.Select(s => s.Deadline).ToArray();

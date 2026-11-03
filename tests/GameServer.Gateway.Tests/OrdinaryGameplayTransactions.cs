@@ -24,6 +24,9 @@ public sealed partial class WhispererRuntimeTests
         Game.OrdinaryAcceptedUse(c, 11);
         var native = Game.OrdinaryPresentation(c);
         Assert.NotEmpty(native); Assert.NotEqual((ushort)0, c.OrdinaryTailwindBuff);
+        // Tailwind is not an IsRecovery row: a stat value would become an unchecked native list count.
+        Assert.True(native.AsSpan().IndexOf(InstanceEntities.AddBuff(Program.PlayerId,
+            c.OrdinaryTailwindBuff, 1094, Program.PlayerId)) >= 0);
         Assert.Empty(Game.OrdinaryPresentation(c));
         OrdinaryAdapterTransactions(h);
         var gem = h.Fireball;

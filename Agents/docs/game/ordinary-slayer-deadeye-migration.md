@@ -56,6 +56,8 @@ Combined native acceptance remains incomplete; automated gameplay checks do not 
   Peer selection reads immutable published poses and a neutral qualified source flag, without peer combat locks.
   Gale scales only its owner; the recipient's Tailwind-effect stat scales the selected nonstacking receipt once.
   The current cipher gate owns Tailwind source/value changes and independent row1095 Gale grant clocks.
+  Tailwind row1094 is non-recovery: its native buff carries no stat values, only the ordinary empty trailing list.
+  Sending the signed action-speed value there makes the client read it as a list count and can hang its message graph.
   Ordinary finite clocks delegate category rates to the shared `RecipientEffectTime` contract.
 - Aura activation, accepted links, Vaal costs and instant utility uses join paid manual-use Gale admission.
   Instant utility identities are separate from the interrupted ordinary action; aura deactivation grants nothing.
