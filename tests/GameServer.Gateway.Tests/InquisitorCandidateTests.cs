@@ -155,6 +155,21 @@ public sealed class InquisitorCandidateTests
     {
         using var h = new OrdinaryHarness(); var c = h.Conn;
         h.Build(19417, 13851);
+        var unreachable = new SpawnedMonster("moving target", new(200, 200, 0), 0, 0, 1000);
+        h.Time.At = .1;
+        Assert.False(Game.AcceptDefaultSwingUse(c, unreachable, (100, 100), (200, 200), 10, 1));
+        h.Time.At = 1;
+        Assert.Equal(0, Game.InquisitorRead(c, Game.CharacterPlayerStats(c)).FanaticCharges);
+        h.Time.At = 1.1;
+        Assert.True(Game.AcceptDefaultSwingUse(c, unreachable, (200, 200), (200, 200), 10, 2));
+        h.Time.At = 2;
+        Assert.Equal(1, Game.InquisitorRead(c, Game.CharacterPlayerStats(c)).FanaticCharges);
+        Game.ClearInquisitor(c);
+        h.Time.At = .1;
+        Assert.True(Game.TryBeginRangedAttack(c, .1, 1, SkillCatalog.FirstSkillId, 0, out _));
+        h.Time.At = 1;
+        Assert.Equal(1, Game.InquisitorRead(c, Game.CharacterPlayerStats(c)).FanaticCharges);
+        Game.ClearInquisitor(c);
         h.Time.At = 0;
         var beforeUse = Game.WeaponStats(c, Game.WeaponFor(c), Game.CharacterPlayerStats(c)).ToDictionary(p => p.Item1, p => p.Item2);
         Game.InquisitorAcceptedUse(c, Game.SupportedSkill(c, h.Skill).Effect);

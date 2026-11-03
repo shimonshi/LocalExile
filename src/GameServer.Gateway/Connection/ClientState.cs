@@ -303,6 +303,8 @@ sealed partial class ClientState(AreaLayout layout, uint ticket, uint seed)
     // A transfer invalidates flights even during the gap after PendingTransfer is consumed by Transfer.
     // Guarded by Monsters, like projectile impact commits and pause changes.
     public bool LeavingArea;
+    // Auth accepted the destination; PendingTransfer is already consumed before this handoff.
+    public bool TransferAccepted;
     public readonly RecentEnemyHits RecentEnemyHits = new();
     public readonly PlayerElementalAilments ElementalAilments = new();
     // The King in the Mists' Portent Vapors: stacks taken from his Mystic Fetishes and when they expire. The server

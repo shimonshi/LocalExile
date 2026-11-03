@@ -321,6 +321,7 @@ public sealed partial class WhispererRuntimeTests
             return Task.FromResult(new ControlResponse { Ok = true, Ticket = 123, Area = 1, Instance = 1 });
         });
         var wrong = h.NewConnection("wrong", 123); Game.RestoreResourceEffects(wrong);
+        Assert.True(c.TransferAccepted);
         Assert.Null(wrong.ResourceEffectsState);
         var arriving = h.NewConnection(c.Character!, 123); Game.RestoreResourceEffects(arriving);
         var carried = Game.ResourceEffectsOf(arriving);
@@ -340,7 +341,7 @@ public sealed partial class WhispererRuntimeTests
             Game.DiscardResourceLoadingRecovery(failed, 11);
             return Task.FromResult(new ControlResponse { Ok = false, Error = "controlled refusal" });
         });
-        Assert.False(failed.LeavingArea); Assert.Null(failedState.TransferCheckpoint);
+        Assert.False(failed.LeavingArea); Assert.False(failed.TransferAccepted); Assert.Null(failedState.TransferCheckpoint);
         Assert.Equal(0, failedState.Mana.Take(11)); Assert.Equal(199, failedState.Mana.SpentRemainder);
         Assert.Equal(5, failedState.Mana.Take(12));
 

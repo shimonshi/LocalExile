@@ -50,6 +50,7 @@ static partial class Game
             conn.Walk.Order(x, y, requestedAt);
             conn.ChannelSkill = skill;
             conn.ChannelSkillSequence = sequence;
+            InquisitorRead(conn, CharacterPlayerStats(conn), new(true, false, false, false, false));
             OrdinaryAcceptedUse(conn, action);
             started = (action, x, y, CaptureSkillCriticalRoll(conn, skill));
             return true;
@@ -223,15 +224,15 @@ static partial class Game
         (stop, arrive) = swing;
         now = conn.Clock.Elapsed.TotalSeconds;
         SkillCriticalRoll criticalRoll;
+        bool admitted;
         lock (conn.Monsters)
         {
             target = m.Walk.Position(now);
             conn.NextAttackAt = AttackTiming.After(now, conn.NextAttackAt, duration);
-            InquisitorRead(conn, CharacterPlayerStats(conn), new(true, false, false, false, false));
             criticalRoll = CaptureSkillCriticalRoll(conn, SkillCatalog.FirstSkillId);
-            if (SwingInReach(m, stop, target, weapon.Range + 2)) OrdinaryAcceptedUse(conn, action);
+            admitted = AcceptDefaultSwingUse(conn, m, stop, target, weapon.Range + 2, action);
         }
-        if (!SwingInReach(m, stop, target, weapon.Range + 2))
+        if (!admitted)
         {
             Console.WriteLine($"[gateway] {remote} attack on 0x{use.TargetId:x} out of reach: {Dist(stop, target):0.0} > {weapon.Range}");
             return;
@@ -394,6 +395,17 @@ static partial class Game
             if (m.ThresholdReached) await QuestThreshold(remote, stream, ciphers, conn, targetId, m);
             return true;
         }
+    }
+
+    // The follow timeout may return a stop that still cannot reach its moving target.
+    // Only an admitted swing feeds either class's accepted-use history.
+    internal static bool AcceptDefaultSwingUse(ClientState conn, SpawnedMonster target,
+        (int X, int Y) stop, (int X, int Y) contact, double reach, int action)
+    {
+        if (!SwingInReach(target, stop, contact, reach)) return false;
+        InquisitorRead(conn, CharacterPlayerStats(conn), new(true, false, false, false, false));
+        OrdinaryAcceptedUse(conn, action);
+        return true;
     }
 
     // A gem skill used on a monster (C→S 0x24 with a skill id other than the default attack's). A spell stops and casts from

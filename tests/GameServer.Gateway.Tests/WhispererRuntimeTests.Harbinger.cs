@@ -138,6 +138,38 @@ public sealed partial class WhispererRuntimeTests
             Assert.Equal(4, Assert.Single(fortify.Carry(2).Grants).Remaining);
             var ignite = new MonsterIgnites(); ignite.Add(0, 10, 4); ignite.SetExpiryRate(2, .5);
             Assert.Equal(6, ignite.Until); Assert.Equal(60, ignite.Advance(6, 1));
+
+            // PendingTransfer has been consumed before Closing; successful Auth handoff retains summons
+            // even when the source closes before the destination attaches its roster lease.
+            var departing = h.NewConnection("handoff" + Guid.NewGuid().ToString("N"), classRow: classRow);
+            departing.MainAscendancy = new(definition.Identity, PathTo(20105), AscendancyRules.AwardKeys);
+            departing.ProjectileRuntimeState = h.Time;
+            departing.PlayerSent = departing.PlayerObjectCreated = true;
+            departing.Pools = Game.PoolsFor(departing, 68);
+            departing.PlayerLife = departing.PlayerMaxLife; departing.PlayerMana = departing.Pools.Mana;
+            departing.Clock.Start();
+            var summon = Assert.Single(Game.GemSkillEffects(departing), g => g.Effect == catalog.All.Single(s => s.Node == 20105).SummonEffect);
+            Assert.True(Game.TryBeginSkillCooldownUse(departing, summon.Id, summon.Effect,
+                Game.CooldownFor(departing, summon.Effect, summon.Level, summon.Quality), false, () => departing.ActionCount++, out var summonUse));
+            Assert.True(await Game.CastGemSkill("Harbinger", h.Wire, h.Ciphers, departing, summon.Id, (100, 100), (100, 100),
+                actionToken: summonUse?.ActionToken ?? departing.ActionCount, cooldownUse: summonUse));
+            h.Time.At += 2;
+            await Game.PlayerMinionsTick("Harbinger", h.Wire, h.Ciphers, departing, h.Time.At);
+            Assert.Single(departing.Minions.All);
+            var selection = departing.MainAscendancy;
+            var transfer = new PendingTransfer(1, 1, false, AtSpawn: true);
+            Assert.True(departing.TryBeginAreaChange(transfer, out _));
+            await Game.Transfer("Harbinger", h.Wire, h.Ciphers, departing, transfer,
+                _ => Task.FromResult(new ControlResponse { Ok = true, Ticket = 912, Area = 1, Instance = 1 }));
+            Assert.Null(departing.PendingTransfer); Assert.True(departing.TransferAccepted);
+            gameplay.Close(departing);
+            Assert.Empty(departing.Minions.All);
+            var arriving = h.NewConnection(departing.Character!, 912, classRow: classRow);
+            arriving.MainAscendancy = selection; arriving.PlayerSent = arriving.PlayerObjectCreated = true;
+            arriving.ProjectileRuntimeState = h.Time;
+            await gameplay.Tick("Harbinger", h.Wire, h.Ciphers, arriving, h.Time.At);
+            Assert.Single(arriving.Minions.All);
+            gameplay.Close(arriving); // Logout without an accepted transfer must clear the retained roster.
             h.Provider.Stop(_ => { });
             Assert.True(c.Closed);
             await gameplay.Tick("Harbinger", h.Wire, h.Ciphers, c, h.Time.At);

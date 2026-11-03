@@ -125,7 +125,7 @@ internal sealed partial class HarbingerGameplay(Func<DateTimeOffset>? utcNow = n
                 conn.Minions.OutputQueue.Add(new(InstanceEntities.RemoveBuff(PlayerId, instance), "companion retired"));
             state.Presented.Clear();
             conn.Minions.StatRevision++;
-            foreach (uint actor in state.Session.Retire(conn.PendingTransfer is not null && conn.PlayerLife > 0, UtcNow()))
+            foreach (uint actor in state.Session.Retire(conn.TransferAccepted && conn.PlayerLife > 0, UtcNow()))
             {
                 conn.Minions.Remove(actor);
                 conn.Monsters.Remove(actor);
