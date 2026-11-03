@@ -176,9 +176,9 @@ static class ChargeGains
     static (double Period, int Count) EachSecond(int value) => (1, value);
 
     /// <summary>The timers of the <see cref="Periodics"/> of one character.</summary>
-    public sealed class Timers
+    public sealed class Timers(Dictionary<string, double>? carried = null)
     {
-        private readonly double[] elapsed = new double[Periodics.Count];
+        readonly Dictionary<string, double> elapsed = carried ?? [];
 
         /// <summary>Advances every timer by <paramref name="seconds"/> of game time and returns the charges that came due.
         /// A timer whose stat is absent or whose condition does not hold is reset.</summary>
@@ -200,11 +200,11 @@ static class ChargeGains
                 var (period, count) = value != 0 ? p.Rate(value) : (0, 0);
                 // A negative count takes charges away (Replica Fragility and its two siblings); a random type
                 // ("gain X random charges") only ever adds them.
-                if (!holds || period <= 0 || count == 0 || (p.Type is null && count < 0)) { elapsed[i] = 0; continue; }
-                elapsed[i] += Math.Max(0, seconds);
-                while (elapsed[i] >= period)
+                if (!holds || period <= 0 || count == 0 || (p.Type is null && count < 0)) { elapsed[p.Stat] = 0; continue; }
+                elapsed[p.Stat] = elapsed.GetValueOrDefault(p.Stat) + Math.Max(0, seconds);
+                while (elapsed[p.Stat] >= period)
                 {
-                    elapsed[i] -= period;
+                    elapsed[p.Stat] -= period;
                     if (p.Type is { } type) gains.Add(new(type, count, p.Stat));
                     else for (int n = 0; n < count; n++) gains.Add(new(Charges.Types[rng.Next(Charges.Types.Length)], 1, p.Stat));
                 }
@@ -213,6 +213,6 @@ static class ChargeGains
         }
 
         /// <summary>Every timer starts again (death).</summary>
-        public void Reset() => Array.Clear(elapsed);
+        public void Reset() => elapsed.Clear();
     }
 }

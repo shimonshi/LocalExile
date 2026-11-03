@@ -50,6 +50,7 @@ static partial class Game
                 var shot = new ProjectileOffense(captured.Hit.Scale(InquisitorRead(conn, character).AttackDamageFactor), false, captured.Accuracy, captured.CriticalChance,
                     captured.CriticalMultiplier, wand ? "ordinary wand" : "ordinary bow")
                 { SkillStats = SkillsFor(conn).EffectStats(effect, 1).ToDictionary(s => s.Item1, s => s.Item2),
+                    MarkSource = CaptureOrdinaryMarkHitSource(conn, false),
                     VsBlindedCriticalChance = AttackCriticalChanceVsBlinded(conn, character, release: true),
                     VsProfaneCriticalChance = AttackCriticalChanceVsProfane(conn, character, release: true),
                     Penetration = captured.Penetration, ResistanceMods = captured.ResistanceMods, ImpaleChance = captured.ImpaleChance,
@@ -60,6 +61,8 @@ static partial class Game
                     CriticalRoll = criticalRoll, Leech = captured.Leech,
                     AccuracyMoreUnique = conn.Pools.AccuracyMoreVsUniquePct, AccuracyMoreClose = conn.Pools.AccuracyMoreInCloseRangePct,
                     AlwaysHits = Get("global_always_hit") != 0, FarShot = Get("player_far_shot") != 0,
+                    OrdinaryDistance = DeadeyeProjectileDamage.Capture(Get) with { PointBlank = false },
+                    OrdinaryResidual = DeadeyeResidualProjectile.Capture(Get),
                     PointBlank = Get("keystone_point_blank") != 0,
                     ReturnMultiplier = ProjectileReturn.DamageMore(Get), Blind = BlindInputs(character),
                     // The object flies at the height the clip releases it (the bow's nock, the wand's tip).
