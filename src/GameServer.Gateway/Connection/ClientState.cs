@@ -325,6 +325,8 @@ sealed partial class ClientState(AreaLayout layout, uint ticket, uint seed)
     // A failed transfer retains history but cannot revive a swing from before the attempted transfer.
     public void InvalidateIncomingHits(bool clear = true)
     {
+        if (PlayerLife == 0 || Closed)
+        { PaidChannel = null; NonChaosDotBypassCarry = NonChaosDotTakenCarry = 0; }
         lock (Monsters)
         {
             IncomingHitEpoch++;

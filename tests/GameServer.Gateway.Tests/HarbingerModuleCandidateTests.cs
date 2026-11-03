@@ -71,7 +71,7 @@ public sealed class HarbingerModuleCandidateTests
     }
 
     [Fact]
-    public void Feature_adapter_requires_paid_current_channel_and_revalidates_native_publication()
+    public async Task Feature_adapter_requires_paid_current_channel_and_revalidates_native_publication()
     {
         var roster = new HarbingerRoster(); var lease = Guid.NewGuid();
         var session = new HarbingerSession(roster, lease, Now);
@@ -106,6 +106,7 @@ public sealed class HarbingerModuleCandidateTests
         Assert.Equal(160u, HarbingerDefences.Maximum(100, 100, 100, 100, 10, 20));
         Assert.Equal(1.1, HarbingerActionSpeed.From(n => n == "action_speed_-%" ? -10 : 0).Factor, 8);
         VerifyCurseReplacementAndSuppression();
+        await WhispererRuntimeTests.CombinedHarbingerResourceTransactions();
     }
 
     static void VerifyCurseReplacementAndSuppression()

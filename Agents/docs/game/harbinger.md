@@ -60,6 +60,49 @@ Party propagation and strongest-of-multiple-casters curse arbitration remain out
 
 ## Shared integration owned by the parent after Whisperer
 
+### Private combined resource integration
+
+This checkout combines exact inputs Whisperer `566f4e8dd811bef8ec0bd7d933932e671892c5b3`
+and Harbinger `b914f0b93bf5b3c84dbf9ea442da3d07bfc72121`, in that order,
+on `ec522f1876690c0b203636bf78b508f308365163`.
+The local replay commits are `53463c92` and `fdfffd48`; neither input was replaced with an older PR tree.
+The shared resource changes below are private, incomplete integration, not class readiness.
+The separate correction writer still owns QuestKillEffects and FreezeShown/HeldMove retirement.
+Neither correction is included here and neither quest nor LivingCollision was edited by this integration.
+
+`IncomingResourceDefences` is a small Gateway arithmetic contract usable by both Game and the optional feature.
+The candidate's HarbingerDefences delegates to it so component and production arithmetic cannot diverge.
+The current typed writer applies Focus to each mitigated component before Ward,
+then non-chaos bypass before ES, then physical-only defensive Mana.
+Mana Recoup still observes the reduced post-Ward components, independent of actual Life damage.
+Flask recovery and its accepted payment/copy machinery are unchanged.
+Extra ES uses freshly computed final Life/Mana and ES increases once in BuildPoolsFor.
+Rebuilding a pool never treats previously derived ES as a new base.
+Ignite and Righteous Fire route non-chaos DoT through the same bypass helper.
+Fractional DoT reduction/bypass carry lives in neutral connection data and clears on death/close.
+This does not yet establish live received-Focus or Temporal source reconciliation at every resource boundary.
+
+The real initial channel admission and repeated paid stages now issue a host-owned receipt with exact
+skill, effect, action, generation and rule-lifetime identity.
+PaidChannelCurrent rejects changed actions, stale rules, expired silence, pause, blocked actions,
+removed/replaced gems and failed current requirements.
+Zero-cost successful payment is still payment admission; an unpaid action never creates a receipt.
+Focus's session adapter is not yet attached to this production receipt consumer.
+
+The existing two Harbinger Facts retain component checks and add combined production transactions through
+the existing Whisperer harness; no new Core/Data test or individual working-directory setup was added.
+They cover Focus/Ward/typed ES/physical Mana/Recoup composition, an ordinary control,
+source-derived extra ES without feedback, a payable non-channel skill rejection and death cleanup.
+They do not establish companion actor acceptance or native class behavior.
+
+Remaining implementation is concrete: attach the roster/session to neutral lifetime/transfer state,
+route accepted summon completions to registered owned actors and native cast/follow/buff publication,
+feed their live recipient stats into pool/stat sources, attach Temporal self/aura/reflection/suppression,
+and integrate category-specific BASE budgets with charge/flask/fortification/ailment/Ignite/taunt clocks.
+Time/Temporal native and raw server pacing still need one shared action-factor integration.
+The descriptor remains absent until these consumers are complete.
+No native client, shared runtime, public push or PR state was touched.
+
 Do not cherry-pick the old 77-file PR tree or its generic foundations over current main.
 Do not register the descriptor before these steps; the isolated tests do not establish whole-class readiness.
 The following are the minimal behavioral integration points, not permission to replace the containing methods.
@@ -95,6 +138,18 @@ Old common documentation expansions and all historical test files are excluded f
 Historical candidates including `candidate/harbinger-339-main-d415-09d013a5` remain read-only sources, not bases.
 
 ## Validation and remaining acceptance
+
+### Combined resource candidate checks
+
+The private combined resource candidate builds the full solution with zero warnings/errors.
+Core passes 434, Data passes 45 and Gateway passes 96, including the existing two Harbinger Facts.
+The exact committed combined head and pinned inputs are recorded in `logs/private-harbinger/revisions.txt`
+in the prepared checkout; suite outputs are alongside it.
+The first Gateway attempt passed 94 and failed two installed-graph checks because this checkout lacked
+`data/game-files.zip`; after copying an existing extracted archive privately, all 96 passed.
+Existing extracted tables/catalogs were copied from the Harbinger candidate checkout.
+No generated data, archives, saves or credentials enter the commit.
+No native window was requested or used, so these automated results do not establish class acceptance.
 
 Solution build: zero warnings/errors.
 Core: 434 passing; Data: 45 passing; Gateway: 94 passing, including exactly two new Facts.
