@@ -15,13 +15,13 @@ public sealed partial class WhispererRuntimeTests
         c.LeagueModule = new(new League("Standard", "Standard", false, false), new HashSet<string>(["Game"]));
         c.StatSourcesCacheState = null;
         Assert.Equal(8, Game.OrdinaryTailwindSpeed(c));
-        for (int i = 1; i <= 10; i++) Game.OrdinaryAcceptedUse(c, i);
-        Game.OrdinaryAcceptedUse(c, 10); // Same admitted action cannot grant twice.
+        for (int i = 1; i <= 10; i++) Game.OrdinaryAcceptedUse(c, ++c.ActionCount);
+        Game.OrdinaryAcceptedUse(c, c.ActionCount); // Same admitted action cannot grant twice.
         Assert.Equal(16, Game.OrdinaryTailwindSpeed(c));
         var player = Game.CharacterPlayerStats(c);
         Assert.Equal(.6, Game.OrdinaryIncomingHit(c, player, 0), 8);
         Assert.Equal(8, Game.OrdinaryTailwindSpeed(c));
-        Game.OrdinaryAcceptedUse(c, 11);
+        Game.OrdinaryAcceptedUse(c, ++c.ActionCount);
         var native = Game.OrdinaryPresentation(c);
         Assert.NotEmpty(native); Assert.NotEqual((ushort)0, c.OrdinaryTailwindBuff);
         // Tailwind is not an IsRecovery row: a stat value would become an unchecked native list count.
@@ -63,20 +63,24 @@ public sealed partial class WhispererRuntimeTests
         var target = new SpawnedMonster("Mirage target", new(110, 100, 0), 0, 0, 100000) { Hostile = true };
         c.Monsters[99] = target;
         int action = ++c.ActionCount;
-        while (Game.OrdinaryOf(c, _ => 0).Accepted(c.ProjectileEpoch, action)) action = ++c.ActionCount;
         string? signature = Game.MirageSignature(c, gem.Id);
         var supported = Game.SupportedSkill(c, gem.Id);
         Assert.True(signature is not null, $"Mirage source: requirements={supported.RequirementsMet}, gem={supported.SourceGem is not null}, arrows={Game.ArrowsFor(c, gem.Effect)}, disabled={Game.GemSkillInstanceDisabled(c, gem.Effect, gem.Id)}, supports={string.Join(',', supported.Supports.Select(s => s.Effect.Id))}");
-        var receipt = new Game.MirageReceipt(c.ProjectileEpoch, action, gem.Id, signature);
-        Assert.Null(Game.MirageOwnerHit(session, receipt, target));
+        Assert.Null(Game.PaidMirageAdmission(c, action));
         Assert.True(Game.PayMana(c, gem.Id, out uint paid, out _));
         Game.OrdinaryAcceptedUse(c, action);
+        var admission = Assert.IsType<DeadeyeMirageLifecycle.Release>(Game.PaidMirageAdmission(c, action));
+        // A paid windup and its later hit survive newer accepted actions without retaining area-wide history.
+        Game.OrdinaryAcceptedUse(c, ++c.ActionCount);
+        Assert.False(Game.OrdinaryOf(c, _ => 0).Accepted(c.ProjectileEpoch, action));
+        Game.MirageReceipt receipt;
         Game.MirageBody body;
         using (Game.ProjectileMutation(c, advance: false))
         {
-            var released = Game.PaidMirageRelease(c, action, gem.Id,
+            var released = Game.PaidMirageRelease(c, admission, gem.Id,
                 Game.CaptureGemProjectile(c, session, gem.Id, gem, (110, 100), Game.CaptureSkillCriticalRoll(c, gem.Id)));
-            Assert.NotNull(Assert.IsType<ProjectileOffense>(released.Payload).MirageRelease);
+            receipt = Assert.IsType<Game.MirageReceipt>(Assert.IsType<ProjectileOffense>(released.Payload).MirageRelease);
+            Game.OrdinaryAcceptedUse(c, ++c.ActionCount);
             body = Assert.IsType<Game.MirageBody>(Game.MirageOwnerHit(session, receipt, target));
             Assert.Null(Game.MirageOwnerHit(session, receipt, target));
         }
@@ -172,7 +176,7 @@ public sealed partial class WhispererRuntimeTests
         }
         c.LeagueModule = new(new League("Standard", "Standard", false, false), new HashSet<string>(["Game"]));
         c.MainAscendancy = new(h.Definition.Identity, [24848, 23169, 45313, 44482], []); c.StatSourcesCacheState = null;
-        Game.OrdinaryAcceptedUse(c, 12);
+        Game.OrdinaryAcceptedUse(c, ++c.ActionCount);
         var session = Game.ProjectilesFor("ordinary adapters", h.Wire, h.Ciphers, c);
         c.PlayerStats[Key("projectile_chain_from_terrain_chance_%")] = 100;
         c.PlayerStats[Key("no_barrage_projectile_spread")] = 1;
