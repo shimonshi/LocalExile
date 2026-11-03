@@ -97,7 +97,14 @@ static partial class Game
     internal static Dictionary<uint, int> SupportedStats(ClientState conn, ushort skillId)
     {
         var player = FinalPlayerStats(conn).ToDictionary(kv => kv.Item1, kv => kv.Item2);
-        return MergeSkillStats(player, SupportedSkill(conn, skillId).Stats);
+        var gem = SupportedSkill(conn, skillId);
+        var result = MergeSkillStats(player, gem.Stats);
+        var fanatic = InquisitorModifiers(conn, gem.Effect, player);
+        if (Stats.Key("mana_cost") is uint cost && result.TryGetValue(cost, out int basis))
+            result[cost] = InquisitorSkillCost(gem.Stats.GetValueOrDefault(cost), player, fanatic);
+        if (Stats.Key("spell_area_of_effect_+%") is uint area)
+            result[area] = result.GetValueOrDefault(area) + fanatic.AreaIncreasePct;
+        return result;
     }
 
     internal static Dictionary<uint, int> MergeSkillStats(IReadOnlyDictionary<uint, int> player, IReadOnlyDictionary<uint, int> own)
@@ -167,7 +174,7 @@ static partial class Game
     internal sealed record SupportedHitInputs(GameServer.Core.World.DamagePacket Raw, Func<string, int> Get,
         GameServer.Core.World.DamageConversion Conversion, bool Attack, bool Melee, bool Area, bool Projectile,
         List<(string Name, int Value)> Modifiers, HashSet<int> Types, SkillHitPlan Plan, Dictionary<uint, int> Caster,
-        bool WieldingWand = false);
+        bool WieldingWand = false, double InquisitorAttackFactor = 1);
 
     internal static SupportedHitInputs? SupportedHitInputsFor(ClientState conn, ushort skillId, bool? area = null,
         SkillCatalog.Unarmed? weapon = null)
@@ -185,12 +192,14 @@ static partial class Game
         if (!plan.CanHit) return null;
         var raw = attack
             ? SpellDamage.WithEffectiveness(SupportedAttackDamage.Raw(weapon ?? WeaponFor(conn), Get), SkillsFor(conn).DamageEffectiveness(gem.Effect, gem.Level))
-            : DamageStats.RawAdded(plan.SpellBase, Get, spell: true, AddedEffectiveness(conn, gem.Effect, gem.Level));
+            : DamageStats.RawAdded(plan.SpellBase.Add(InquisitorOffense.WeaponDamage(InquisitorMainHand(conn), Get)
+                .Scale(AddedEffectiveness(conn, gem.Effect, gem.Level))), Get, spell: true, AddedEffectiveness(conn, gem.Effect, gem.Level));
         var modifiers = gem.Supports.SelectMany(s => s.Stats).Select(s => (Stats.Name(s.Key) ?? "", s.Value)).ToList();
         return new(raw, Get, DamageStats.Conversion(stats, Stats, attack), attack,
             Melee: attack && types.Contains(19), Area: attack ? types.Contains(7) : Get("is_area_damage") != 0,
             Projectile: attack ? types.Contains(2) : Get("base_is_projectile") != 0, modifiers, types, plan, caster,
-            WieldingWand: attack && (weapon ?? WeaponFor(conn)).WieldingWand);
+            WieldingWand: attack && (weapon ?? WeaponFor(conn)).WieldingWand,
+            InquisitorAttackFactor: attack ? InquisitorRead(conn, caster).AttackDamageFactor : 1);
     }
 
     internal static GameServer.Core.World.DamagePacket SupportedHitFor(ClientState conn, ushort skillId, bool suppress, bool? area = null,
@@ -204,7 +213,8 @@ static partial class Game
             melee: inputs.Melee, area: inputs.Area, projectile: inputs.Projectile,
             supportModifiers: inputs.Modifiers, skillTypes: inputs.Types,
             wieldingWand: inputs.WieldingWand, retaliation: inputs.Attack && inputs.Types.Contains(120));
-        if (inputs.Attack) hit = MaximumAttackDamage.Apply(RageStats.ApplyAttack(hit, inputs.Get), inputs.Get);
+        if (inputs.Attack) hit = MaximumAttackDamage.Apply(RageStats.ApplyAttack(hit, inputs.Get), inputs.Get)
+            .Scale(inputs.InquisitorAttackFactor);
         return suppress ? new SkillDamageContext(inputs.Plan.Kind, inputs.Caster).Hit(hit) : hit;
     }
 
@@ -256,7 +266,8 @@ static partial class Game
                 + AttackBaseCriticalStrike.IncreasedSum(weapon, name => Own(name));
             return DisplayedCriticalChance(conn, AttackBaseCriticalStrike.ChanceOfBase(basis, increased, Player, Own), Player);
         }
-        return DisplayedCriticalChance(conn, SpellCriticalStrike.Chance(SkillsFor(conn).SpellCritChance(gem.Effect, gem.Level),
+        return DisplayedCriticalChance(conn, SpellCriticalStrike.Chance(InquisitorOffense.SpellBase(
+            SkillsFor(conn).SpellCritChance(gem.Effect, gem.Level), InquisitorLocalCritical(conn), Player),
             Player, Own, conn.Pools.SpellCriticalStrikeChancePct + extraIncrease), Player);
     }
 

@@ -196,9 +196,9 @@ Part of [Status](../Status.md); what to build next in this area is in
 
 ## Partly working
 
-- Ordinary Inquisitor has private residual offense, accepted-use clock and recipient/recovery helpers in Core Game.
-  Shared hooks and native verification remain pending in the required predecessor order.
-  See [candidate behavior and publisher hooks](../docs/game/inquisitor-candidate.md).
+- Ordinary Inquisitor has a private wired offense, accepted-use, ground and recovery integration in Core Game.
+  Final predecessor reconciliation and native acceptance remain with the parent integrator.
+  See [integration and native handoff](../docs/game/inquisitor-candidate.md).
 
 - Behemoth: the optional Phrecia module supplies its capability, verified-graph opt-in and mode-aware node sources.
   Shared Rampage tiers and Vaal Ground Slam payment execute in Game with generation/source retirement guards.
