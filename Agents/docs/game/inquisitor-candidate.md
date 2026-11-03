@@ -43,5 +43,3 @@ The complete native five-type local weapon, cannot-crit, empty/swap and damage-b
 So do independent Virtue damage, native cast/area cadence, repeat/trigger rejection, enemy ground linger,
 incoming critical Ignite, finite recovery modifiers and transfer/death/race interleavings.
 Marks and their Virtue interaction belong to the following Slayer/Deadeye layer.
-Exact source revisions, automated results and bounded client observations are recorded in
-[PR #1](https://github.com/shimonshi/LocalExile/pull/1).
