@@ -131,6 +131,8 @@ sealed class SpawnedMonster(string label, PlayerWalk walk, int aggroRange, int s
     public bool Asleep;
     public MonsterAttack? Attack { get; init; }
     public bool Hostile { get; init; } = true;
+    /// <summary>A controller drives every action (a Survivors gate boss): the ordinary AI neither chases nor swings.</summary>
+    public bool Scripted { get; init; }
     public uint? OwnerId { get; init; }
     // The monster whose summoning skill brought it (MonsterAttack.Summon), whether its death gives no experience or items
     // (summoned_monsters_no_drops_or_experience), and when its own summoning skill is off cooldown.
@@ -441,7 +443,7 @@ sealed partial class ClientState(AreaLayout layout, uint ticket, uint seed)
                     (all ??= [.. fixedOnes]).Add(new(x, y, LivingCollision.Size(m)));
                 }
             foreach (var peer in Instance?.PlayersExcept(PeerId) ?? [])
-                if (peer.Life > 0) (all ??= [.. fixedOnes]).Add(new(peer.X, peer.Y, LivingCollision.PlayerSize));
+                if (peer.Life > 0 && peer.Owner is not null) (all ??= [.. fixedOnes]).Add(new(peer.X, peer.Y, LivingCollision.PlayerSize));
             return all is null ? fixedOnes : new GameServer.Core.World.BlockerSet(all);
         }
     }

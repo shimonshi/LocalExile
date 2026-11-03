@@ -29,7 +29,8 @@ public class OrdinaryResidualMigrationTests
     [Fact]
     public void SlayerCommittedKillsQualifiedConditionsAndReloadKeepTheirOriginalDeadlines()
     {
-        WhispererRuntimeTests.OrdinaryGameplayTransactions();
+        OrdinaryGameplayChecks.SlayerGameplayTransactions();
+        OrdinaryGameplayChecks.TransferComposition();
         foreach (bool ruthless in new[] { false, true })
         {
             var stats = Sources(ruthless, "Headsman", "Bane of Legends", "Impact", "Overwhelm",
@@ -108,7 +109,7 @@ public class OrdinaryResidualMigrationTests
         Assert.True(compacted.Capture(2060).Length < initialLength + 128);
         Assert.False(compacted.Use(2060, new(1, 1, true, true)));
         Assert.False(compacted.Use(2060, new(1, -1, true, true)));
-        WhispererRuntimeTests.DeadeyeGameplayTransactions();
+        OrdinaryGameplayChecks.DeadeyeGameplayTransactions();
         foreach (bool ruthless in new[] { false, true })
         {
             var stats = Sources(ruthless, "Far Shot", "Gathering Winds", "Wind Ward", "Focal Point", "Occupying Force");

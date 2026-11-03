@@ -1,11 +1,19 @@
 using GameServer.Core.World;
 using GameServer.Core.Protocol.Instance;
+using GameServer.Core.Protocol.Login;
 using GameServer.Core.Projectiles;
+using GameServer.Modding;
+using System.Net;
+using System.Net.Sockets;
 
 using League = GameServer.Core.Accounts.League;
+using MonsterRarity = GameServer.Core.Protocol.Instance.MonsterRarity;
 
-public sealed partial class WhispererRuntimeTests
+namespace GameServer.Gateway.Tests;
+
+static class OrdinaryGameplayChecks
 {
+    static uint Key(string name) => Program.Stats.Key(name)!.Value;
     internal static void DeadeyeGameplayTransactions()
     {
         var definition = Assert.Single(new AscendancyCatalog().Definitions,
@@ -360,7 +368,7 @@ public sealed partial class WhispererRuntimeTests
         }
     }
 
-    internal static void OrdinaryGameplayTransactions()
+    internal static void SlayerGameplayTransactions()
     {
         var definition = Assert.Single(new AscendancyCatalog().Definitions,
             d => d.Identity.Family == AscendancyFamily.Normal && d.Name == "Slayer");
@@ -424,7 +432,7 @@ public sealed partial class WhispererRuntimeTests
         var nextVictim = new SpawnedMonster("carry", new(100, 100, 0), 0, 0, 100) { Rarity = MonsterRarity.Rare };
         Assert.Equal(0u, Game.ApplyMonsterHitLocked(c, nextVictim, 180, player: Game.CharacterPlayerStats(c))!.Value.Life);
         Game.CarryOrdinary(c, 987);
-        var destination = h.NewConnection(c.Character!, ticket: 987, optional: false);
+        var destination = h.NewConnection(c.Character!, ticket: 987);
         destination.MainAscendancy = c.MainAscendancy;
         destination.ProjectileRuntimeState = new ManualRuntime { At = 100 };
         foreach (var (key, value) in c.PlayerStats) destination.PlayerStats[key] = value;
@@ -460,5 +468,129 @@ public sealed partial class WhispererRuntimeTests
         Assert.Null(Game.CurrentMark(c)); Assert.NotEmpty(Game.MarkPresentation(c)); Assert.Empty(Game.MarkPresentation(c));
         Assert.True(Cast()); c.PlayerLife = 0;
         Assert.Null(Game.CurrentMark(c)); Assert.Null(Game.MarksOf(c).Pending);
+    }
+
+    internal static void TransferComposition()
+    {
+        var definition = Assert.Single(new AscendancyCatalog().Definitions,
+            d => d.Identity.Family == AscendancyFamily.Normal && d.Name == "Slayer");
+        using var h = new Harness(definition);
+        var c = h.Conn;
+        c.PlayerStats[Key(SlayerRules.RareKillAttackSpeed)] = 20;
+        var victim = new SpawnedMonster("transfer kill", new(100, 100, 0), 0, 0, 100)
+            { Hostile = true, Rarity = MonsterRarity.Rare };
+        Assert.Equal(0u, Game.ApplyMonsterHitLocked(c, victim, 180, player: Game.CharacterPlayerStats(c))!.Value.Life);
+        int resolved = 0;
+        using var hook = GameEvents.TransferResolved.Add("Game", (conn, _, response) =>
+        {
+            Assert.Same(c, conn);
+            Assert.True(response.Ok);
+            Assert.False(conn.RageRetired);
+            int Get(string name) => conn.PlayerStats.GetValueOrDefault(Key(name));
+            Assert.Equal(1, Game.OrdinaryOf(conn, Get).Slayer.Read(Game.ProjectileWorldTime(conn), Get).RecentKills);
+            resolved++;
+            return Task.CompletedTask;
+        });
+        var transfer = new PendingTransfer(1, 0, false, AtSpawn: true);
+        Assert.True(c.TryBeginAreaChange(transfer, out _));
+        Game.Transfer("ordinary transfer", h.Wire, h.Ciphers, c, transfer,
+            _ => Task.FromResult(new ControlResponse
+                { Ok = true, Ticket = 988, Area = 1 })).GetAwaiter().GetResult();
+        Assert.Equal(1, resolved);
+        Assert.True(c.RageRetired);
+        var arrival = h.NewConnection(c.Character!, 988);
+        var arrivalWorld = new Game.ProjectileSession("ordinary arrival", h.Wire, h.Ciphers, arrival);
+        arrival.ProjectileRuntime = arrivalWorld;
+        arrivalWorld.AdvanceTo(ProjectileRuntime.Time(100));
+        Assert.Equal(100, Game.ProjectileWorldTime(arrival));
+        arrival.PlayerStats[Key(SlayerRules.RareKillAttackSpeed)] = 20;
+        Game.RestoreOrdinary(arrival);
+        var state = Game.OrdinaryOf(arrival, n => arrival.PlayerStats.GetValueOrDefault(Key(n)))
+            .Slayer.Read(100, n => arrival.PlayerStats.GetValueOrDefault(Key(n)));
+        Assert.Equal(1, state.RecentKills);
+        Assert.Equal(20, state.AttackSpeedIncrease);
+        Assert.False(OrdinaryResidualTransfers.Tickets.ContainsKey(988));
+    }
+
+    sealed class HighDraw : Random
+    {
+        public override int Next(int maxValue) => maxValue - 1;
+        public override double NextDouble() => 0;
+    }
+
+    sealed class ManualRuntime : IProjectileRuntime
+    {
+        internal double At;
+        public bool Active => true;
+        public double NowTicks => At * 120000;
+        public void Invalidate() { }
+    }
+
+    sealed class Sink : NetworkStream
+    {
+        readonly Socket peer;
+        static (Socket, Socket) Pair()
+        {
+            using var listener = new TcpListener(IPAddress.Loopback, 0); listener.Start();
+            var writer = new Socket(SocketType.Stream, ProtocolType.Tcp); writer.Connect(listener.LocalEndpoint);
+            return (writer, listener.AcceptSocket());
+        }
+        internal Sink() : this(Pair()) { }
+        Sink((Socket Writer, Socket Peer) pair) : base(pair.Writer, ownsSocket: true) => peer = pair.Peer;
+        public override ValueTask WriteAsync(ReadOnlyMemory<byte> bytes, CancellationToken cancellationToken = default)
+            => ValueTask.CompletedTask;
+        protected override void Dispose(bool disposing) { if (disposing) peer.Dispose(); base.Dispose(disposing); }
+    }
+
+    sealed class Harness : IDisposable
+    {
+        readonly string path = Path.Combine(Path.GetTempPath(), "ordinary-" + Guid.NewGuid().ToString("N") + ".db");
+        readonly IGameLogic? oldLogic = Program.GameLogicOrNull;
+        readonly IModuleLifetime? oldRules = Game.CombatLifetime;
+        readonly ModuleLifetime rules = new("Game");
+        readonly List<ClientState> connections = [];
+        internal readonly AscendancyCatalog.Definition Definition;
+        internal readonly Sink Wire = new();
+        internal readonly ConnectionCiphers Ciphers = new(new byte[64], false);
+        internal readonly ManualRuntime Time = new();
+        internal readonly ClientState Conn;
+        internal PlayerInventories Items => Game.ItemsOf(Conn);
+        internal (ushort Id, int Effect, string Name, int Level, int Quality, uint Gem) Fireball =>
+            Game.GemSkillEffects(Conn).Single(g => Game.SkillsFor(Conn).EffectId(g.Effect) == "Fireball");
+        internal Harness(AscendancyCatalog.Definition definition)
+        {
+            Saves.Open(path); Definition = definition;
+            Game.CombatLifetime = rules; Program.SetGameLogic(new GameServer.Modules.Game.GameLogic());
+            Conn = NewConnection("Ordinary" + Guid.NewGuid().ToString("N"));
+            Conn.ProjectileRuntimeState = Time;
+            var gem = ItemCatalog.Create(Program.Items.Find("Metadata/Items/Gems/SkillGemFireball")!);
+            Items.Add(PlayerInventories.Weapon1, 0, 0, ItemCatalog.Create(Program.Items.Find("Driftwood Wand")!) with
+                { Sockets = [new(SocketColour.White, gem)], Links = [1] });
+            Conn.PlayerStats[Key("virtual_intelligence_for_requirements")] = 1000;
+            Conn.PlayerStats[Key("no_inherent_rage_loss")] = 1;
+        }
+        internal ClientState NewConnection(string name, uint ticket = 1)
+        {
+            byte row = (byte)Enumerable.Range(0, 7).First(r => Program.Skills.ClassFor((byte)r).IntegerId == Definition.BaseClass);
+            var c = new ClientState(new(1, "Ordinary", 300, 300, 100, 100, null, []), ticket, 1)
+            {
+                Character = name, ClassRow = row, PlayerLife = 1000, PlayerMana = 1000, Instance = new(),
+                Experience = CharacterStats.ExperienceFor(68), Pools = new(68, 1000, 1000, 100, 0),
+                LeagueModule = new(new League("OrdinaryTest", "Standard", false, false), new HashSet<string>(["Game"])),
+                Keyring = new InstanceKeyring(new byte[32]), MainAscendancy = new(Definition.Identity, [], AscendancyRules.AwardKeys),
+            };
+            connections.Add(c); return c;
+        }
+        public void Dispose()
+        {
+            foreach (var c in connections)
+            {
+                c.Closed = true; c.ProjectileRuntime?.Invalidate(); c.RetirePlayerUpdates();
+                c.RetireResourceEffects(); c.RetireOwnedCombat(); PlayerInventories.Forget(c.Character!);
+            }
+            rules.Stop(_ => { }); Wire.Dispose();
+            Game.CombatLifetime = oldRules; Program.SetGameLogic(oldLogic!);
+            Saves.Db.Dispose(); foreach (string suffix in new[] { "", "-wal", "-shm" }) File.Delete(path + suffix);
+        }
     }
 }
