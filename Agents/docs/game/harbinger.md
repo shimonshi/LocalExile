@@ -49,6 +49,7 @@ Following teleports a companion back beside its owner beyond twelve cells.
 
 The character roster retains transfer leases and freezes at the exact common pause boundary.
 Old leases cannot mutate a destination connection's roster.
+Admission builds pools before restoring Life; that initial zero must not attach a death-clearing roster session.
 Refunds reconcile the successfully saved current node vector before recipient stat collection.
 Death clears summons and received effects; logout retires the session.
 A new Game lifetime retires the old session on access; optional-provider retirement uses the existing area-close policy.

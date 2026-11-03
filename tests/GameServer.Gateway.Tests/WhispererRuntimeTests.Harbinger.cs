@@ -165,8 +165,14 @@ public sealed partial class WhispererRuntimeTests
             gameplay.Close(departing);
             Assert.Empty(departing.Minions.All);
             var arriving = h.NewConnection(departing.Character!, 912, classRow: classRow);
-            arriving.MainAscendancy = selection; arriving.PlayerSent = arriving.PlayerObjectCreated = true;
+            arriving.MainAscendancy = selection;
             arriving.ProjectileRuntimeState = h.Time;
+            // Real admission builds pools before InitializeCharacterVitals restores the initial zero Life.
+            arriving.PlayerLife = 0;
+            _ = Game.CharacterStatSources(arriving);
+            arriving.Pools = Game.PoolsFor(arriving, 68);
+            arriving.PlayerLife = arriving.PlayerMaxLife; arriving.PlayerMana = arriving.Pools.Mana;
+            arriving.PlayerSent = arriving.PlayerObjectCreated = true;
             await gameplay.Tick("Harbinger", h.Wire, h.Ciphers, arriving, h.Time.At);
             Assert.Single(arriving.Minions.All);
             gameplay.Close(arriving); // Logout without an accepted transfer must clear the retained roster.

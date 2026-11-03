@@ -72,6 +72,8 @@ internal sealed partial class HarbingerGameplay(Func<DateTimeOffset>? utcNow = n
         if (!Enabled(conn)) return raw;
         lock (conn.Monsters)
         {
+            // Admission computes pools before vitals are restored. Its initial zero is not a death or a roster lease.
+            if (conn.PlayerLife == 0 && !conn.PlayerObjectCreated) return raw;
             var state = Get(conn);
             if (conn.PlayerLife == 0) { state.Curses.Clear(); state.CurseCast = null; state.Cast = null; }
             WithSelfCurse(conn, state, raw);
