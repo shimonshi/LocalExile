@@ -26,7 +26,7 @@ sealed class ChargeSession(Charges.State? state = null)
     readonly int[] applied = new int[3];
     Charges.Shown[] shown => State.Presented;
     Dictionary<string, int> observed = [];
-    double lastStep { get => State.LastPeriodicStep; set => State.LastPeriodicStep = value; }
+    double lastStep = state?.LastPeriodicStep ?? double.NaN;
 
     static readonly Charges.Limits Default = new(ChargePanelStats.BaseMaximumCharges, 0, Charges.BaseDurationMs);
 
@@ -81,6 +81,7 @@ sealed class ChargeSession(Charges.State? state = null)
         while (events.TryDequeue(out _)) { }
         timers.Reset();
         lastStep = double.NaN;
+        State.LastPeriodicStep = double.NaN;
         return State.Clear();
     }
 
@@ -98,6 +99,7 @@ sealed class ChargeSession(Charges.State? state = null)
         var log = new List<string>();
         double elapsed = double.IsNaN(lastStep) ? 0 : Math.Max(0, now - lastStep);
         lastStep = now;
+        State.LastPeriodicStep = now;
         if (!alive)
         {
             if (Die()) log.Add("charges lost on death");
