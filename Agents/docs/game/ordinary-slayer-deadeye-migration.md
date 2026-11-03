@@ -54,8 +54,18 @@ Ordinary production transactions are tested with only the Game league module ena
 This is a partial gameplay candidate, not completion of both ascendancies or an independently ready PR.
 The following requested behavior remains unimplemented or uncertified:
 
-- Mark gem admission, payment, exact catalog/contact adapters, Focal Point mitigation and native mark transfer.
-  `DeadeyeMarkRules` remains a tested rule object without those production consumers.
+- Mark admission and Focal Point now have production adapters in `DeadeyeMarks.cs` and `DeadeyeMarkContacts.cs`.
+  The four extracted ordinary gem identities use shared requirements, cooldown/payment and manual-use acceptance.
+  Target admission rejects ground, friendly, dead, distant and reused objects before payment.
+  Cast completion rechecks the action, source gem and target object; cancellation retains the paid cost.
+  Native rows74/77/78/80 carry ordered qualified values, source skill and recipient-rate finite clocks.
+  Source removal, death and Game retirement clear identities; neutral area/reload payloads never carry marks.
+  Accepted lethal transfer selects a living nearby hostile only when the current source grants transfer.
+  It keeps the original clock and never repeats payment; Standard and Ruthless use their separate Focal vectors.
+  Supported owner melee/area/projectile contacts consume mark critical, damage-taken, physical reduction,
+  added-base, recovery, leech and stun inputs; projectiles retain their frozen hitter inputs across refund.
+  Sniper split feeds the existing simulator through a default-zero target query, without a new projectile engine.
+  Native art/timing, knockback and legacy Sniper flask-charge behavior still need separate certification.
 - Mirage autonomous native actor allocation, target selection, equipment/visual packets, projectile attacks and retirement.
   `DeadeyeMirageLifecycle` remains a tested lifecycle rule object without that production actor loop.
 - Ally Tailwind selection/sharing, Gale stack presentation, every utility/instant/aura use admission route,
@@ -72,7 +82,9 @@ No new generic cull, leech, critical, proximity, projectile, ranged, recovery or
 ## Verification
 
 The input's two Gateway Facts are extended with production transactions rather than adding new Fact methods.
-Coverage includes ordinary-only admission, actual lethal/duplicate/phase outcomes, overkill in the shared leech session,
+Coverage includes actual mark gem payment/rejection, replacement, source removal, finite expiry, native cleanup,
+clock-preserving lethal transfer, ordinary non-Deadeye use and Standard/Ruthless Focal incoming damage/refund.
+It also includes ordinary-only admission, actual lethal/duplicate/phase outcomes, overkill in the shared leech session,
 refund without retrospective regrant, native owner Tailwind output, accepted Gale deduplication and Wind Ward consumption,
 real projectile release freezing across refund, and accepted neutral transfer with the original remaining lifetime.
 The complete required suites and build are run on the private committed candidate; exact source and results are

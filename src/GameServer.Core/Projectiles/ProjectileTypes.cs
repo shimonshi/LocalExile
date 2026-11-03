@@ -286,5 +286,7 @@ public interface IProjectileWorld
     /// height (a shot aimed at higher ground) overrides it; area placement and target selection keep the plain trace.</summary>
     TerrainContact? TraceFlight(ProjectileEntity projectile, ProjectileVector from, ProjectileVector to) => TraceTerrain(from, to);
     ProjectileHitResult Hit(ProjectileDamage damage);
+    /// <summary>Current target-local split count. This query must not commit effects or advance clocks.</summary>
+    int TargetSplit(ProjectileEntity projectile, ProjectileActorKey target) => 0;
     void Publish(ProjectileEvent value);
 }

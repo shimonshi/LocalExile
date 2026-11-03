@@ -656,6 +656,11 @@ Part of [Status](../Status.md); what to build next in this area is in
 
 ## Partly working
 
+- Ordinary mark gems use target validation, shared paid admission and on-target native buffs.
+  Focal Point consumes the distinct Standard/Ruthless vectors in incoming monster contacts.
+  Accepted death transfer keeps the original mark clock without another payment.
+  The two ordinary grouped Gateway Facts cover the transactions; native certification remains with the root.
+  See [the private migration handoff](../docs/game/ordinary-slayer-deadeye-migration.md).
 - Attack-speed admission: gem attacks now use the supported attack speed (gem and support stats plus the inherent
   GrantedEffectsPerLevel multiplier) for both the admission gate and the swing interval, instead of mixing it with
   `SkillAttackSeconds`. Tornado Shot's -20% and player/bow attack speed apply. Projectile speed adds the player's

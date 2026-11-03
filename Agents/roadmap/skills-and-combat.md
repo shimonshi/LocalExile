@@ -315,6 +315,10 @@ remaining native checks are recorded in [the port record](../docs/dev/issue75-po
 
 ### Damage model (foundation done, deeper defence next)
 
+- Verify ordinary marks and Focal Point with the final combined native build after root integration.
+  Paid admission, target buffs, Standard/Ruthless mitigation and clock-preserving death transfer are implemented.
+  Certify native art/timing and remaining knockback/legacy flask behavior separately.
+  See [the private migration handoff](../docs/game/ordinary-slayer-deadeye-migration.md).
 - **Client Buff descriptor consumer follow-up (#370, Known issues K1-K3):** follow one prepared descriptor
   from `ChaosDegenerationAuraPlayersUniqueBodyStr3` to an actual reader and explain its output.
   The [ownership/transfer report](../docs/re/client-buff-descriptor-consumers.md) is the bounded #466 delivery.

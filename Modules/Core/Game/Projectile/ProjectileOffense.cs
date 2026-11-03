@@ -6,6 +6,8 @@ sealed record ProjectileOffense(DamagePacket Hit, bool Spell, int Accuracy, int 
     int CriticalMultiplier, string Label)
 {
     public DamagePacket? AreaHit { get; init; }
+    public Game.MarkHitSource? MarkSource { get; init; }
+    public Game.MarkHitSource? MarkAreaSource { get; init; }
     public Penetration.PerType Penetration { get; init; }
     public HitResistances.Mods ResistanceMods { get; init; }
     public int ImpaleChance { get; init; }

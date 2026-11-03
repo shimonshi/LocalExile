@@ -68,6 +68,7 @@ static partial class Game
         int directDamage, LeechSources sources)
     {
         if (!target.Hostile || target.Dead || target.Life == 0 || target.Invulnerable || conn.Closed || conn.LeavingArea || conn.Paused || conn.PlayerLife == 0) return;
+        sources = MarkLeech(conn, target, sources);
         var amounts = sources.Amounts(taken, directDamage);
         if (!target.StageRunning && !target.KingPhaseLocked && target.Threshold is null
             && (target.Stage is null || target.StageTaken) && directDamage > target.Life)

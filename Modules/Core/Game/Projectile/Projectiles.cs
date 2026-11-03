@@ -190,6 +190,15 @@ static partial class Game
         /// <summary>The actor key a monster has in this session's world: a monster's own shot names it as owner, so its
         /// flight never contacts the monster itself.</summary>
         internal ProjectileActorKey ActorKey(uint id, SpawnedMonster monster) => Key(id, monster);
+        public int TargetSplit(ProjectileEntity projectile, ProjectileActorKey target)
+        {
+            if (projectile.Use.Payload is not ProjectileOffense || MarksOf(Conn).Active is not { } mark
+                || mark.Id != target.Id || !Conn.Monsters.TryGetValue(target.Id, out var monster)
+                || !ReferenceEquals(mark.Monster, monster) || Key(target.Id, monster) != target
+                || !MarkOwnerCurrent(Conn) || !MarkSourceCurrent(Conn, mark.Source) || monster.Dead || monster.Life == 0
+                || mark.Clock.Deadline <= ProjectileWorldTime(Conn)) return 0;
+            return Math.Clamp(MarkAmount(Conn, mark, "projectiles_hitting_self_split_into_x"), 0, 256);
+        }
 
         public IReadOnlyList<ProjectileActor> Actors(long from, long until)
         {
@@ -281,6 +290,7 @@ static partial class Game
             if (!shot.Spell && shot.FarShot) more *= AntiquarianEffects.FarShot(contact.Projectile.Distance);
             if (!shot.Spell && shot.PointBlank) more *= AntiquarianEffects.PointBlank(contact.Projectile.Distance);
             var baseHit = contact.IsArea ? shot.AreaHit ?? shot.Hit : shot.Hit;
+            baseHit = MarkHit(Conn, target, baseHit, contact.IsArea ? shot.MarkAreaSource : shot.MarkSource);
             // One stat build per contact: every input below reads the same owner state (about 120 µs per build).
             var player = CharacterPlayerStats(Conn);
             more *= OrdinaryTargetMore(Conn, target, player);
@@ -297,9 +307,10 @@ static partial class Game
             bool critical = RollCriticalStrike(Conn, chance, shot.SkillStats, attack: !shot.Spell, skillRoll: shot.CriticalRoll, player: player)
                 && (shot.Spell || EvasionEntropy.ConfirmsCritical(hitChance, Conn.AttackAccuracyRandom));
             int sourceCriticalMultiplier = shot.CriticalMultiplier + OrdinaryCriticalBonus(Conn, player);
-            int multiplier = CriticalMultiplierOn(target, sourceCriticalMultiplier);
+            int multiplier = CriticalMultiplierOn(target, sourceCriticalMultiplier
+                + MarkOn(Conn, target, "enemy_additional_critical_strike_multiplier_against_self"));
             var (damage, _, mitigated) = MonsterHitDamage(Conn, target, rolled, critical, !shot.Spell, at, shot.ResistanceMods,
-                shot.Penetration, gambler.InvertsResistance(random));
+                shot.Penetration, gambler.InvertsResistance(random), projectile: true);
             if (critical) damage = DamageModel.CriticalDamage(damage, multiplier);
             bool immune = target.Invulnerable;
             LeechOnHitLocked(Conn, target, MonsterTakenComponents(target, mitigated, shot.Spell), damage, shot.Leech);
