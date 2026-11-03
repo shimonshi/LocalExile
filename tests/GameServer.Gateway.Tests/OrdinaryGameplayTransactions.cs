@@ -231,8 +231,13 @@ public sealed partial class WhispererRuntimeTests
     static void MarkGameplayTransactions(Harness h)
     {
         var c = h.Conn;
-        var production = Game.ProjectilesFor("marks", h.Wire, h.Ciphers, c);
+        c.ProjectileRuntime?.Invalidate();
+        // Explicit advances own this fixture's world time; no timer can finish a cast between adjacent assertions.
+        var production = new Game.ProjectileSession("marks", h.Wire, h.Ciphers, c);
+        c.ProjectileRuntime = production;
         var runtime = production.Runtime;
+        runtime.AdvanceTo(ProjectileRuntime.Time(Math.Max(h.Time.At, c.Clock.Elapsed.TotalSeconds) + 60));
+        h.Time.At = runtime.Now / (double)ProjectileRuntime.QuantaPerSecond;
         void Advance(double seconds)
         {
             h.Time.At = Math.Max(h.Time.At, Math.Max(c.Clock.Elapsed.TotalSeconds, runtime.Now / 120000d)) + seconds;
