@@ -403,6 +403,7 @@ static partial class Game
             return;
         }
         lock (conn.Monsters) conn.TransferAccepted = true;
+        CarryInquisitor(conn, r.Ticket);
         CarryCharges(conn, r.Ticket);
         CarryFortification(conn, r.Ticket);
         CarryRampage(conn, r.Ticket);

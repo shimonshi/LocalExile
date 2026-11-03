@@ -297,7 +297,7 @@ static partial class Game
             bool critical = RollCriticalStrike(Conn, chance, shot.SkillStats, attack: !shot.Spell, skillRoll: shot.CriticalRoll, player: player)
                 && (shot.Spell || EvasionEntropy.ConfirmsCritical(hitChance, Conn.AttackAccuracyRandom));
             int multiplier = CriticalMultiplierOn(target, shot.CriticalMultiplier);
-            var (damage, _, mitigated) = MonsterHitDamage(target, rolled, critical, !shot.Spell, at, shot.ResistanceMods,
+            var (damage, _, mitigated) = MonsterHitDamage(Conn, target, rolled, critical, !shot.Spell, at, shot.ResistanceMods,
                 shot.Penetration, gambler.InvertsResistance(random));
             if (critical) damage = DamageModel.CriticalDamage(damage, multiplier);
             bool immune = target.Invulnerable;

@@ -28,6 +28,7 @@ sealed class FortificationState
     double lastTime = double.NegativeInfinity, nextHitGain = double.NegativeInfinity;
     int activeMaximum = BaseMaximum;
     public double StackSeconds { get; private set; }
+    internal (int Count, double ExpiresAt)[] GrantSnapshot() => [.. grants.Select(g => (g.Count, g.ExpiresAt))];
     readonly record struct Grant(int Count, double ExpiresAt);
     public readonly record struct Carried(int Count, double Remaining);
     public sealed record Transfer(IReadOnlyList<Carried> Grants, double HitDelay);

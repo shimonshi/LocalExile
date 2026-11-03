@@ -92,21 +92,7 @@ static partial class Game
                         : InstanceEntities.RemoveBuff(id, profane.Buff),
                         $"profane ground monster 0x{id:x}: {profane.Added}"));
             }
-            bool alive = conn.PlayerLife > 0;
-            var here = conn.Walk.Position(now);
-            var (stale, make) = state.Stationary(alive && !conn.Walk.Moving(now) && !InTown(conn), here);
-            if (stale?.Object is uint old) pending.Packets.Add(new(InstanceProtocol.RemoveObject(old),
-                $"0x02bb remove effect 0x{old:x} (stationary consecrated ground)"));
-            if (make > 0) state.PlaceStationary(new(FlaskGrounds.Kind.ConsecratedGround, here.X, here.Y, make,
-                double.PositiveInfinity, QueueGroundArtLocked(conn, FlaskGrounds.Kind.ConsecratedGround, here, make)));
-            if (state.SetConsecrated(state.OnConsecrated(alive, here, now), () => conn.NextBuff++) is { } consecrated)
-            {
-                pending.Packets.Add(new(consecrated.Added
-                    ? InstanceEntities.AddBuff(PlayerId, consecrated.Buff, FlaskGrounds.ConsecratedBuffRow, PlayerId)
-                    : InstanceEntities.RemoveBuff(PlayerId, consecrated.Buff),
-                    $"0x{(consecrated.Added ? "01c1" : "01c2")} player {(consecrated.Added ? "on" : "off")} consecrated ground"));
-                pending.StatRevision++;
-            }
+            InquisitorGroundStep(conn, now);
             state.StopTickerIfIdle();
         }
     }

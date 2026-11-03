@@ -137,6 +137,7 @@ static partial class Game
             LeechOf(conn).Clear(conn.Clock.Elapsed.TotalSeconds);
             ClearRageOnDeath(conn);
             conn.Rampage.Clear();
+            ClearInquisitor(conn);
             conn.RetireOwnedCombat();
             ChargesOnDeath(conn);
             ClearBloodChargesOnDeath(conn);
@@ -238,7 +239,8 @@ static partial class Game
                 uint current = conn.EnergyShield.Current;
                 bool active = conn.EnergyShield.Recharging;
                 int rate = conn.PlayerLife == 0 || conn.TrapDegenPerSecond > 0 ? 0 : (int)Math.Round(
-                    EnergyShield.PredictionPerMinute(conn.Pools.EnergyShield, Get, active));
+                    EnergyShield.PredictionPerMinute(conn.Pools.EnergyShield, Get, active)
+                    + (conn.InquisitorOwnerUntil > InquisitorNow(conn) ? 60 * InquisitorMirrorRate(conn, Get) : 0));
                 if (conn.SentEnergyShield == current && conn.SentRechargeActive == active && conn.SentEsRecoveryRate == rate)
                     return null;
                 bool rateChanged = conn.SentEsRecoveryRate != rate;
@@ -331,7 +333,7 @@ static partial class Game
         if (increased <= -100) return increased;
         static float Factor(int value, float scale = 100) => Math.Max(0, (value + scale) / scale);
         float Final(string name) => Factor(get(name));
-        bool totem = get("is_totem") != 0, handCast = get("casting_spell") != 0 && get("is_not_hand_cast") == 0;
+        bool totem = get("is_totem") != 0, handCast = !totem && get("casting_spell") != 0 && get("is_not_hand_cast") == 0;
         int fishing = get("cast_speed_+%_final_while_holding_fishing_rod");
         float final = Final("active_skill_cast_speed_+%_final") * 100 * Final("righteous_fire_cast_speed_+%_final")
             * Final("suppressing_fire_debuff_cast_speed_+%_final") * Final("support_multicast_cast_speed_+%_final")
@@ -375,7 +377,7 @@ static partial class Game
         ushort? buffVisual = Art.BuffVisual("righteous_fire_buff_visual", variation), auraVisual = Art.BuffVisual("righteous_fire_aura_visual", variation);
         string? ringAo = Art.Animated("righteous_fire_ring", variation) ?? (variation == 0 ? RighteousFireRingAo : null);
         // The radius takes the player's area of effect stats (passives, items, gem quality) under the skill's own (SkillArea).
-        var stats = MergeSkillStats(AreaPlayerStats(conn), SupportedSkill(conn, skillId).Stats);
+        var stats = SkillArea.WithoutPlayerBase(SupportedStats(conn, skillId), Stats.Key(SkillArea.BaseIncreased));
         int Get(string name, int fallback) => Stats.Key(name) is uint k && stats.TryGetValue(k, out int v) ? v : fallback;
         int radius = SkillArea.Radius(Get("active_skill_base_area_of_effect_radius", 18), name => Get(name, 0), spell: true);
         (int X, int Y) at;
@@ -672,6 +674,9 @@ static partial class Game
                     int trapWhole = (int)Math.Truncate(trapCarry); trapCarry -= trapWhole;
                     int lifeTrap = IncomingResourceDefences.DamageOverTime(conn.EnergyShield, trapWhole,
                         IncomingStat(IncomingResourceDefences.BypassStat), now, ref conn.NonChaosDotBypassCarry);
+                    InquisitorSettleMirror(conn, now);
+                    conn.EnergyShield.Gain(conn.InquisitorMirrorPending);
+                    conn.InquisitorMirrorPending = 0;
                     conn.EnergyShield.Advance(recoveryFrom, now, RecoveryStat, true);
                     conn.EnergyShield.Gain(leeched.EnergyShield + (convertLifeRegen ? lifeRate * seconds : 0));
                     double fortificationLife = FortificationOf(conn).TakeRecovery(conn.Clock.Elapsed.TotalSeconds);
@@ -989,6 +994,7 @@ static partial class Game
         var (layout, name, classRow, pools) = (conn.Layout, conn.Character, conn.ClassRow, conn.Pools);
         var cls = SkillsFor(conn).ClassFor(classRow);
         // Keep the ticket's remaining Rage timers frozen while the destination loads (before 0x7d).
+        RestoreInquisitor(conn);
         RestoreRage(conn);
         RestoreRampage(conn);
         RestoreResourceEffects(conn);
