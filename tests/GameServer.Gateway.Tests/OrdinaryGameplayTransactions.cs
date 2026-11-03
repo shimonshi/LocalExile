@@ -410,6 +410,13 @@ static class OrdinaryGameplayChecks
             charges.Step(1.2, _ => 0, () => Game.WeaponProfileFor(c), true, false, true, new Random(1));
             Assert.Equal(2, charges.State.Held(ChargeType.Endurance));
             Assert.Equal(2, charges.Limits(ChargeType.Endurance).Maximum);
+            typeof(Game).GetMethod("CommitAcceptedChargeBatchLocked", System.Reflection.BindingFlags.Static
+                | System.Reflection.BindingFlags.NonPublic)!.Invoke(null, [c,
+                new PlayerMinions.AcceptedCharges[] { new(false, false, MonsterRarity.Normal, null,
+                    new Dictionary<uint, int>(), false, 1.2) }, Game.CharacterPlayerStats(c)]);
+            Assert.Equal(7, charges.Limits(ChargeType.Frenzy).Maximum);
+            Assert.Equal(2, charges.Limits(ChargeType.Endurance).Maximum);
+            Assert.Equal(2, charges.State.Held(ChargeType.Endurance));
             c.PlayerStats.Remove(Key("virtual_maximum_endurance_charges"));
             c.PlayerStats.Remove(Key("virtual_maximum_frenzy_charges"));
             c.PlayerStats.Remove(Key("gain_X_endurance_charges_per_second"));

@@ -10,8 +10,8 @@ static partial class Game
         if (conn.PlayerLife == 0) return;
         var session = ChargesOf(conn);
         int Get(string name) => Stats.Key(name) is uint key ? player.GetValueOrDefault(key) : 0;
-        session.Observe(Get);
-        var events = accepted.Select(e => e.KillEvent ? (ChargeEvent)new ChargeEvent.Kill(e.Rarity)
+        session.Observe(Get, name => Stats.Key(name) is uint key && conn.PlayerStats.TryGetValue(key, out int value) ? value : null);
+        var events = accepted.Select(e => e.KillEvent ? (ChargeEvent)new ChargeEvent.Kill(e.Rarity, e.Frozen)
             : new ChargeEvent.Hit(e.Critical, true, null, e.Rarity, e.Effect,
                 name => Stats.Key(name) is uint key ? e.Skill!.GetValueOrDefault(key) : 0, e.Killed, e.Primary));
         var step = session.Admit(accepted.Max(e => e.At), events, Get, () => WeaponProfileFor(conn), conn.PlayerLife > 0, Random.Shared);
