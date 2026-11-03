@@ -43,10 +43,14 @@ static partial class Game
         lock (conn.Monsters) ChargesOf(conn).Die();
     }
 
-    // A hostile monster the player killed (MonsterKilled): its "on kill" gains.
+    // A hostile monster the player killed (MonsterKilled): its "on kill" gains, "on Killing a Frozen Enemy" too when the
+    // corpse kept a freeze (its killing hit's included) or shattered.
     internal static void ChargesOnKill(ClientState conn, SpawnedMonster m)
     {
-        if (conn.PlayerLife > 0) ChargesOf(conn).Enqueue(new ChargeEvent.Kill(m.Rarity));
+        if (conn.PlayerLife == 0) return;
+        bool frozen;
+        lock (conn.Monsters) frozen = m.Ailments.FrozenAtDeath(ProjectileWorldTime(conn));
+        ChargesOf(conn).Enqueue(new ChargeEvent.Kill(m.Rarity, frozen));
     }
 
     // A monster's hit on the player that landed (when hit) or was blocked (on block).
@@ -166,15 +170,21 @@ static partial class Game
         }
     }
 
+    // Then, as a monster's hit: the flat damage taken, a ranged attack's physical (Turtle Shell) and the increased damage
+    // taken with the shock's (PlayerDamageTaken). An attack that is not ranged is melee.
     internal static int MitigateTakenWithArmour(ClientState conn, DamageType type, int amount, int resistance, int maxResistance,
-        int effectiveArmour, IReadOnlyDictionary<uint, int> stats)
+        int effectiveArmour, IReadOnlyDictionary<uint, int> stats, bool attack = true, bool ranged = false)
     {
+        int Get(string name) => Stats.Key(name) is uint key ? stats.GetValueOrDefault(key) : 0;
+        int increased = PlayerDamageTaken.IncreasedPct(type, melee: attack && !ranged, Get);
         var reduction = PlayerDamageReduction(conn, stats);
         int resisted = type == DamageType.Physical ? amount : DamageModel.Mitigate(amount, resistance, maxResistance);
-        return FortificationDamageTaken(conn, (int)Math.Round(PlayerHitMitigation.AfterResistance(conn.Pools, type, resisted,
-            reduction.Physical, reduction.Elemental, effectiveArmour,
-            PlayerHitMitigation.ArmourPercent(conn.Pools, type, name => Stats.Key(name) is uint key ? stats.GetValueOrDefault(key) : 0))
-            * conn.ElementalAilments.DamageTakenFactor(conn.Clock.Elapsed.TotalSeconds)));
+        int value = Math.Max(0, PlayerHitMitigation.AfterResistance(conn.Pools, type, resisted,
+            reduction.Physical, reduction.Elemental, effectiveArmour, PlayerHitMitigation.ArmourPercent(conn.Pools, type, Get))
+            + PlayerDamageTaken.Flat(type, attack, Get));
+        if (type == DamageType.Physical) value = AntiquarianEffects.RangedPhysical(value, ranged, Get);
+        return FortificationDamageTaken(conn, (int)Math.Round(value
+            * conn.ElementalAilments.DamageTakenFactor(conn.Clock.Elapsed.TotalSeconds, increased)));
     }
 
     // A warcry (CastGemSkill), when its cast is over: it taunts the hostile monsters within its radius (wiki Warcry: every
