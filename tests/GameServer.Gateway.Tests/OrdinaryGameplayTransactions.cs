@@ -246,6 +246,31 @@ static class OrdinaryGameplayChecks
         Assert.True(Game.ToggleAura("ordinary aura", h.Wire, h.Ciphers, c, skill.Id, skill.Effect,
             skill.Name, reservation, skill.Level, skill.Quality).GetAwaiter().GetResult());
         Assert.Equal(before + 1, Count()); // Deactivation is not a skill use.
+        foreach (var old in h.Items.Items(PlayerInventories.Weapon1).ToArray()) h.Items.Remove(PlayerInventories.Weapon1, old.Id);
+        var blood = ItemCatalog.Create(Program.Items.Find("Petrified Blood")!);
+        h.Items.Add(PlayerInventories.Weapon1, 0, 0, ItemCatalog.Create(Program.Items.Find("Driftwood Wand")!) with
+            { Sockets = [new(SocketColour.White, blood)], Links = [1] });
+        c.PlayerStats[Key("virtual_strength_for_requirements")] = 1000;
+        c.PlayerStats[Key("virtual_dexterity_for_requirements")] = 1000;
+        var pb = Game.GemSkillEffects(c).Single(g => Game.SkillsFor(c).EffectId(g.Effect) == PetrifiedBlood.EffectId);
+        var pbReservation = Game.SupportedReservation(c, pb.Id)!.Value;
+        int beforeBlood = Count();
+        bool Toggle((int Flat, int Percent) cost) => Game.TogglePetrifiedBlood("ordinary blood", h.Wire, h.Ciphers,
+            c, pb.Id, pb.Effect, pb.Name, cost, pb.Level, pb.Quality).GetAwaiter().GetResult();
+        Assert.True(Toggle(pbReservation));
+        Assert.True(c.PetrifiedBlood.Active);
+        Assert.Equal(beforeBlood + 1, Count());
+        Assert.True(Toggle(pbReservation));
+        Assert.False(c.PetrifiedBlood.Active);
+        Assert.Equal(beforeBlood + 1, Count());
+        Assert.False(Toggle((0, 101)));
+        Assert.Equal(beforeBlood + 1, Count());
+        CharacterSaves.SetPetrifiedBlood(c.Character!, true);
+        Game.RestoreRememberedPetrifiedBlood(c);
+        Assert.True(c.PetrifiedBlood.Active);
+        Assert.Equal(beforeBlood + 1, Count()); // Restored intent is not a new manual use.
+        c.PetrifiedBlood.Suspend();
+        CharacterSaves.SetPetrifiedBlood(c.Character!, false);
     }
 
     static void MarkGameplayTransactions(Harness h)
