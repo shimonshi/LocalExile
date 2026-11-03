@@ -72,6 +72,7 @@ public sealed class InquisitorCandidateTests
     public async Task Accepted_uses_reload_refund_and_recipient_expiry_preserve_clock_and_recovery_boundaries()
     {
         await WiredTiming();
+        await TransferComposition();
         var sources = Sources(19417, 13851, 39790, 32816);
         int Get(string name) => sources.GetValueOrDefault(name);
         var inputs = InquisitorCombatState.Inputs.From(Get, InquisitorCombatState.BaseFanaticismSeconds);
@@ -276,6 +277,54 @@ public sealed class InquisitorCandidateTests
         Assert.Null(await Game.ChangePassives("Inquisitor", h.Stream, h.Ciphers, c, [(ushort)32816], false, "refund", refundPoints: true));
         c.PlayerLife = 0; Game.InquisitorRead(c, Game.CharacterPlayerStats(c));
         Assert.Empty(c.InquisitorCombat);
+    }
+
+    static async Task TransferComposition()
+    {
+        using var h = new OrdinaryHarness();
+        var c = h.Conn;
+        h.Build(19417, 13851);
+        for (int i = 0; i < 4; i++)
+        {
+            h.Time.At = i + .1;
+            Game.InquisitorRead(c, Game.CharacterPlayerStats(c), new(true, false, false, false, false));
+        }
+        h.Time.At = 4;
+        Assert.True(Game.InquisitorRead(c, Game.CharacterPlayerStats(c)).Fanaticism(4));
+        int resolved = 0;
+        using var hook = GameEvents.TransferResolved.Add("Game", (conn, _, response) =>
+        {
+            Assert.Same(c, conn);
+            Assert.False(conn.InquisitorRetired);
+            Assert.False(conn.RageRetired);
+            Assert.True(Game.InquisitorRead(conn, Game.CharacterPlayerStats(conn)).Fanaticism(4));
+            Assert.Equal(response.Ok, conn.TransferAccepted);
+            if (!response.Ok) Assert.False(conn.LeavingArea);
+            resolved++;
+            return Task.CompletedTask;
+        });
+        var refused = new PendingTransfer(1, 0, false, AtSpawn: true);
+        Assert.True(c.TryBeginAreaChange(refused, out _));
+        await Game.Transfer("Inquisitor transfer", h.Stream, h.Ciphers, c, refused,
+            _ => Task.FromResult(new ControlResponse { Ok = false, Error = "fixture refusal" }));
+        Assert.Equal(1, resolved);
+        Assert.False(c.InquisitorRetired);
+        var accepted = new PendingTransfer(1, 0, false, AtSpawn: true);
+        Assert.True(c.TryBeginAreaChange(accepted, out _));
+        await Game.Transfer("Inquisitor transfer", h.Stream, h.Ciphers, c, accepted,
+            _ => Task.FromResult(new ControlResponse { Ok = true, Ticket = 908, Area = 1 }));
+        Assert.Equal(2, resolved);
+        Assert.True(c.InquisitorRetired);
+        Assert.True(c.RageRetired);
+        var arrival = h.NewConnection(908, c.Character);
+        arrival.MainAscendancy = c.MainAscendancy;
+        h.Time.At = 100;
+        Game.RestoreInquisitor(arrival);
+        Game.ActivateInquisitor(arrival, 100);
+        Assert.True(Game.InquisitorRead(arrival, Game.CharacterPlayerStats(arrival)).Fanaticism(100));
+        await Game.Transfer("Inquisitor transfer", h.Stream, h.Ciphers, c, accepted,
+            _ => throw new InvalidOperationException("Auth must not run twice"));
+        Assert.Equal(2, resolved);
     }
 
     sealed class Clock : IProjectileRuntime
