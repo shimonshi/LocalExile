@@ -141,7 +141,7 @@ static partial class Game
             return packet;
         });
         internal void Packet(byte[] bytes, string? log = null) => Packet(() => bytes, log);
-        void Packet(Func<byte[]?> snapshot, string? log = null) => Enqueue(async () =>
+        internal void Packet(Func<byte[]?> snapshot, string? log = null) => Enqueue(async () =>
         {
             while (Active)
             {
@@ -246,6 +246,9 @@ static partial class Game
             if (contact.Projectile.Use.Payload is not ProjectileOffense shot) return ProjectileHitResult.Miss;
             if (!Conn.Monsters.TryGetValue(contact.Target.Id, out var target) || target.Dead || target.Life == 0
                 || Key(contact.Target.Id, target) != contact.Target) return ProjectileHitResult.Miss;
+            var mirage = shot.Mirage;
+            if (mirage is not null && (!MirageCurrent(this, mirage) || !target.Hostile || Conn.Paused))
+                return ProjectileHitResult.Miss;
             var random = contact.Projectile.RandomSource;
             if (shot.RampageEpoch is long ownedEpoch)
             {
@@ -316,7 +319,8 @@ static partial class Game
                 shot.Penetration, gambler.InvertsResistance(random), projectile: true);
             if (critical) damage = DamageModel.CriticalDamage(damage, multiplier);
             bool immune = target.Invulnerable;
-            LeechOnHitLocked(Conn, target, MonsterTakenComponents(target, mitigated, shot.Spell), damage, shot.Leech);
+            if (mirage is null)
+                LeechOnHitLocked(Conn, target, MonsterTakenComponents(target, mitigated, shot.Spell), damage, shot.Leech);
             if (!immune)
             {
                 var settings = (critical ? shot.CriticalImpaleSettings : null) ?? shot.ImpaleSettings ?? new(shot.ImpaleChance);
@@ -324,18 +328,28 @@ static partial class Game
                 var (stored, _) = target.Impale.OnHit(physical, at, settings, random, target.Mods.Effects["avoid_impale_%"]);
                 damage = ImpaleStats.AddReflected(damage, MonsterImpaleDamage(target, stored));
             }
-            var hit = ApplyMonsterHitLocked(Conn, target, damage, player: player,
-                cull: Cull.Of(player, shot.SkillStats, critical, shot.Spell));
+            var cull = Cull.Of(player, shot.SkillStats, critical, shot.Spell);
+            var hit = mirage is null
+                ? ApplyMonsterHitLocked(Conn, target, damage, player: player, cull: cull)
+                : ApplyMonsterHitLocked(Conn, target, damage,
+                    allyAt: ((int)mirage.Actor.Position.X, (int)mirage.Actor.Position.Y),
+                    cull: cull with { RecoverLifePct = 0 });
             if (hit is null) return ProjectileHitResult.Miss;
+            if (!immune && damage > 0 && shot.MirageRelease is { } receipt) MirageOwnerHit(this, receipt, target);
             if (!immune)
                 AilmentsOnHitLocked(Conn, target, mitigated, shot.Spell, critical, multiplier, player, shot.SkillStats,
-                    at, contact.Projectile.ReactionRandomSource);
+                    at, contact.Projectile.ReactionRandomSource, reflectToPlayer: mirage is null);
             if (!immune && hit.Value.Life > 0 && rolled[DamageType.Fire].Max > 0) IgniteOnHitLocked(this, contact.Target.Id, target,
                 OrdinaryIgniteAt(Conn, target, shot, contact.Projectile.Distance, player), critical, at);
+            InflictMonsterBlind(Conn, contact.Target.Id, target, at, shot.Blind, contact.Projectile.ReactionRandomSource);
+            if (mirage is not null)
+            {
+                CommitMirageHit(this, contact, target, hit.Value);
+                return ProjectileHitResult.Hit;
+            }
             RageOnHitLocked(Conn, attack: !shot.Spell, melee: false, critical, shot.SkillStats,
                 contact.Projectile.ReactionRandomSource, player);
             ChargesOnHit(Conn, target, critical, shot.Spell, shot.Effect, shot.Level, shot.Quality, melee: false);
-            InflictMonsterBlind(Conn, contact.Target.Id, target, at, shot.Blind, contact.Projectile.ReactionRandomSource);
             CommitProjectileHit(this, contact, target, hit.Value, damage, shot, critical);
             if (critical) Enqueue(() => MaybeCreateProfaneGround(remote, stream, ciphers, Conn, target.Walk.Position(at)));
             return ProjectileHitResult.Hit;

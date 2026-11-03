@@ -6,6 +6,7 @@ sealed class DeadeyeMirageLifecycle
     public sealed record Actor(long Identity, long GameGeneration, string EquipmentSignature, ushort Skill,
         bool Detached, ProjectileVector Position, OrdinaryEffectClock Clock)
     {
+        public ProjectileVector Position { get; set; } = Position;
         public OrdinaryEffectClock Clock { get; set; } = Clock;
         public double NextAttack { get; set; }
         public long Attack { get; set; }
@@ -20,7 +21,7 @@ sealed class DeadeyeMirageLifecycle
     public Actor? OwnerHit(double now, long area, long release, bool paidRelease, bool ownerDirect, long gameGeneration,
         string signature, ushort skill, ProjectileVector position, Func<string, int> qualified)
     {
-        Step(now, gameGeneration, signature);
+        Advance(now, gameGeneration);
         if (!paidRelease || !ownerDirect || !releases.Add((area, release))) return null;
         bool detached = qualified("mirage_archers_do_not_attach") != 0;
         int radius = Math.Max(0, qualified("cannot_summon_mirage_archer_if_near_mirage_archer_radius"));
@@ -45,16 +46,30 @@ sealed class DeadeyeMirageLifecycle
 
     public void Step(double now, long generation, string signature)
     {
+        Advance(now, generation);
+        actors.RemoveAll(a => a.EquipmentSignature != signature);
+    }
+
+    internal void Remove(Actor actor) => actors.Remove(actor);
+    internal void Advance(double now)
+    {
         foreach (var actor in actors) actor.Clock.Advance(now);
-        actors.RemoveAll(a => a.GameGeneration != generation || a.EquipmentSignature != signature || a.Clock.Remaining <= 0);
+        actors.RemoveAll(a => a.Clock.Remaining <= 0);
+    }
+
+    void Advance(double now, long generation)
+    {
+        Advance(now);
+        actors.RemoveAll(a => a.GameGeneration != generation);
     }
 
     public bool TryAttack(Actor actor, double now, long generation, string signature, double attackSeconds,
         out long attack)
     {
-        Step(now, generation, signature);
+        Advance(now, generation);
         attack = 0;
-        if (!actors.Contains(actor) || now < actor.NextAttack || !double.IsFinite(attackSeconds) || attackSeconds <= 0)
+        if (!actors.Contains(actor) || actor.EquipmentSignature != signature || now < actor.NextAttack
+            || !double.IsFinite(attackSeconds) || attackSeconds <= 0)
             return false;
         actor.NextAttack = now + attackSeconds;
         attack = ++actor.Attack;

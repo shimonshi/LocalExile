@@ -5,6 +5,8 @@ using GameServer.Core.World;
 sealed record ProjectileOffense(DamagePacket Hit, bool Spell, int Accuracy, int CriticalChance,
     int CriticalMultiplier, string Label)
 {
+    public Game.MirageReceipt? MirageRelease { get; init; }
+    public Game.MirageBody? Mirage { get; init; }
     public DamagePacket? AreaHit { get; init; }
     public Game.MarkHitSource? MarkSource { get; init; }
     public Game.MarkHitSource? MarkAreaSource { get; init; }

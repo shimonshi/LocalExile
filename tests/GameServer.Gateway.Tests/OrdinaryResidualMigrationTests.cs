@@ -138,6 +138,19 @@ public class OrdinaryResidualMigrationTests
             Assert.False(state.Mirages.TryAttack(actor, .5, 4, "bow/gem", 1, out _));
             state.Mirages.Step(1, 5, "bow/gem");
             Assert.False(state.Mirages.Current(actor, attack, 4));
+            int Detached(string name) => name switch
+            {
+                "mirage_archers_do_not_attach" => 1,
+                "additional_max_mirage_archers" => 2,
+                _ => Mirage(name),
+            };
+            var first = state.Mirages.OwnerHit(2, 2, 1, true, true, 5, "bow/first", 1, at, Detached)!;
+            var second = state.Mirages.OwnerHit(2, 2, 2, true, true, 5, "bow/second", 2, new(100, 0), Detached)!;
+            Assert.NotNull(first); Assert.NotNull(second); Assert.Equal(2, state.Mirages.Actors.Count);
+            Assert.True(state.Mirages.TryAttack(first, 2, 5, "bow/first", 1, out _));
+            Assert.True(state.Mirages.TryAttack(second, 2, 5, "bow/second", 1, out _));
+            Assert.Equal(2, state.Mirages.Actors.Count);
+            Assert.False(state.Mirages.TryAttack(first, 3, 5, "wrong/source", 1, out _));
         }
     }
 }

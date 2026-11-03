@@ -72,7 +72,7 @@ static partial class Game
     /// </summary>
     internal static void AilmentsOnHitLocked(ClientState conn, SpawnedMonster m, DamagePacket mitigated, bool spell,
         bool critical, int criticalMultiplier, IReadOnlyDictionary<uint, int> player, IReadOnlyDictionary<uint, int>? skill,
-        double now, Random random, List<MonsterElementalAilments.Effect>? reflected = null)
+        double now, Random random, List<MonsterElementalAilments.Effect>? reflected = null, bool reflectToPlayer = true)
     {
         double factor = MonsterDamageTaken(m, spell, now, hit: true) * (critical ? criticalMultiplier / 100.0 : 1);
         int Player(string name) => Stats.Key(name) is uint key ? player.GetValueOrDefault(key) : 0;
@@ -101,7 +101,7 @@ static partial class Game
                 (x, y) => conn.Layout.WalkableFor(x, y, size) && !conn.Barrier.Contains((x, y)), Random.Shared);
             m.Fleeing = m.FleeTo is not null;
         }
-        if (added.Count == 0 || conn.PlayerLife == 0
+        if (!reflectToPlayer || added.Count == 0 || conn.PlayerLife == 0
             || !RandomRolls.Chance(m.Mods.Effects["reflect_non_damaging_ailments_%_chance"], 100, random)) return;
         if (reflected is not null) reflected.AddRange(added);
         else ReflectAilmentsLocked(conn, added, now, player, random);

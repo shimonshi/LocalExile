@@ -40,6 +40,78 @@ public sealed partial class WhispererRuntimeTests
                 ? next.OrdinaryDistance.HitMultiplier(70, false) : 0);
         MarkGameplayTransactions(h);
         OrdinaryUtilityTransactions(h);
+        MirageGameplayTransactions(h);
+    }
+
+    static void MirageGameplayTransactions(Harness h)
+    {
+        var c = h.Conn;
+        c.MainAscendancy = new(h.Definition.Identity, [], []); c.StatSourcesCacheState = null;
+        c.Monsters.Clear(); c.PlayerLife = c.PlayerMaxLife; c.PlayerMana = c.Pools.Mana;
+        foreach (var old in h.Items.Items(PlayerInventories.Weapon1).ToArray()) h.Items.Remove(PlayerInventories.Weapon1, old.Id);
+        var arrow = ItemCatalog.Create(Program.Items.Find("Tornado Shot")!);
+        var support = ItemCatalog.Create(Program.Items.Find("Mirage Archer Support")!);
+        var bow = h.Items.Add(PlayerInventories.Weapon1, 0, 0, ItemCatalog.Create(Program.Items.Find("Crude Bow")!) with
+            { Sockets = [new(SocketColour.White, arrow), new(SocketColour.White, support)], Links = [2] });
+        var gem = Assert.Single(Game.GemSkillEffects(c), g => Game.ArrowsFor(c, g.Effect));
+        var session = Game.ProjectilesFor("Mirage", h.Wire, h.Ciphers, c);
+        double now = session.Runtime.Now / 120000d;
+        c.Walk.Teleport(100, 100, now);
+        var target = new SpawnedMonster("Mirage target", new(110, 100, 0), 0, 0, 100000) { Hostile = true };
+        c.Monsters[99] = target;
+        int action = ++c.ActionCount;
+        while (Game.OrdinaryOf(c, _ => 0).Accepted(c.ProjectileEpoch, action)) action = ++c.ActionCount;
+        string? signature = Game.MirageSignature(c, gem.Id);
+        var supported = Game.SupportedSkill(c, gem.Id);
+        Assert.True(signature is not null, $"Mirage source: requirements={supported.RequirementsMet}, gem={supported.SourceGem is not null}, arrows={Game.ArrowsFor(c, gem.Effect)}, disabled={Game.GemSkillInstanceDisabled(c, gem.Effect, gem.Id)}, supports={string.Join(',', supported.Supports.Select(s => s.Effect.Id))}");
+        var receipt = new Game.MirageReceipt(c.ProjectileEpoch, action, gem.Id, signature);
+        Assert.Null(Game.MirageOwnerHit(session, receipt, target));
+        Assert.True(Game.PayMana(c, gem.Id, out uint paid, out _));
+        Game.OrdinaryAcceptedUse(c, action);
+        Game.MirageBody body;
+        using (Game.ProjectileMutation(c, advance: false))
+        {
+            var released = Game.PaidMirageRelease(c, action, gem.Id,
+                Game.CaptureGemProjectile(c, session, gem.Id, gem, (110, 100), Game.CaptureSkillCriticalRoll(c, gem.Id)));
+            Assert.NotNull(Assert.IsType<ProjectileOffense>(released.Payload).MirageRelease);
+            body = Assert.IsType<Game.MirageBody>(Game.MirageOwnerHit(session, receipt, target));
+            Assert.Null(Game.MirageOwnerHit(session, receipt, target));
+        }
+        void Flush()
+        {
+            var sent = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            session.Enqueue(() => { sent.SetResult(); return Task.CompletedTask; });
+            sent.Task.GetAwaiter().GetResult();
+        }
+        Flush(); Assert.True(body.Created);
+        Assert.Single(c.Minions.All, m => m.Kind == "MirageArcherProxy");
+        Assert.False(body.Monster.Hostile); Assert.Equal(Program.PlayerId, body.Monster.OwnerId);
+        uint mana = c.PlayerMana, life = target.Life;
+        double lastOwnerHit = c.LastEnemyHitAt;
+        using (Game.ProjectileMutation(c, advance: false)) Game.MirageStep(session, now);
+        session.AdvanceTo(ProjectileRuntime.Time(now + 2)); Flush();
+        Assert.True(target.Life < life); Assert.Equal(mana, c.PlayerMana);
+        Assert.Equal(lastOwnerHit, c.LastEnemyHitAt);
+        Assert.Equal(double.NegativeInfinity, target.PlayerHitAt);
+        Assert.Single(c.Minions.All, m => m.Kind == "MirageArcherProxy");
+        h.Items.Remove(PlayerInventories.Weapon1, bow.Id);
+        using (Game.ProjectileMutation(c, advance: false)) Game.MirageStep(session, now + 2);
+        Flush(); Assert.DoesNotContain(c.Minions.All, m => m.Kind == "MirageArcherProxy");
+        Assert.False(Game.MirageCurrent(session, body));
+        Assert.Null(Game.MirageOwnerHit(session, receipt, target));
+        Assert.True(paid > 0);
+        var mirrored = new SpawnedMonster("Mirrored", new(110, 100, 0), 0, 0, 100000)
+        { Mods = new([], [], new(new Dictionary<string, int> { ["reflect_non_damaging_ailments_%_chance"] = 100 })) };
+        var cold = DamagePacket.Of(DamageType.Cold, 100000, 100000);
+        var stats = Game.CharacterPlayerStats(c);
+        Game.AilmentsOnHitLocked(c, mirrored, cold, false, true, 150, stats, null, now + 2,
+            new Random(1), reflectToPlayer: false);
+        Assert.True(mirrored.Ailments.Magnitude(MonsterElementalAilments.Kind.Freeze, now + 2) > 0);
+        Assert.Equal(1, c.ElementalAilments.ActionFactor(now + 2));
+        var ownerTarget = new SpawnedMonster("Mirrored owner control", new(110, 100, 0), 0, 0, 100000)
+            { Mods = mirrored.Mods };
+        Game.AilmentsOnHitLocked(c, ownerTarget, cold, false, true, 150, stats, null, now + 2, new Random(1));
+        Assert.True(c.ElementalAilments.FreezeUntil(now + 2) > now + 2);
     }
 
     static void OrdinaryAdapterTransactions(Harness h)
@@ -239,7 +311,9 @@ public sealed partial class WhispererRuntimeTests
             Assert.Equal(0u, Game.ApplyMonsterHitLocked(c, target, 2000)!.Value.Life);
             var transferred = Assert.IsType<Game.MarkTarget>(Game.CurrentMark(c));
             Assert.Equal(43u, transferred.Id); Assert.Same(clock, transferred.Clock);
-            Assert.Equal(8, clock.Remaining, 8); Assert.Equal(afterDeathMana, c.PlayerMana);
+            Assert.InRange(clock.Remaining, 8 - 1d / ProjectileRuntime.QuantaPerSecond,
+                8 + 1d / ProjectileRuntime.QuantaPerSecond);
+            Assert.Equal(afterDeathMana, c.PlayerMana);
             Assert.Null(Game.ApplyMonsterHitLocked(c, target, 2000)); Assert.Same(transferred, Game.CurrentMark(c));
             Advance(9); Assert.Null(Game.CurrentMark(c)); Assert.NotEmpty(Game.MarkPresentation(c));
             target = new("mark next", new(105, 100, 0), 0, 0, 1000) { Hostile = true }; c.Monsters[42] = target;

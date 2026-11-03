@@ -1,9 +1,9 @@
 # Private ordinary Slayer and Deadeye gameplay candidate
 
 Input rules: `0831ee7f75f3963c7c3dcb96284a33b72b54b21a`, originally based on main `ec522f18`.
-The bounded remaining-adapter candidate starts at exact private base `56d6f4a9a219aae23ca42742af4ec4e7720c4327`.
-Its output and verification logs live only in isolated checkout `t3-b0c0ac03`; `t3-f62fbadf` is read-only input.
-The root's later `2694afcc` corrections are a separate integration input, not part of this tested base.
+The root combined integration reconciles remaining adapters `987b84b1`, marks `64d9d97e`,
+Inquisitor `75e49a1f`, Harbinger `f9793c84` and Whisperer `1d87a4f3` on main `ec522f18`.
+The integration includes the accepted-transfer and rejected-attack corrections plus the ranged-clock regression fix.
 Private combined base: `e3587919`, containing exact Whisperer `1d87a4f3`, Harbinger `5318b7b9`,
 and Inquisitor `65b99d17`, followed by the input rules.
 The private merge `009ec47d` retains Whisperer quest transactions, phase-type output, held movement,
@@ -12,7 +12,7 @@ The test class remains partial and retains both predecessors' grouped transactio
 The feature implementation is in `OrdinaryGameplay.cs`; shared consumers receive small hooks.
 Nothing was published, pushed, marked ready, or installed into the running native environment.
 The root remains sole shared integrator and publisher, in order **#333 -> #339 -> Inquisitor -> Slayer/Deadeye**.
-The Inquisitor reference here contains its input helpers, not the other writer's subsequent integration.
+Combined native acceptance remains incomplete; automated gameplay checks do not certify native art or timings.
 
 ## Active production consumers
 
@@ -85,8 +85,13 @@ The following requested behavior remains unimplemented or uncertified:
   added-base, recovery, leech and stun inputs; projectiles retain their frozen hitter inputs across refund.
   Sniper split feeds the existing simulator through a default-zero target query, without a new projectile engine.
   Native art/timing, knockback and legacy Sniper flask-charge behavior still need separate certification.
-- Mirage autonomous native actor allocation, target selection, equipment/visual packets, projectile attacks and retirement.
-  `DeadeyeMirageLifecycle` remains a tested lifecycle rule object without that production actor loop.
+- Mirage now has production actor allocation, source validation, target selection, projectile attacks and retirement.
+  An accepted owner arrow release carries its area/action/source receipt; only a qualifying hit admits the actor.
+  Autonomous arrows use the common projectile damage calculation, including distance and target mark modifiers.
+  They do not debit owner mana, leech for the owner or grant owner direct-hit charges, Rage or critical flask effects.
+  Reflected non-damaging ailments do not target the owner through the proxy's contact.
+  Detached actors validate each source independently; equipment changes and replacement sessions retire stale actors.
+  Native appearance, equipment packets, attachment and animation timing remain uncertified.
 - All-source direct/DoT/proxy provenance certification across every historical damage route.
 - Player bleeding damage suppression, complete Slayer DoT/ailment coverage outside the supported projectile ignite path,
   and real-client timing/art/equipment verification.
@@ -105,9 +110,8 @@ real projectile release freezing across refund, and accepted neutral transfer wi
 The bounded adapter build and required suites are recorded against the private committed candidate in ignored
 `logs/ordinary-finish/`, including `source.txt`, `build.log`, `core.log`, `data.log`, `gateway.log`.
 The earlier mark-wiring candidate's logs remain separate in `logs/ordinary-wiring/` in its originating checkout.
-The exact starting base reproduces an Inquisitor `WiredTiming` failure at line171: ranged admission expects one
-Fanatic charge but produces zero (`logs/ordinary-finish/base-inquisitor.log`).
-That predecessor assertion is outside the two ordinary Facts; this candidate preserves it for root reconciliation.
+The predecessor Inquisitor timing assertion sampled before its first one-second charge boundary.
+The root correction samples the actual accepted-use boundary; the exact combined predecessor passes all suites.
 No Core/Data tests, sleeps, production catalog path changes or per-test working-directory changes were added.
 Prepared nonsecret data is physically copied from `t3-f62fbadf`; the existing vendor-stock file is present.
 The predecessor graph-admission tests also require its nonsecret `game-files.zip` fixture.

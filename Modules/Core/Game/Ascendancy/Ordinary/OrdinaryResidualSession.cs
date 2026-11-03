@@ -44,6 +44,7 @@ sealed class OrdinaryResidualSession(long generation)
     }
 
     public bool CanPublish(long currentGeneration) => !retired && Generation == currentGeneration;
+    internal bool Accepted(long area, long action) => !retired && uses.Contains((area, action));
 
     // Host stores this UTF-8-neutral string on its connection/transfer payload. Capture at the exact source
     // transition. World clock does not reset on hotreload. Transfer uses its existing paused owner clock.
