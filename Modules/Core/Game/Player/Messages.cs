@@ -647,6 +647,7 @@ static partial class Game
                     if (!ServerLevels.IsSupported(conn.Layout.Id) && !CaptureTour.Active(CharacterName(conn)))
                         await conn.Commands!.Reply(ServerLevels.UnsupportedMessage);
                     await Program.ServerHooks.AreaGenerated(PlayerOf(conn));
+                    ActivateInquisitor(conn, ProjectileWorldTime(conn));
                     ActivateResourceEffects(conn, ProjectileWorldTime(conn));
                     _ = conn.LockstepServed ? RunLockstepFrames(remote, stream, ciphers, conn) : RunServerFrames(remote, stream, ciphers, conn);
                     Program.ActivatePlayerUpdates(conn);

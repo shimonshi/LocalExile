@@ -50,6 +50,8 @@ static partial class Game
             conn.Walk.Order(x, y, requestedAt);
             conn.ChannelSkill = skill;
             conn.ChannelSkillSequence = sequence;
+            InquisitorRead(conn, CharacterPlayerStats(conn), new(true, false, false, false, false));
+            OrdinaryAcceptedUse(conn, action);
             started = (action, x, y, CaptureSkillCriticalRoll(conn, skill));
             return true;
         }
@@ -247,19 +249,17 @@ static partial class Game
         (stop, arrive) = swing;
         now = conn.Clock.Elapsed.TotalSeconds;
         SkillCriticalRoll criticalRoll;
-        bool inReach;
+        bool admitted;
         lock (conn.Monsters)
         {
             target = m.Walk.Position(now);
             conn.NextAttackAt = AttackTiming.After(now, conn.NextAttackAt, duration);
             criticalRoll = CaptureSkillCriticalRoll(conn, SkillCatalog.FirstSkillId);
-            inReach = SwingInReach(conn, m, stop, target, weapon.Range + 2);
-            // The swing holds the player until the client lets a Move cut it short (LockstepAttackCutIn), plus the client's
-            // frame or two; the next attack waits the attack time (NextAttackAt).
-            if (started && inReach)
+            admitted = AcceptDefaultSwingUse(conn, m, stop, target, weapon.Range + 2, action);
+            if (started && admitted)
                 LockstepAttackSwings(conn, action, now, LockstepAttackCutIn(conn, use.SkillId, use.Sequence) + conn.LockstepActionTail);
         }
-        if (!inReach)
+        if (!admitted)
         {
             Console.WriteLine($"[gateway] {remote} attack on 0x{use.TargetId:x} out of reach: {Dist(stop, target):0.0} > {weapon.Range}");
             LockstepAttackOver(conn, action);
@@ -356,18 +356,21 @@ static partial class Game
                 var pen = Penetration.Of(player, Stats, attack: true, ownPenetration, weapon.LocalSources);
                 var resistanceMods = HitResistMods(player, ownPenetration);
                 var hit = AttackHitConverted(weapon, player, WeaponProfileFor(conn, activeSet: true).Melee,
-                    ConversionFor(conn, attackEffect, 1, attack: true));
+                    ConversionFor(conn, attackEffect, 1, attack: true)).Scale(InquisitorRead(conn, player).AttackDamageFactor);
+                hit = MarkHit(conn, m, hit, CaptureOrdinaryMarkHitSource(conn, WeaponProfileFor(conn, activeSet: true).Melee));
                 if (WeaponProfileFor(conn, activeSet: true).Melee)
                     hit = WithMeleeProximityLocked(conn, player, ownPenetration, m, hit, contactAt);
                 var gambler = GamblerFor(player);
+                hit = hit.Scale(OrdinaryTargetMore(conn, m, player));
                 var ownRolled = GameEvents.WithOutgoingDamage(conn, player, m, (gambler with { DamageMorePct = 0 }).RollOutgoingHit(hit, Random.Shared));
                 critical = RollCriticalStrike(conn, CriticalChanceOn(conn, targetId, conn.Pools.AttackCriticalStrikeChance,
                         AttackCriticalChanceVsBlinded(conn, player), AttackCriticalChanceVsProfane(conn, player)), ownPenetration, skillRoll: criticalRoll)
                     && GameServer.Core.World.EvasionEntropy.ConfirmsCritical(hitChance, conn.AttackAccuracyRandom);
-                int sourceCriticalMultiplier = AttackCriticalMultiplier(conn, player);
-                int criticalMultiplier = CriticalMultiplierOn(m, sourceCriticalMultiplier);
+                int sourceCriticalMultiplier = AttackCriticalMultiplier(conn, player) + OrdinaryCriticalBonus(conn, player);
+                int criticalMultiplier = CriticalMultiplierOn(m, sourceCriticalMultiplier
+                    + MarkOn(conn, m, "enemy_additional_critical_strike_multiplier_against_self"));
                 double at = ProjectileWorldTime(conn);
-                (damage, resistance, var mitigated) = MonsterHitDamage(m, ownRolled, critical, attack: true, at, resistanceMods, pen,
+                (damage, resistance, var mitigated) = MonsterHitDamage(conn, m, ownRolled, critical, attack: true, at, resistanceMods, pen,
                     gambler.InvertsResistance(Random.Shared));
                 if (critical) damage = DamageModel.CriticalDamage(damage, criticalMultiplier);
                 LeechOnHitLocked(conn, m, MonsterTakenComponents(m, mitigated, spell: false), damage,
@@ -433,6 +436,17 @@ static partial class Game
             if (m.ThresholdReached) await QuestThreshold(remote, stream, ciphers, conn, targetId, m);
             return true;
         }
+    }
+
+    // The follow timeout may return a stop that still cannot reach its moving target.
+    // Only an admitted swing feeds either class's accepted-use history.
+    internal static bool AcceptDefaultSwingUse(ClientState conn, SpawnedMonster target,
+        (int X, int Y) stop, (int X, int Y) contact, double reach, int action)
+    {
+        if (!SwingInReach(conn, target, stop, contact, reach)) return false;
+        InquisitorRead(conn, CharacterPlayerStats(conn), new(true, false, false, false, false));
+        OrdinaryAcceptedUse(conn, action);
+        return true;
     }
 
     // A gem skill used on a monster (C→S 0x24 with a skill id other than the default attack's). A spell stops and casts from
@@ -564,11 +578,13 @@ static partial class Game
     // it was refused (cooldown, mana), so its use is not confirmed to the client.
     internal static async Task<bool> CastGemSkill(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn,
         ushort skillId, (int X, int Y) from, (int X, int Y) to, uint targetId = 0, ushort sequence = 0,
-        int? actionToken = null, CooldownUseTicket? cooldownUse = null, bool locationInstant = false)
+        int? actionToken = null, CooldownUseTicket? cooldownUse = null, bool locationInstant = false,
+        bool ordinaryInstantUse = false)
     {
         int action = actionToken ?? conn.ActionCount;
         int recoveryGeneration = 0;
         int? channelGeneration = null;
+        DeadeyeMirageLifecycle.Release? mirageAdmission = null;
         VaalUseReservation? vaalUse = null;
         lock (conn.Monsters)
             if (actionToken is not null && (conn.ActionCount != action || conn.ElementalAilments.ActionFactor(conn.Clock.Elapsed.TotalSeconds) == 0 || conn.HitRecovery.Active(conn.Clock.Elapsed.TotalSeconds))) return false;
@@ -580,6 +596,8 @@ static partial class Game
             && (channelGeneration is not int generation || ChannelCurrent(conn, skillId, action, generation));
         if (!Current()) return false;
         if (gem.Name is not null && !ProjectilePathAvailable(remote, conn, skillId, gem.Effect)) return false;
+        bool markCast = gem.Name is not null && MarkCatalog.Find(gem.Effect) is not null;
+        if (markCast && !MarkAdmission(conn, skillId, targetId)) return false;
         if (locationInstant && (gem.Name is null || !InstantLocationSkill.Supported(SkillsFor(conn), gem.Effect))) return false;
         if (gem.Name is not null && SkillsFor(conn).IsSpell(gem.Effect) && !SkillsFor(conn).IsAttack(gem.Effect)
             && CastMs(conn, gem.Effect) is null)
@@ -601,6 +619,8 @@ static partial class Game
             Console.WriteLine($"[gateway] {remote} skill 0x{skillId:x4} {gem.Name}: no executable paid Vaal admission");
             return false;
         }
+        if (vaalUse is not null && SkillsFor(conn).IsAttack(gem.Effect))
+            lock (conn.Monsters) mirageAdmission = PaidMirageAdmission(conn, vaalUse.Action);
         // Eligible uses arrive with their one original preflight reservation. Never reserve again after an await.
         if (cooldownUse is not null)
         {
@@ -676,8 +696,17 @@ static partial class Game
             lock (conn.Monsters)
             {
                 if (!Current()) return false;
+                if (markCast && !MarkAdmission(conn, skillId, targetId)) return false;
                 paid = PayMana(conn, skillId, out cost, out lifeCost);
-                if (paid) criticalRoll = CaptureSkillCriticalRoll(conn, skillId);
+                if (paid)
+                {
+                    InquisitorAcceptedUse(conn, gem.Effect);
+                    criticalRoll = CaptureSkillCriticalRoll(conn, skillId);
+                    OrdinaryAcceptedUse(conn, cooldownUse?.Instant == true || locationInstant || ordinaryInstantUse
+                        ? -(++conn.OrdinaryUtilitySequence) : action);
+                    if (SkillsFor(conn).IsAttack(gem.Effect)) mirageAdmission = PaidMirageAdmission(conn, action);
+                    if (markCast) AdmitPaidMark(conn, skillId, targetId, action);
+                }
                 if (paid && Supports.Of(gem.Effect)?.Types.Contains(47) == true)
                 {
                     channelGeneration = ++conn.ChannelGeneration;
@@ -721,7 +750,7 @@ static partial class Game
         }
         // Location instant acceptance handles only Frostblink's repositioning, without inventing its departure/arrival
         // hits or chilled ground. In particular do not route it through the generic single-area hit approximation.
-        if (locationInstant) return true;
+        if (locationInstant || markCast) return true;
         if (gem.Name is not null)
         {
             if (SkillsFor(conn).IsTravel(gem.Effect)) QueueFlaskTrigger(conn, FlaskEnchantments.Trigger.Travel);
@@ -745,7 +774,8 @@ static partial class Game
             await ActivateRighteousFire(remote, stream, ciphers, conn, skillId, gem.Effect, gem.Level, gem.Quality, gem.Gem);
         else
             await LaunchProjectile(remote, stream, ciphers, conn, skillId, from, to, recoveryGeneration, targetId, sequence: sequence,
-                actionToken: actionToken, cooldownUse: cooldownUse, criticalRoll: criticalRoll, channelGeneration: channelGeneration);
+                actionToken: actionToken, cooldownUse: cooldownUse, criticalRoll: criticalRoll,
+                channelGeneration: channelGeneration, mirageAdmission: mirageAdmission);
         return true;
     }
 
@@ -770,7 +800,8 @@ static partial class Game
         if (!TryBeginSkillCooldownUse(conn, skillId, gem.Effect,
             CooldownFor(conn, gem.Effect, gem.Level, gem.Quality),
             true, () => { }, out var cooldownUse)) return;
-        if (await CastGemSkill(remote, stream, ciphers, conn, skillId, at, at, targetId, cooldownUse: cooldownUse))
+        if (await CastGemSkill(remote, stream, ciphers, conn, skillId, at, at, targetId,
+            cooldownUse: cooldownUse, ordinaryInstantUse: true))
         {
             await Send(remote, stream, ciphers, InstanceProtocol.InstantAction(PlayerId, skillId, at.X, at.Y, targetId),
                 $"0x01ce player skill 0x{skillId:x4}: instant action (its use and cooldown)",
@@ -892,6 +923,11 @@ static partial class Game
             conn.ApplyMovementSpeed();
             conn.AuraStatsDirty = true;
             CharacterSaves.SetAuraActive(CharacterName(conn), effectId, started is not null);
+            if (started is not null)
+            {
+                InquisitorAcceptedUse(conn, effect);
+                OrdinaryAcceptedUse(conn, -(++conn.OrdinaryUtilitySequence));
+            }
         }
 
         await SendOwnAuraChanges(remote, stream, ciphers, conn);
@@ -908,7 +944,7 @@ static partial class Game
     internal static Task LaunchProjectile(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn,
         ushort skillId, (int X, int Y) from, (int X, int Y) to, int recoveryGeneration, uint targetId = 0, ushort sequence = 0,
         int? actionToken = null, CooldownUseTicket? cooldownUse = null, SkillCriticalRoll? criticalRoll = null,
-        int? channelGeneration = null)
+        int? channelGeneration = null, DeadeyeMirageLifecycle.Release? mirageAdmission = null)
     {
         var gem = GemSkillEffects(conn).FirstOrDefault(g => g.Id == skillId);
         if (gem.Name is null) return Task.CompletedTask;
@@ -918,7 +954,7 @@ static partial class Game
         if (UsesProjectileRuntime(gem.Effect))
             return ScheduleGemProjectile(remote, stream, ciphers, conn, skillId, gem, to,
                 actionToken ?? cooldownUse?.ActionToken ?? conn.ActionCount, recoveryGeneration, cooldownUse, criticalRoll,
-                sequence);
+                sequence, mirageAdmission);
         // A channelled skill (Cyclone, ActiveSkillType 47) hits as it starts: its spin is already in motion, and the later
         // sweeps follow on the attack timer (RunChannel).
         bool channelled = Supports.Of(gem.Effect)?.Types.Contains(47) == true;
@@ -1011,6 +1047,8 @@ static partial class Game
     internal static int SkillRadius(ClientState conn, IReadOnlyDictionary<uint, int> skillStats, bool spell, int effect)
     {
         var areaStats = MergeSkillStats(AreaPlayerStats(conn), skillStats);
+        if (spell && Stats.Key("spell_area_of_effect_+%") is uint area)
+            areaStats[area] = areaStats.GetValueOrDefault(area) + InquisitorModifiers(conn, effect, areaStats).AreaIncreasePct;
         int Get(string name) => Stats.Key(name) is uint k ? areaStats.GetValueOrDefault(k) : 0;
         return SkillArea.Radius(SkillArea.BaseRadius(SkillsFor(conn).EffectId(effect), Get), Get, spell);
     }
@@ -1141,6 +1179,7 @@ static partial class Game
         Penetration.PerType pen = default;
         HitResistances.Mods mods = default;
         DamagePacket sweepHit = default!;
+        MarkHitSource? sweepMark = null;
         int sweepMultiplier = 0;
         AttackAccuracyProfile accuracy = default;
         LeechSources? leech = null;
@@ -1179,6 +1218,7 @@ static partial class Game
                     pen = Penetration.Of(player, Stats, attack: !spell, skillStats, local);
                     mods = HitResistMods(player, skillStats);
                     sweepHit = shield is null ? SupportedHit(conn, skillId) : SupportedHitFor(conn, skillId, suppress: true, weapon: shield);
+                    sweepMark = CaptureMarkHitSource(conn, skillId, true, shield, suppress: true, scale: ruthless);
                     if (ruthless != 1) sweepHit = sweepHit.Scale(ruthless);
                     sweepMultiplier = SupportedCriticalMultiplier(conn, skillId);
                     if (!spell) accuracy = SupportedAccuracy(conn, skillId);
@@ -1190,6 +1230,7 @@ static partial class Game
                     poison = SupportedPoison(conn, skillId, spell, player, shield);
                 }
                 var contactHit = sweepHit;
+                contactHit = MarkHit(conn, m, contactHit, sweepMark);
                 if (VaalExecutor(conn, gem.Effect))
                 {
                     double distance = Dist(conn.Walk.Position(ProjectileWorldTime(conn)), m.Walk.Position(ProjectileWorldTime(conn)));
@@ -1206,6 +1247,7 @@ static partial class Game
                     continue;
                 }
                 var gambler = GamblerFor(player);
+                contactHit = contactHit.Scale(OrdinaryTargetMore(conn, m, player));
                 var rolled = WithConditionalSupportDamageLocked(conn, skillStats, !spell, m,
                     GameEvents.WithOutgoingDamage(conn, player, m, (gambler with { DamageMorePct = 0 }).ForSkill(Stat, spell)
                         .RollOutgoingHit(contactHit, Random.Shared)),
@@ -1217,16 +1259,17 @@ static partial class Game
                 critical = RollCriticalStrike(conn, criticalChance, skillStats,
                         attack: !spell, skillRoll: criticalRoll, player: player)
                     && (spell || GameServer.Core.World.EvasionEntropy.ConfirmsCritical(hitChance, conn.AttackAccuracyRandom));
-                int multiplier = CriticalMultiplierOn(m, sweepMultiplier);
+                int multiplier = CriticalMultiplierOn(m, sweepMultiplier + OrdinaryCriticalBonus(conn, player)
+                    + MarkOn(conn, m, "enemy_additional_critical_strike_multiplier_against_self"));
                 double at = ProjectileWorldTime(conn);
-                (damage, resistance, var mitigated) = MonsterHitDamage(m, rolled, critical, attack: !spell, at, mods, pen,
+                (damage, resistance, var mitigated) = MonsterHitDamage(conn, m, rolled, critical, attack: !spell, at, mods, pen,
                     gambler.InvertsResistance(Random.Shared));
                 var taken = MonsterTakenComponents(m, mitigated, spell);
                 if (critical) damage = DamageModel.CriticalDamage(damage, multiplier);
                 double more = damageMore * bloodMore;
                 if (more != 1) damage = (int)Math.Floor(damage * Math.Max(0, more));
                 LeechOnHitLocked(conn, m, taken, damage, leech!);
-                damage = WithImpaleHitLocked(conn, m, damage, rolled, critical, sweepMultiplier,
+                damage = WithImpaleHitLocked(conn, m, damage, rolled, critical, sweepMultiplier + OrdinaryCriticalBonus(conn, player),
                     critical ? criticalImpale : impale, more).Damage;
                 // Only the first victim has a freshly built player snapshot. After notification awaits, resolve the
                 // current raw source so a refund between victims cannot keep granting from the sweep's old snapshot.
@@ -1348,9 +1391,17 @@ static partial class Game
 
     // A player's hit as MonsterDamage, with the target's damage taken at now (its shock, Glacial Wave's chill) and the
     // resisted packet that AilmentsOnHitLocked needs: every player hit path calls both (surfcaster.md, Hit paths).
+    internal static (int Damage, string? Resistance, DamagePacket Mitigated) MonsterHitDamage(ClientState owner, SpawnedMonster m, DamagePacket rolled,
+        bool critical, bool attack, double now, HitResistances.Mods mods, Penetration.PerType pen = default,
+        bool invertElemental = false, bool projectile = false)
+    {
+        m.InquisitorOwner = new(owner);
+        return MonsterHitDamage(m, rolled, critical, attack, now, mods, pen, invertElemental, markOwner: owner, projectile: projectile);
+    }
+
     internal static (int Damage, string? Resistance, DamagePacket Mitigated) MonsterHitDamage(SpawnedMonster m, DamagePacket rolled,
         bool critical, bool attack, double now, HitResistances.Mods mods, Penetration.PerType pen = default,
-        bool invertElemental = false)
+        bool invertElemental = false, ClientState? markOwner = null, bool projectile = false)
     {
         var described = new List<string>();
         var strike = new HitResistances.Strike(Critical: critical, Attack: attack);
@@ -1361,7 +1412,10 @@ static partial class Game
             double effective = HitResistances.FinalValue(type, value, strike, mods, invertElemental);
             return range.Scale(Math.Max(0, 1 - effective / 100));
         });
-        return (MonsterTakesMitigated(m, mitigated, spell: !attack, now),
+        int Mark(string name) => markOwner is null ? 0 : MarkOn(markOwner, m, name);
+        return (MonsterTakesMitigated(m, mitigated, spell: !attack, now,
+            Mark("base_damage_taken_+%") + (projectile ? Mark("projectile_damage_taken_+%") : 0),
+            Mark("base_additional_physical_damage_reduction_%")),
             described.Count > 0 ? string.Join(", ", described) : null, mitigated);
     }
 

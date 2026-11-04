@@ -136,6 +136,7 @@ static partial class Game
                         string.Join(", ", worn.Where(w => inactive.Contains(w.Id)).Select(w =>
                             $"{w.Id} {ItemsFor(conn).ByHash(w.Item.TypeHash)?.Name} (str {w.Strength}, dex {w.Dexterity}, int {w.Intelligence}, level {w.Level})")));
             }
+        WithOrdinaryGameplay(conn, sources);
         sources = WithLinks(conn, GameEvents.WithPlayerStatSources(conn, WithQuestStats(conn, WithAntiquarian(conn, WithFortification(conn, WithCharges(conn, sources))))));
         lock (conn.Monsters)
         {
@@ -769,6 +770,9 @@ static partial class Game
             (long)classInfo.Intelligence + bonus.Intelligence);
         bonus = bonus with { AdditionalMana = (long)finalAttributes.Dexterity * perDexterity };
         var pools = CharacterStats.For(classInfo, level, bonus);
+        int providence = InquisitorProvidence(RawCritical, pools.Strength, pools.Intelligence);
+        pools = pools with { CriticalStrikeChancePct = pools.CriticalStrikeChancePct + providence,
+            SpellCriticalStrikeChancePct = pools.SpellCriticalStrikeChancePct + providence };
         // The pure base critical stats (/set_stat too) sit outside the passive increases: the weapon override replaces
         // the armed main hand's base and the unarmed base replaces the empty one, before the global increases.
         pools = pools with
@@ -784,7 +788,8 @@ static partial class Game
             AttackCriticalStrikeChance = DisplayedCriticalChance(conn, AttackBaseCriticalStrike.Chance(!activeWeapon.Unarmed,
                 activeWeapon.Critical, pools.CriticalStrikeChancePct, RawCritical), RawCritical),
             SpellCriticalStrikeChance = DisplayedCriticalChance(conn, SpellCriticalStrike.Chance(
-                DamageModel.BaseSpellCriticalStrikeChancePerMyriad, RawCritical,
+                InquisitorOffense.SpellBase(DamageModel.BaseSpellCriticalStrikeChancePerMyriad,
+                    activeWeapon.Unarmed ? null : activeWeapon.Critical, RawCritical), RawCritical,
                 playerIncrease: pools.SpellCriticalStrikeChancePct), RawCritical)
         };
         // Only the active usable shield contributes. The alternate set and unmet requirements cannot grant block.

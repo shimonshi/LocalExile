@@ -10,7 +10,7 @@ static partial class Game
         if (conn.PlayerLife == 0) return;
         var session = ChargesOf(conn);
         int Get(string name) => Stats.Key(name) is uint key ? player.GetValueOrDefault(key) : 0;
-        session.Observe(Get);
+        session.Observe(Get, name => Stats.Key(name) is uint key && conn.PlayerStats.TryGetValue(key, out int value) ? value : null);
         var events = accepted.Select(e => e.KillEvent ? (ChargeEvent)new ChargeEvent.Kill(e.Rarity, e.Frozen)
             : new ChargeEvent.Hit(e.Critical, true, null, e.Rarity, e.Effect,
                 name => Stats.Key(name) is uint key ? e.Skill!.GetValueOrDefault(key) : 0, e.Killed, e.Primary));
@@ -54,7 +54,8 @@ static partial class Game
         var packets = session.Presentation(now, () => conn.NextBuff++).SelectMany(b => ChargeBuffs.Packets(b, PlayerId)).ToArray();
         foreach (var (packet, label) in packets)
             Console.WriteLine($"[gateway] {remote} => {label}: {Convert.ToHexString(packet.AsSpan(0, Math.Min(packet.Length, 96)))}");
-        return (packets.Length > 0 ? packets.SelectMany(p => p.Packet).ToArray() : null, step.CountsChanged);
+        var ordinary = OrdinaryPresentation(conn);
+        return (packets.Length > 0 || ordinary.Length > 0 ? packets.SelectMany(p => p.Packet).Concat(ordinary).ToArray() : null, step.CountsChanged);
     }
 
     static void CommitAcceptedCritFlasksLocked(ClientState conn, IReadOnlyDictionary<uint, int> player, double at)

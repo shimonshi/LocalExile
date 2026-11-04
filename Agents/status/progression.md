@@ -287,6 +287,16 @@ Part of [Status](../Status.md); what to build next in this area is in
   Fishing (fish rarity, corrupted fish) has no gameplay in 3.29.3b.
   `Game_VERIFIED_SURFCASTER=1` opts in.
   Docs: [Surfcaster checklist](../docs/game/surfcaster.md).
+- Ordinary Inquisitor has offense, accepted-use clocks, Sanctuary/Pious and lifecycle consumers with Gateway coverage.
+  Skill/support area survives player-area normalization, including Fanaticism's separate multiplier.
+  Full native weapon, damage, recovery and race matrices remain partial.
+  Docs: [ordinary Inquisitor findings](../docs/game/inquisitor-candidate.md).
+- Ordinary Slayer has direct kill/overkill and shared leech condition consumers.
+  Full native leech-cap, recovery and DoT/proxy provenance matrices remain partial.
+  Docs: [ordinary class findings](../docs/game/ordinary-slayer-deadeye-migration.md).
+- Ordinary Deadeye has Gale/Tailwind, Marks and Mirage projectile consumers.
+  Party membership, native peer/equipment and the full projectile/lifetime matrices remain partial.
+  Docs: [ordinary class findings](../docs/game/ordinary-slayer-deadeye-migration.md).
 - Phrecia identities, graph ownership and the point/save lifecycle have automated coverage.
   Existing class capabilities and passive sources are extracted into the optional `PhreciaAscendancies` module.
   The Phrecia league lists it explicitly; Idols remains a separate unimplemented feature.

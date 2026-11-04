@@ -20,12 +20,14 @@ sealed class ChargeSession(Charges.State? state = null)
 
     public Charges.State State { get; } = state ?? new();
     readonly ConcurrentQueue<ChargeEvent> events = new();
-    readonly ChargeGains.Timers timers = new();
+    ChargeGains.Timers? timerState;
+    ChargeGains.Timers timers => timerState ??= new(State.PeriodicElapsed);
     readonly Charges.Limits[] limits = [Default, Default, Default];
     readonly int[] applied = new int[3];
     Charges.Shown[] shown => State.Presented;
     Dictionary<string, int> observed = [];
-    double lastStep = double.NaN;
+    Dictionary<string, int> replacements = [];
+    double lastStep = state?.LastPeriodicStep ?? double.NaN;
 
     static readonly Charges.Limits Default = new(ChargePanelStats.BaseMaximumCharges, 0, Charges.BaseDurationMs);
 
@@ -48,22 +50,31 @@ sealed class ChargeSession(Charges.State? state = null)
     /// the stats the session reads between events (the periodic gains, the gain-to-maximum chances, the duration
     /// stats), kept until the next observation.
     /// </summary>
-    public void Observe(Func<string, int> get)
+    public void Observe(Func<string, int> get, Func<string, int?>? replacement = null)
     {
         var seen = new Dictionary<string, int>(StringComparer.Ordinal);
+        var final = new Dictionary<string, int>(StringComparer.Ordinal);
         int Record(string name) => seen[name] = get(name);
+        int? Replace(string name)
+        {
+            int? value = replacement?.Invoke(name);
+            if (value is int amount) final[name] = amount;
+            return value;
+        }
         foreach (var type in Charges.Types)
         {
-            limits[(int)type] = Charges.LimitsOf(type, Record, State.Held(type));
+            limits[(int)type] = Charges.LimitsOf(type, Record, State.Held(type), Replace);
             Record(ChargeGains.ToMaximumStat(type));
             Record(Charges.ConversionFlag(type));
             Record(Charges.MinimumConversionFlag(type));
         }
         foreach (var p in ChargeGains.Periodics) Record(p.Stat);
         observed = seen;
+        replacements = final;
     }
 
     int Observed(string name) => observed.GetValueOrDefault(name);
+    int? Replacement(string name) => replacements.TryGetValue(name, out int value) ? value : null;
 
     /// <summary>Whether the type's charges are its special type's (Brutal, Affliction, Absorption) as last observed:
     /// the "gain … instead of" flag (<see cref="Charges.ConversionFlag"/>).</summary>
@@ -79,6 +90,8 @@ sealed class ChargeSession(Charges.State? state = null)
     {
         while (events.TryDequeue(out _)) { }
         timers.Reset();
+        lastStep = double.NaN;
+        State.LastPeriodicStep = double.NaN;
         return State.Clear();
     }
 
@@ -96,6 +109,7 @@ sealed class ChargeSession(Charges.State? state = null)
         var log = new List<string>();
         double elapsed = double.IsNaN(lastStep) ? 0 : Math.Max(0, now - lastStep);
         lastStep = now;
+        State.LastPeriodicStep = now;
         if (!alive)
         {
             if (Die()) log.Add("charges lost on death");
@@ -157,14 +171,14 @@ sealed class ChargeSession(Charges.State? state = null)
         {
             // A per-second loss (Replica Fragility, Replica Pacifism, Replica Powerlessness).
             var (lost, left) = State.Lose(gain.Type, -gain.Count, current);
-            limits[(int)gain.Type] = Charges.LimitsOf(gain.Type, Observed, left);
+            limits[(int)gain.Type] = Charges.LimitsOf(gain.Type, Observed, left, Replacement);
             log.Add($"{gain.Source}: {Charges.Name(gain.Type)} charges {lost} -> {left}/{limits[(int)gain.Type].Maximum}");
             return;
         }
         int after = Math.Min(current.Maximum, State.Effective(gain.Type, current) + gain.Count);
         // The duration of charges counted per Frenzy Charge (frenzy_charge_duration_+%_per_frenzy_charge) uses the count
         // the gain leaves.
-        var l = Charges.LimitsOf(gain.Type, Observed, after);
+        var l = Charges.LimitsOf(gain.Type, Observed, after, Replacement);
         limits[(int)gain.Type] = l;
         bool toMaximum = ChargeGains.Rolls(Observed(ChargeGains.ToMaximumStat(gain.Type)), rng);
         var (before, now2) = State.Gain(gain.Type, gain.Count, now, l, toMaximum);

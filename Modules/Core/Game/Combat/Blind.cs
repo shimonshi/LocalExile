@@ -20,7 +20,7 @@ static partial class Game
     internal static int PlayerBlindAccuracy(ClientState conn, int rating, IReadOnlyDictionary<uint, int>? player = null) =>
         TimedBlind.Apply(rating, PlayerBlindValue(conn, player).Less);
     internal static int PlayerAccuracy(ClientState conn, IReadOnlyDictionary<uint, int>? player = null) =>
-        PlayerBlindAccuracy(conn, conn.Pools.Accuracy, player);
+        PlayerBlindAccuracy(conn, OrdinaryAccuracy(conn, conn.Pools.Accuracy, player), player);
     internal static int PlayerEvasion(ClientState conn, IReadOnlyDictionary<uint, int>? player = null) =>
         TimedBlind.Apply(PlayerEvasionBase(conn, ResourceEffectsTime(conn)), PlayerBlindValue(conn, player).Less);
     internal static int PlayerEvasion(ClientState conn, double now) =>
@@ -169,8 +169,10 @@ static partial class Game
     // increase: a hit's chance against a Blinded target is recomputed from its base with it in the increased sum, never
     // the final chance scaled. Each site computes that second chance once (null without the stat) and picks it here.
     internal static int CriticalChanceOn(ClientState conn, uint target, int chance, int? vsBlinded, int? vsProfane = null) =>
-        vsProfane is int profane && conn.FlaskGrounds.Profane(target) ? profane
-        : vsBlinded is int blinded && Blinded(conn, target) ? blinded : chance;
+        Math.Clamp((vsProfane is int profane && conn.FlaskGrounds.Profane(target) ? profane
+        : vsBlinded is int blinded && Blinded(conn, target) ? blinded : chance)
+        + (conn.Monsters.TryGetValue(target, out var enemy)
+            ? MarkOn(conn, enemy, "enemy_additional_critical_strike_chance_against_self") : 0), 0, 10000);
 
     // The default attack's (and an ordinary bow's) chance against a Blinded target: the main hand's base with the pooled
     // attack increases and the vs-Blinded one, as Pools.AttackCriticalStrikeChance is built. A release keeps the

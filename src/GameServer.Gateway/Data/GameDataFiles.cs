@@ -69,7 +69,7 @@ static class GameDataFiles
         ("tables", 3, "Kirac progression and gold refresh prices"),
         ("vendor-stock", 2, "vendor-specific quest/class gem membership and captured layout groups"),
         ("item-types", 2, "quest items' .it Quest flags (held, picked up, handed in, used): without them quest items set no flags"),
-        ("animation-contacts", 4, "class rig animation indices for 0x1b2 cast clips: without them run casts have no character animation"),
+        ("animation-contacts", 5, "class rig animation indices for 0x1b2 cast clips: without them run casts have no character animation"),
         ("object-types", 6, "quest objects and chests (rooms' server objects, quest tile and room types): without them they get the wrong blob or none"),
     ];
 

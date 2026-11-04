@@ -254,6 +254,13 @@ static class FlaskGrounds
             lock (_lock) return _grounds.Append(_stationary).Any(g => g?.Kind == kind && g.Covers(at));
         }
 
+        internal double CoverageUntil(Kind kind, (int X, int Y) at)
+        {
+            lock (_lock) return _grounds.Append(_stationary)
+                .Where(g => g?.Kind == kind && g.Covers(at)).Select(g => g!.Ends)
+                .DefaultIfEmpty(double.NegativeInfinity).Max();
+        }
+
         /// <summary>Marks a monster blinded (with the buff id that shows it) or not: the buff id to add (newly blinded),
         /// or to remove (no longer), or null when nothing changes. <paramref name="nextBuff"/> runs outside this lock (it
         /// takes the connection's Monsters lock, under which <see cref="Blinded(uint)"/> is read).</summary>
