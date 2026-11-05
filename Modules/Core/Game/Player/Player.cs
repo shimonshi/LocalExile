@@ -456,24 +456,35 @@ static partial class Game
         await Send(remote, stream, ciphers, InstanceProtocol.EnterWakeZone(ring), null);
     }
 
-    internal static async Task EndRighteousFire(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn, string why)
+    internal static (RighteousFireState? Fire, List<byte[]> Buffs) PrepareRighteousFireEnd(ClientState conn)
     {
         RighteousFireState? rf;
-        List<(uint Monster, ushort Buff)> auras;
+        List<byte[]> auras;
         lock (conn.Monsters)
         {
-            if (ProjectileOutputGuard.Value is { } guard && !guard()) return;
+            if (ProjectileOutputGuard.Value is { } guard && !guard()) return (null, []);
             rf = conn.RighteousFire;
+            auras = rf is null ? [] : [.. rf.Auras.Select(kv => conn.TargetBuffOutputs.Retain(conn,
+                kv.Key, kv.Value, InstanceEntities.RemoveBuff(kv.Key, kv.Value)))];
             conn.RighteousFire = null;
-            auras = rf is null ? [] : [.. rf.Auras.Select(kv => (kv.Key, kv.Value))];
         }
+        return (rf, auras);
+    }
+
+    internal static async Task EndRighteousFire(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn, string why)
+    {
+        var (rf, auras) = PrepareRighteousFireEnd(conn);
         if (rf is null) return;
-        await Send(remote, stream, ciphers, InstanceEntities.RemoveBuff(PlayerId, rf.Buff), $"0x01c2 player buff {rf.Buff}: righteous_fire ends ({why})");
-        await Send(remote, stream, ciphers, InstanceEntities.RemoveBuff(PlayerId, rf.SelfAura), null);
-        if (rf.Ring is uint ring)
-            await Send(remote, stream, ciphers, InstanceProtocol.RemoveObject(ring), $"0x02bb remove effect 0x{ring:x} (Righteous Fire's ring)");
-        foreach (var (monster, buff) in auras)
-            await Send(remote, stream, ciphers, InstanceEntities.RemoveBuff(monster, buff), null);
+        try
+        {
+            await Send(remote, stream, ciphers, InstanceEntities.RemoveBuff(PlayerId, rf.Buff), $"0x01c2 player buff {rf.Buff}: righteous_fire ends ({why})");
+            await Send(remote, stream, ciphers, InstanceEntities.RemoveBuff(PlayerId, rf.SelfAura), null);
+            if (rf.Ring is uint ring)
+                await Send(remote, stream, ciphers, InstanceProtocol.RemoveObject(ring), $"0x02bb remove effect 0x{ring:x} (Righteous Fire's ring)");
+            foreach (var packet in auras)
+                await Send(remote, stream, ciphers, packet, null);
+        }
+        finally { foreach (var packet in auras) TargetBuffOutputLedger.Discard(packet); }
     }
 
     // The slower player tick: RF on nearby enemies, suppression conditions, waypoints, auto-loot and quests.
@@ -874,11 +885,12 @@ static partial class Game
 
     // Righteous Fire's damage to the hostile monsters within its radius for one tick, with their aura buff on while they
     // are inside.
-    internal static async Task BurnAround(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn, RighteousFireState rf, double seconds)
+    internal static (List<(uint Id, SpawnedMonster M, uint Life, int Damage)> Hits, List<byte[]> Buffs)
+        PrepareRighteousFireTick(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn, RighteousFireState rf, double seconds)
     {
         var hits = new List<(uint Id, SpawnedMonster M, uint Life, int Damage)>();
-        var entered = new List<(uint Id, ushort Buff)>();
-        var left = new List<(uint Id, ushort Buff)>();
+        var entered = new List<byte[]>();
+        var left = new List<byte[]>();
         using (ProjectileMutation(conn))
         {
             double now = ProjectileWorldTime(conn);
@@ -887,6 +899,8 @@ static partial class Game
             if (Stats.Key("delirium_aura_damage_over_time_+%_final") is uint moreDot)
                 perSecond *= Math.Max(0, 1 + playerStats.GetValueOrDefault(moreDot) / 100.0);
             perSecond *= ChargeDamageMore(playerStats);
+            perSecond *= HierophantModifiers.Damage(n => Stats.Key(n) is uint key
+                ? playerStats.GetValueOrDefault(key) : 0, spell: false);
             perSecond *= OrdinaryAssassinOutgoingMore(conn, playerStats, now);
             var damageOverTime = new SkillDamageContext(SkillHitKind.Spell, playerStats)
                 .OverTime(new DamageOverTime(DamageType.Fire, perSecond, seconds));
@@ -896,10 +910,16 @@ static partial class Game
                 bool inside = !m.Dead && m.Life > 0 && m.Hostile && Dist(here, m.Walk.Position(now)) <= rf.Radius + m.StopRange;
                 if (!inside)
                 {
-                    if (rf.Auras.Remove(id, out ushort gone)) left.Add((id, gone));
+                    if (rf.Auras.Remove(id, out ushort gone))
+                        left.Add(conn.TargetBuffOutputs.Retain(conn,id,gone,InstanceEntities.RemoveBuff(id,gone)));
                     continue;
                 }
-                if (!rf.Auras.ContainsKey(id)) { rf.Auras[id] = conn.NextBuff; entered.Add((id, conn.NextBuff++)); }
+                if (!rf.Auras.ContainsKey(id))
+                {
+                    ushort buff = conn.NextBuff++; rf.Auras[id] = buff;
+                    entered.Add(conn.TargetBuffOutputs.Retain(conn,id,buff,InstanceEntities.AddBuff(id,buff,
+                        RighteousFireAuraBuffRow,PlayerId,rf.Skill,visual:rf.AuraVisual)));
+                }
                 var (damage, carry) = MonsterBurn(m, damageOverTime, seconds, now);   // its fire resistance, its shock
                 m.Burn = carry;
                 if (damage == 0) continue;
@@ -910,25 +930,34 @@ static partial class Game
                     m.Dead = true;
                     CollectVaalSoulAtDeathLocked(conn, m);
                     ShockOnKillLocked(conn, m, playerStats, now);
-                    if (rf.Auras.Remove(id, out ushort b)) left.Add((id, b));
+                    if (rf.Auras.Remove(id, out ushort b))
+                        left.Add(conn.TargetBuffOutputs.Retain(conn,id,b,InstanceEntities.RemoveBuff(id,b)));
                     TriggerElementalRelicLocked(conn, m, hit: false, killed: true);   // a burn is no hit
                 }
                 hits.Add((id, m, m.Life, damage));
                 if (stageStarts) CommitBossStage(remote, stream, ciphers, conn, id, m, now);
             }
         }
-        foreach (var (id, buff) in entered)
-            await Send(remote, stream, ciphers, InstanceEntities.AddBuff(id, buff, RighteousFireAuraBuffRow, PlayerId, rf.Skill, visual: rf.AuraVisual), null);
-        foreach (var (id, buff) in left)
-            await Send(remote, stream, ciphers, InstanceEntities.RemoveBuff(id, buff), null);
-        foreach (var (id, m, life, damage) in hits)
+        entered.AddRange(left);
+        return (hits,entered);
+    }
+
+    internal static async Task BurnAround(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn, RighteousFireState rf, double seconds)
+    {
+        var (hits,packets) = PrepareRighteousFireTick(remote,stream,ciphers,conn,rf,seconds);
+        try
         {
-            if (life == 0)
-                await Send(remote, stream, ciphers, InstanceEntities.StatsUpdate(id, [(StatKeys.HideMiniLifeBar, 1)]), null);
-            await Send(remote, stream, ciphers, InstanceProtocol.LifeUpdate(id, life),
-                life == 0 ? $"0x01b1 monster 0x{id:x} ({m.Label}) burnt to death by Righteous Fire" : null);
-            if (life == 0) await MonsterKilled(remote, stream, ciphers, conn, id, m);
+            foreach (var packet in packets) await Send(remote,stream,ciphers,packet,null);
+            foreach (var (id, m, life, damage) in hits)
+            {
+                if (life == 0)
+                    await Send(remote, stream, ciphers, InstanceEntities.StatsUpdate(id, [(StatKeys.HideMiniLifeBar, 1)]), null);
+                await Send(remote, stream, ciphers, InstanceProtocol.LifeUpdate(id, life),
+                    life == 0 ? $"0x01b1 monster 0x{id:x} ({m.Label}) burnt to death by Righteous Fire" : null);
+                if (life == 0) await MonsterKilled(remote, stream, ciphers, conn, id, m);
+            }
         }
+        finally { foreach (var packet in packets) TargetBuffOutputLedger.Discard(packet); }
     }
 
     // The quest flags the permanent Kitava resistance penalty mirrors (ResistancePenalty): the Act 5 pair and the

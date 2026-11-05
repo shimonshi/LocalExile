@@ -4,6 +4,8 @@ The ordinary Default/HardMode identity gates Surge, mana cost, mana-derived dama
 Surge availability is captured before actual Mana payment in the shared ordinary-use receipt.
 Scheduled releases retain that value; autonomous Brand, totem and Mirage activations start unpaid scopes.
 A hit that grants Surge does not change the other victims of that activation.
+The per-totem generic more multiplier also reaches damaging ailments and outgoing Righteous Fire;
+Surge's spell-only more does not scale either that burn or its independent self-burn.
 
 ## Supported actors
 
@@ -25,7 +27,8 @@ Retained action `0x2c6` keeps the action type, skill, sequence and clone identit
 The bounded first clone has identity two; later allocation and nondefault producers are not inferred.
 The target buff precedes the retained attachment in one output group.
 Detach, expiry, source replacement and retirement remove only the owned presentation.
-Live target buff holders and pending ground/DoT outputs reserve independent instances through allocator wrap.
+Live target buff holders and pending ground/DoT outputs, including Righteous Fire entry, exit and end packets,
+reserve independent instances through allocator wrap.
 Counted packet leases end at the common send gate or explicit discard, including reload and retirement.
 
 ## Verification limits
