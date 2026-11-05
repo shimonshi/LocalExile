@@ -383,9 +383,11 @@ static partial class Game
                 int ex = x, ey = y;
                 if (spawn && presentation.SpawnAtCaster)
                 {
-                    var caster = Conn.Walk.Position(Runtime.Now / (double)ProjectileRuntime.QuantaPerSecond);
-                    ex = (int)Math.Round((double)caster.X);
-                    ey = (int)Math.Round((double)caster.Y);
+                    var caster = Actors(Runtime.Now, Runtime.Now).FirstOrDefault(a => a.Key == p.Use.Emitter);
+                    if (caster is null) return;
+                    var at = caster.Position(Runtime.Now);
+                    ex = (int)Math.Round(at.X);
+                    ey = (int)Math.Round(at.Y);
                 }
                 Effect(ex, ey, eventEffect, presentation.EffectLifetime,
                     value.Kind == ProjectileEventKind.Area ? value.Radius : null, presentation.AttachEffect,

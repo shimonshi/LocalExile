@@ -222,7 +222,8 @@ static partial class Game
 
     internal static ProjectileUse CaptureGemProjectile(ClientState conn, ProjectileSession session, ushort skillId,
         (ushort Id, int Effect, string Name, int Level, int Quality, uint Gem) gem, (int X, int Y) aim,
-        SkillCriticalRoll criticalRoll, ushort sequence = 0, uint repeatsLeft = 0, double releaseDelay = 0)
+        SkillCriticalRoll criticalRoll, ushort sequence = 0, uint repeatsLeft = 0, double releaseDelay = 0,
+        ProjectileVector? casterOrigin = null)
     {
         var player = CharacterPlayerStats(conn);
         var own = SupportedSkill(conn, skillId).Stats;
@@ -238,8 +239,9 @@ static partial class Game
         if (!double.IsFinite(speed) || speed <= 0)
             throw new InvalidOperationException("Projectile release requires a finite positive speed.");
         var profile = definition.Parameters.Resolve(Get, speed, ArrowsFor(conn, gem.Effect));
-        var at = conn.Walk.Position(session.Runtime.Now / (double)ProjectileRuntime.QuantaPerSecond);
-        var origin = ProjectileSession.Vector(at);
+        (int X,int Y) at = casterOrigin is { } caster ? ((int)Math.Round(caster.X),(int)Math.Round(caster.Y))
+            : conn.Walk.Position(session.Runtime.Now / (double)ProjectileRuntime.QuantaPerSecond);
+        var origin = casterOrigin ?? ProjectileSession.Vector(at);
         if (definition.RequiresTerrain && ProjectileGrid.Blocks(conn.Layout.Id, conn.Seed, at.X, at.Y) is null)
             throw new InvalidOperationException("Projectile recipe requires a projectile terrain mask");
         var target = ProjectileSession.Vector(aim);
@@ -256,7 +258,7 @@ static partial class Game
             WeaponProfileFor(conn, activeSet: true));
         double ahead = release is { ForwardCells: > 0 } point ? point.ForwardCells : 1.5;
         // A point closer than the muzzle must not end up behind the released projectile.
-        origin += direction * Math.Min(ahead, (target - origin).Length / 2);
+        if (casterOrigin is null) origin += direction * Math.Min(ahead, (target - origin).Length / 2);
         profile = profile with { Range = PrimaryRange(SkillsFor(conn).EffectId(gem.Effect), profile.Range,
             (target - origin).Length, toTarget: rain) };
         // Arrow Nova's payload takes the rig's fixed timeline, not the arrow's speed: the official landing rig came

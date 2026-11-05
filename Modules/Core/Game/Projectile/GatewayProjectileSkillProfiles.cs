@@ -85,7 +85,14 @@ static class GatewayProjectileSkillProfiles
         if (effect == "RollingMagma") p = p with { GroundChains = p.Chain, Chain = 0 };
         // Spectral Throw pierces every enemy and flies back to the thrower, hitting again on the way back.
         if (effect == "SpectralThrow") p = p with { Pierce = -1, Returns = true };
-        if (IsTornadoShot(effect)) p = TornadoShotChildren(p, get);
+        if (IsTornadoShot(effect))
+        {
+            // Arrow Nova owns the outer landing payload. Compose the skill's terminal stages
+            // inside its already-counted volley, preserving both emissions and the paid offense carrier.
+            if ((get("projectiles_rain") != 0 || get("skill_is_rain_skill") != 0) && p.EndEmission is { } nova)
+                p = p with { EndEmission = nova with { Child = TornadoShotChildren(nova.Child, get) } };
+            else p = TornadoShotChildren(p, get);
+        }
         // The endpoint cluster uses the same already-resolved quantity as each contact cluster.
         if (p.ContactArea is { } contact) p = p with { EndArea = contact };
         return ScaleAreas(p, effect, get, spell: !attack);

@@ -53,14 +53,18 @@ public sealed class SupportPrerequisiteCases
         yield return ["Melee_splash_radius_and_damage_follow_its_stats"];
         yield return ["Final_repeat_double_damage_and_aura_support_effect_apply"];
         yield return ["Cull_the_weak_and_pacifism_cull_and_spare_by_rarity"];
+        yield return ["Arrow_Nova_preserves_Tornado_stages"];
     }
 
     [Theory]
     [MemberData(nameof(SupportExecutionAndPresentationCasesData))]
-    public void SupportExecutionAndPresentationCases(string caseId)
+    public async Task SupportExecutionAndPresentationCases(string caseId)
     {
         switch (caseId)
         {
+            case "Arrow_Nova_preserves_Tornado_stages":
+                await OrdinaryGameplayChecks.TornadoNova();
+                break;
             case "Melee_splash_radius_and_damage_follow_its_stats":
                 new AwakenedSubsystemTests().Melee_splash_radius_and_damage_follow_its_stats();
                 break;

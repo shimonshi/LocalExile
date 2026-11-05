@@ -13,6 +13,75 @@ namespace GameServer.Gateway.Tests;
 
 static class OrdinaryGameplayChecks
 {
+    internal static async Task TornadoNova()
+    {
+        using var h = new Harness(new AscendancyCatalog().Definitions.Single(d => d.Identity.Family == AscendancyFamily.Normal && d.Name == "Deadeye"));
+        var c = h.Conn;
+        foreach (string effect in new[] { "TornadoShot", "TornadoShotAltX", "TornadoShotAltY" })
+        {
+            var stats = new Dictionary<string,int> { ["base_number_of_projectiles"]=1, ["number_of_additional_projectiles"]=2,
+                ["number_of_additional_arrows"]=1, ["projectiles_rain"]=1, ["tornado_shot_num_of_secondary_projectiles"]=3 };
+            int Get(string n) => stats.GetValueOrDefault(n);
+            var p = GatewayProjectileSkillProfiles.Resolve(effect,"Metadata/Projectiles/TornadoShotArrow",Get,100,attack:true,arrows:true);
+            Assert.Equal(1,p.Count); Assert.False(p.DirectDamage); Assert.True(p.Lobbed);
+            var volley = Assert.IsType<ProjectileEmissionRecipe>(p.EndEmission).Child;
+            Assert.Equal(4,volley.Count); Assert.True(volley.DirectDamage); Assert.False(volley.Lobbed);
+            var secondary = Assert.IsType<ProjectileEmissionRecipe>(volley.EndEmission).Child;
+            Assert.Equal(3,secondary.Count); Assert.True(secondary.DirectDamage);
+            var panel = stats.ToDictionary(kv => Key(kv.Key), kv => kv.Value);
+            var raw = panel.ToDictionary(kv => kv.Key, kv => kv.Value);
+            Game.ApplyProjectilePanelStats(Program.Skills.EffectRow(effect), panel);
+            foreach (string count in new[] { "total_number_of_projectiles_to_fire", "virtual_total_number_of_projectiles",
+                "total_number_of_arrows_to_fire", "virtual_total_number_of_arrows" })
+                Assert.Equal(volley.Count, panel[Key(count)]);
+            foreach (var input in raw) Assert.Equal(input.Value, panel[input.Key]);
+            stats["projectiles_rain"]=0;
+            var control = GatewayProjectileSkillProfiles.Resolve(effect,"Metadata/Projectiles/TornadoShotArrow",Get,100,attack:true,arrows:true);
+            Assert.Equal(4,control.Count); Assert.True(control.DirectDamage); Assert.Equal(3,control.EndEmission!.Child.Count);
+            Assert.True(control.EndEmission.Child.DirectDamage);
+            var session = new Game.ProjectileSession("Tornado Nova",h.Wire,h.Ciphers,c); c.ProjectileRuntimeState=session;
+            try
+            {
+                c.Walk.Teleport(98,100,0);
+                var offense = new ProjectileOffense(DamagePacket.Of(DamageType.Physical,100,100),true,0,0,150,"frozen paid stage")
+                {
+                    CriticalRoll=new(0), Presentation=new() { SpawnAtCaster=true,
+                        EventEffect=e=>e.Projectile.ParentId==0&&e.Kind==ProjectileEventKind.Spawn
+                            ? "Metadata/Effects/Spells/supports/arrow_rain/rain_rig.ao" : null }
+                };
+                // Keep both emissions away from the fixture's world boundary; count, damage and offense stay resolved.
+                volley = volley with { Range=4 };
+                var flight = p with { Range=1, EndEmission=p.EndEmission! with { Child=volley } };
+                uint effectId=c.NextObjectId;
+                session.Runtime.Release(new(flight,new(Program.PlayerId,c.ProjectileEpoch),new(Program.PlayerId,c.ProjectileEpoch),1,
+                    new(100,100),new(101,100)) { Payload=offense });
+                var flush=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                session.Enqueue(()=> { flush.SetResult(); return Task.CompletedTask; }); await flush.Task;
+                var expectedEffect=InstanceEntities.CreateObject(effectId,InstanceEntities.ObjectTypeHash(EffectObject.TypePath),
+                    new EffectObject(98,100,"Metadata/Effects/Spells/supports/arrow_rain/rain_rig.ao").Blob());
+                string prefix=Convert.ToHexString(expectedEffect.AsSpan(0,PacketHistory.KeptBytes));
+                Assert.Contains(Program.HistoryFor(h.Ciphers).Lines(),line=>line.Contains(prefix,StringComparison.Ordinal));
+                long landing=ProjectileRuntime.Time(.01); session.AdvanceTo(landing);
+                long volleyAt=landing+p.EndEmission!.Delay;
+                Assert.True(volleyAt>landing);
+                session.AdvanceTo(volleyAt-1); Assert.Empty(session.Runtime.Projectiles);
+                session.AdvanceTo(volleyAt);
+                var arrows=session.Runtime.Projectiles.ToArray(); Assert.Equal(4,arrows.Length);
+                Assert.All(arrows,a=> { Assert.Same(offense,a.Use.Payload); Assert.Equal(volley,a.Profile); });
+                long terminal=volleyAt+(long)Math.Ceiling(volley.Range/volley.Speed*ProjectileRuntime.QuantaPerSecond);
+                session.AdvanceTo(terminal);
+                var children=session.Runtime.Projectiles.ToArray(); Assert.Equal(12,children.Length);
+                Assert.All(children,a=> { Assert.Same(offense,a.Use.Payload); Assert.True(a.Profile.DirectDamage); });
+                var shot=children[0]; var point=shot.Position+shot.Direction*2;
+                var target=new SpawnedMonster("secondary contact",new((int)Math.Round(point.X),(int)Math.Round(point.Y),0),0,0,100000);
+                c.Monsters[909]=target;
+                session.AdvanceTo(terminal+ProjectileRuntime.Time(.04));
+                Assert.True(target.Life<target.MaxLife);
+                c.Monsters.Clear();
+            }
+            finally { session.Invalidate(); await session.OutputCompleted; }
+        }
+    }
     static uint Key(string name) => Program.Stats.Key(name)!.Value;
     internal static void DeadeyeGameplayTransactions()
     {
@@ -70,8 +139,10 @@ static class OrdinaryGameplayChecks
         foreach (var old in h.Items.Items(PlayerInventories.Weapon1).ToArray()) h.Items.Remove(PlayerInventories.Weapon1, old.Id);
         var arrow = ItemCatalog.Create(Program.Items.Find("Tornado Shot")!);
         var support = ItemCatalog.Create(Program.Items.Find("Mirage Archer Support")!);
+        var nova = ItemCatalog.Create(Program.Items.Find("Arrow Nova Support")!);
+        c.PlayerStats[Key("mirage_archers_do_not_attach")]=1;
         var bow = h.Items.Add(PlayerInventories.Weapon1, 0, 0, ItemCatalog.Create(Program.Items.Find("Crude Bow")!) with
-            { Sockets = [new(SocketColour.White, arrow), new(SocketColour.White, support)], Links = [2] });
+            { Sockets = [new(SocketColour.White, arrow), new(SocketColour.White, support), new(SocketColour.White,nova)], Links = [3] });
         var gem = Assert.Single(Game.GemSkillEffects(c), g => Game.ArrowsFor(c, g.Effect));
         var session = Game.ProjectilesFor("Mirage", h.Wire, h.Ciphers, c);
         double now = session.Runtime.Now / 120000d;
@@ -109,6 +180,21 @@ static class OrdinaryGameplayChecks
         Flush(); Assert.True(body.Created);
         Assert.Single(c.Minions.All, m => m.Kind == "MirageArcherProxy");
         Assert.False(body.Monster.Hostile); Assert.Equal(Program.PlayerId, body.Monster.OwnerId);
+        Assert.True(body.Actor.Detached);
+        c.Walk.Teleport(160,100,now);
+        var detached=Game.CaptureMirage(session,body,(110,100));
+        Assert.Equal(body.Actor.Position,detached.Origin);
+        Assert.Equal(10,detached.Profile.Range,8);
+        Assert.Equal(.415,detached.Profile.Range/detached.Profile.Speed,8);
+        detached=Game.CaptureMirage(session,body,(110,100),releaseDelay:.2);
+        Assert.Equal(.215,detached.Profile.Range/detached.Profile.Speed,8);
+        uint effectId=c.NextObjectId;
+        session.Runtime.Release(detached); Flush();
+        var expectedEffect=InstanceEntities.CreateObject(effectId,InstanceEntities.ObjectTypeHash(EffectObject.TypePath),
+            new EffectObject(100,100,"Metadata/Effects/Spells/supports/arrow_rain/rain_rig.ao")
+                { Flags0=4,AnimationWord=22,AnimationValue=-172,AnimatedFlags=9,AnimationId=6 }.Blob());
+        string prefix=Convert.ToHexString(expectedEffect.AsSpan(0,PacketHistory.KeptBytes));
+        Assert.Contains(Program.HistoryFor(h.Ciphers).Lines(),line=>line.Contains(prefix,StringComparison.Ordinal));
         uint mana = c.PlayerMana, life = target.Life;
         double lastOwnerHit = c.LastEnemyHitAt;
         using (Game.ProjectileMutation(c, advance: false)) Game.MirageStep(session, now);
