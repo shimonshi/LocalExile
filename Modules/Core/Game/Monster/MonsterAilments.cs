@@ -103,10 +103,12 @@ static partial class Game
     /// whose hits land together (<see cref="ReflectAilmentsLocked"/>). <paramref name="poison"/>: the hit's poison rows
     /// (<see cref="PoisonOnHitLocked"/>); a hit without them does not poison.
     /// </summary>
+    internal enum HitProvenance { Owner, Proxy }
+
     internal static void AilmentsOnHitLocked(ClientState conn, SpawnedMonster m, DamagePacket mitigated, bool spell,
         bool critical, int criticalMultiplier, IReadOnlyDictionary<uint, int> player, IReadOnlyDictionary<uint, int>? skill,
         double now, Random random, List<MonsterElementalAilments.Effect>? reflected = null,
-        MonsterPoisons.Settings poison = default, bool reflectToPlayer = true)
+        MonsterPoisons.Settings poison = default, bool reflectToPlayer = true, HitProvenance provenance = HitProvenance.Owner)
     {
         double factor = MonsterDamageTaken(m, spell, now, hit: true) * (critical ? criticalMultiplier / 100.0 : 1);
         int Player(string name) => Stats.Key(name) is uint key ? player.GetValueOrDefault(key) : 0;
@@ -129,7 +131,7 @@ static partial class Game
         HitDebuffsOnHitLocked(m, name => Player(name) + Skill(name), spell, critical, now);
         ExposureOnHitLocked(m, name => Player(name) + Skill(name), mitigated, now, Random.Shared);
         WitherOnHitLocked(m, name => Player(name) + Skill(name), now, Random.Shared);
-        PoisonOnHitLocked(conn, m, mitigated, spell, critical, player, skill, poison, now, random);
+        PoisonOnHitLocked(conn, m, mitigated, spell, critical, player, skill, poison, now, random, provenance);
         // Fleeing (MonsterFlee): its own draws (Random.Shared), so a projectile's reaction draws stay in order.
         if (!m.Fleeing && MonsterFlee.Rolls(MonsterFlee.Chance(spell, Player, Skill),
                 m.Mods.Effects["monster_chance_to_not_flee_%"], Random.Shared))

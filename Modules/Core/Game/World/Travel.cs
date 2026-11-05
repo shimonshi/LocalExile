@@ -53,14 +53,15 @@ static partial class Game
             var gem = GemSkillEffects(conn).FirstOrDefault(g => g.Id == use.SkillId);
             double at = conn.Clock.Elapsed.TotalSeconds;
             (int X, int Y) self = default;
-            if (!TryBeginSkillCooldownUse(conn, use.SkillId, gem.Effect,
+            var (accepted_cooldownUse, cooldownUse) = await BeginSkillCooldownUseAsync(conn, use.SkillId, gem.Effect,
                 gem.Name is null ? null : CooldownFor(conn, gem.Effect, gem.Level, gem.Quality), false,
                 () =>
                 {
                     Interlocked.Increment(ref conn.ActionCount);
                     self = conn.Walk.Position(at);
                     conn.Walk.Order(self.X, self.Y, at);
-                }, out var cooldownUse, requestedAt: requestedAt)) return;
+                }, requestedAt: requestedAt);
+            if (!accepted_cooldownUse) return;
             bool acknowledged = false;
             await Send(remote, stream, ciphers,
                 InstanceProtocol.ActionStarted(PlayerId, self.X, self.Y, self.X, self.Y, use.SkillId, use.Sequence, use.Flags, targetObjectId: PlayerId),

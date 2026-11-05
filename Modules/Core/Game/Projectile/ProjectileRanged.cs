@@ -34,16 +34,14 @@ static partial class Game
         session.Schedule(ProjectileRuntime.Time(acceptedAt + AttackReleaseDelay(delay)),
             () => OrdinaryRangedReleaseCurrent(conn, action, epoch)
                 && OrdinaryRangedAttack.ProjectileId(WeaponProfileFor(conn, activeSet: true)) == projectileId,
-            () =>
+            CaptureOrdinaryRelease<ProjectileUse>(conn, () =>
             {
-                var character = CharacterPlayerStats(conn);
+                var character = DistillerInputs(conn, CharacterPlayerStats(conn));
                 int Get(string name) => Stats.Key(name) is uint key ? character.GetValueOrDefault(key) : 0;
                 int RawCritical(string name) => IsCriticalProhibition(name) ? 0 : Get(name);
                 int effect = SkillEffectId(conn, SkillCatalog.FirstSkillId) is { } id ? SkillsFor(conn).EffectRow(id) : -1;
                 var weapon = WeaponProfileFor(conn, activeSet: true);
-                int criticalChance = CriticalProhibited(conn, attack: true)
-                    ? AttackBaseCriticalStrike.Chance(!weapon.Unarmed, weapon.Critical, conn.Pools.CriticalStrikeChancePct, RawCritical)
-                    : conn.Pools.AttackCriticalStrikeChance;
+                var criticalChance = AttackBaseCriticalStrike.Chance(!weapon.Unarmed, weapon.Critical, conn.Pools.CriticalStrikeChancePct + PaidDistillerCritical(conn), RawCritical);
                 var captured = OrdinaryRangedShot.Capture(WeaponFor(conn), character, SkillsFor(conn).EffectStats(effect, 1), Stats,
                     PlayerAccuracy(conn, character), criticalChance, conn.Pools.CriticalStrikeMultiplier);
                 bool wand = projectileId == OrdinaryRangedAttack.Wand;
@@ -86,7 +84,7 @@ static partial class Game
                 origin += (target - origin).Unit * Math.Min(ahead, (target - origin).Length / 2);
                 return new(profile, new(PlayerId, epoch), new(PlayerId, epoch), 1, origin, target)
                     { Payload = shot, ReturnAnchor = new(PlayerId, epoch) };
-            });
+            }));
         return Task.CompletedTask;
     }
 }

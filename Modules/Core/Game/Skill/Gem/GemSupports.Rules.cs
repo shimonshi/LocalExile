@@ -133,7 +133,8 @@ static partial class Game
             result[baseArea] = gem.Stats.GetValueOrDefault(baseArea);
         var fanatic = InquisitorModifiers(conn, gem.Effect, result);
         if (Stats.Key("mana_cost") is uint cost && result.TryGetValue(cost, out int basis))
-            result[cost] = InquisitorSkillCost(gem.Stats.GetValueOrDefault(cost), player, fanatic);
+            result[cost] = MarkCatalog.Find(gem.Effect) is not null && MarkStat(player, "mark_skills_cost_no_mana") != 0 ? 0
+                : InquisitorSkillCost(gem.Stats.GetValueOrDefault(cost), player, fanatic);
         if (Stats.Key("spell_area_of_effect_+%") is uint spellArea)
             result[spellArea] = result.GetValueOrDefault(spellArea) + fanatic.AreaIncreasePct;
         return result;
@@ -161,7 +162,9 @@ static partial class Game
                 ? ArcaneMight.Combine(key, result.GetValueOrDefault(key), value) : result.GetValueOrDefault(key) + value;
         }
         if (Stats.Key("mana_cost") is uint mana && own.TryGetValue(mana, out int baseCost))
-            result[mana] = ManaRecoveryRules.Cost(baseCost, name => Stats.Key(name) is uint key ? player.GetValueOrDefault(key) : 0);
+            result[mana] = new[] { "no_cost", "virtual_no_cost", "skill_no_cost_or_reservation" }
+                .Any(name => Stats.Key(name) is uint key && result.GetValueOrDefault(key) != 0) ? 0
+                : ManaRecoveryRules.Cost(baseCost, name => Stats.Key(name) is uint key ? player.GetValueOrDefault(key) : 0);
         return result;
     }
 
@@ -316,8 +319,8 @@ static partial class Game
         SkillCatalog.Unarmed? weapon = null)
     {
         var gem = SupportedSkill(conn, skillId);
-        var caster = FinalPlayerStats(conn).ToDictionary(v => v.Item1, v => v.Item2);
-        var stats = MergeSkillStats(caster, gem.Stats);
+        var caster = FinalPlayerStats(conn).ToDictionary(kv => kv.Item1, kv => kv.Item2);
+        var stats = MergeSkillStats(caster, DistillerInputs(conn, gem.Stats));
         int Get(string name) => name == "is_area_damage" && area is bool isArea ? isArea ? 1 : 0
             : Stats.Key(name) is uint k ? stats.GetValueOrDefault(k) : 0;
         bool attack = SkillsFor(conn).IsAttack(gem.Effect);
@@ -396,6 +399,7 @@ static partial class Game
     internal static int SupportedCriticalChanceFor(ClientState conn, ushort skillId, bool release, long extraIncrease = 0)
     {
         var gem = SupportedSkill(conn, skillId);
+        gem = gem with { Stats = DistillerInputs(conn, gem.Stats) };
         var hitPlan = SkillHitPlan.ForSkill(SkillsFor(conn), gem.Effect, gem.Level, gem.Quality);
         if (!hitPlan.CanHit) return 0;
         var player = FinalPlayerStats(conn).ToDictionary(v => v.Item1, v => v.Item2);

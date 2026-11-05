@@ -189,7 +189,7 @@ static partial class Game
     static int? AttackCriticalChanceWith(ClientState conn, IReadOnlyDictionary<uint, int> player, long extra, bool release)
     {
         var weapon = WeaponProfileFor(conn, activeSet: true);
-        return AttackBaseCriticalStrike.Chance(!weapon.Unarmed, weapon.Critical, conn.Pools.CriticalStrikeChancePct + extra,
+        return AttackBaseCriticalStrike.Chance(!weapon.Unarmed, weapon.Critical, conn.Pools.CriticalStrikeChancePct + extra + PaidDistillerCritical(conn),
             name => release && IsCriticalProhibition(name) ? 0 : StatOf(player, name));
     }
 

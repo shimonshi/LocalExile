@@ -101,8 +101,9 @@ static partial class Game
     static int LowLifeThresholdPct(IReadOnlyDictionary<uint, int> stats) =>
         LowLife.Threshold(Get(stats, "low_life_threshold_%_override"), Get(stats, "low_life_threshold_%"));
 
-    static int RequiredManaWithPetrifiedBlood(ClientState conn, int petrifiedBloodPercent) =>
-        AuraCatalog.RequiredMana(conn.Pools, conn.Auras.Values)
+    static int RequiredManaWithPetrifiedBlood(ClientState conn, int petrifiedBloodPercent,
+        IEnumerable<AuraCatalog.Aura>? auras = null) =>
+        AuraCatalog.RequiredMana(conn.Pools, auras ?? conn.Auras.Values)
         + PetrifiedBlood.RequiredMana(conn.Pools, petrifiedBloodPercent);
 
     // The invisible slow_life_loss_from_hit_damage buff (BuffDefinitions 1796) draws the dark deferred-loss overlay

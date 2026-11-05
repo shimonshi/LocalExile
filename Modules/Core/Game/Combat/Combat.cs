@@ -194,6 +194,7 @@ static partial class Game
     internal static async Task Attack(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn,
         InstanceTransfer.UseSkillOnObject use, SpawnedMonster m, double requestedAt)
     {
+        using var distillerUse = BeginOrdinaryUse(conn);
         if (m.OwnerId is not null) return;
         int projectileEpoch;
         lock (conn.Monsters) projectileEpoch = conn.ProjectileEpoch;
@@ -250,15 +251,26 @@ static partial class Game
         now = conn.Clock.Elapsed.TotalSeconds;
         SkillCriticalRoll criticalRoll;
         bool admitted;
-        lock (conn.Monsters)
+        await conn.FlaskBarGate.WaitAsync();
+        try
         {
-            target = m.Walk.Position(now);
-            conn.NextAttackAt = AttackTiming.After(now, conn.NextAttackAt, duration);
-            criticalRoll = CaptureSkillCriticalRoll(conn, SkillCatalog.FirstSkillId);
-            admitted = AcceptDefaultSwingUse(conn, m, stop, target, weapon.Range + 2, action);
-            if (started && admitted)
-                LockstepAttackSwings(conn, action, now, LockstepAttackCutIn(conn, use.SkillId, use.Sequence) + conn.LockstepActionTail);
+            using (ProjectileMutation(conn))
+            {
+                now = ProjectileWorldTime(conn);
+                target = m.Walk.Position(now);
+                criticalRoll = CaptureSkillCriticalRoll(conn, SkillCatalog.FirstSkillId);
+                admitted = Current() && PlayerActionCurrent(conn, action) && conn.ProjectileEpoch == projectileEpoch
+                    && !conn.Paused && !conn.Closed && !conn.LeavingArea && conn.PlayerLife > 0 && !m.Dead && m.Life > 0
+                    && conn.Monsters.TryGetValue(use.TargetId, out var liveTarget) && ReferenceEquals(liveTarget, m)
+                    && CurrentGameRules && AttackTiming.Ready(now, conn.NextAttackAt, duration)
+                    && PayDistillerUseLocked(conn, true, () => AcceptDefaultSwingUse(conn, m, stop, target, weapon.Range + 2, action));
+                if (admitted) conn.NextAttackAt = AttackTiming.After(now, conn.NextAttackAt, duration);
+                if (started && admitted)
+                    LockstepAttackSwings(conn, action, now, LockstepAttackCutIn(conn, use.SkillId, use.Sequence) + conn.LockstepActionTail);
+            }
         }
+        finally { conn.FlaskBarGate.Release(); }
+        if (admitted) await PublishFlaskChanges(remote, stream, ciphers, conn);
         if (!admitted)
         {
             Console.WriteLine($"[gateway] {remote} attack on 0x{use.TargetId:x} out of reach: {Dist(stop, target):0.0} > {weapon.Range}");
@@ -338,7 +350,8 @@ static partial class Game
                 }
                 // Settle Rage at accepted contact before this hit's gain. It is a final multiplier on the attack packet,
                 // never on an existing impale bonus or on generic damage/DoT.
-                var player = CharacterPlayerStats(conn);
+                using var offense = new DistillerOffense();
+                var player = DistillerInputs(conn, CharacterPlayerStats(conn));
                 var accuracy = AttackAccuracyProfile.From(conn.Pools, player, Stats, ownPenetration, weapon.LocalSources)
                     with { Rating = PlayerAccuracy(conn, player) };
                 double contactAt = conn.Clock.Elapsed.TotalSeconds;
@@ -356,14 +369,14 @@ static partial class Game
                 var pen = Penetration.Of(player, Stats, attack: true, ownPenetration, weapon.LocalSources);
                 var resistanceMods = HitResistMods(player, ownPenetration);
                 var hit = AttackHitConverted(weapon, player, WeaponProfileFor(conn, activeSet: true).Melee,
-                    ConversionFor(conn, attackEffect, 1, attack: true)).Scale(InquisitorRead(conn, player).AttackDamageFactor);
+                    DamageStats.Conversion(MergeSkillStats(player, ownPenetration ?? new Dictionary<uint, int>()), Stats, attack: true)).Scale(InquisitorRead(conn, player).AttackDamageFactor);
                 hit = MarkHit(conn, m, hit, CaptureOrdinaryMarkHitSource(conn, WeaponProfileFor(conn, activeSet: true).Melee));
                 if (WeaponProfileFor(conn, activeSet: true).Melee)
                     hit = WithMeleeProximityLocked(conn, player, ownPenetration, m, hit, contactAt);
                 var gambler = GamblerFor(player);
                 hit = hit.Scale(OrdinaryTargetMore(conn, m, player));
                 var ownRolled = GameEvents.WithOutgoingDamage(conn, player, m, (gambler with { DamageMorePct = 0 }).RollOutgoingHit(hit, Random.Shared));
-                critical = RollCriticalStrike(conn, CriticalChanceOn(conn, targetId, conn.Pools.AttackCriticalStrikeChance,
+                critical = RollCriticalStrike(conn, CriticalChanceOn(conn, targetId, AttackCriticalChanceWith(conn, player, 0, false) ?? conn.Pools.AttackCriticalStrikeChance,
                         AttackCriticalChanceVsBlinded(conn, player), AttackCriticalChanceVsProfane(conn, player)), ownPenetration, skillRoll: criticalRoll)
                     && GameServer.Core.World.EvasionEntropy.ConfirmsCritical(hitChance, conn.AttackAccuracyRandom);
                 int sourceCriticalMultiplier = AttackCriticalMultiplier(conn, player) + OrdinaryCriticalBonus(conn, player);
@@ -476,7 +489,7 @@ static partial class Game
             int action = 0;
             (int X, int Y) target = default, here = default, stop = default;
             double arrive = now;
-            if (!TryBeginSkillCooldownUse(conn, use.SkillId, gem.Effect,
+            var (accepted_approachTicket, approachTicket) = await BeginSkillCooldownUseAsync(conn, use.SkillId, gem.Effect,
                 CooldownFor(conn, gem.Effect, gem.Level, gem.Quality), false,
                 () =>
                 {
@@ -484,7 +497,8 @@ static partial class Game
                     action = Interlocked.Increment(ref conn.ActionCount);
                     target = m.Walk.Position(now);
                     (here, stop, arrive) = conn.Walk.Approach(target.X, target.Y, weapon.Range, now, tolerance: m.StopRange - 2, precision);
-                }, out var approachTicket, reserve: false, requestedAt: requestedAt)) return;
+                }, reserve: false, requestedAt: requestedAt, valid: () => !m.Dead && m.Life > 0);
+            if (!accepted_approachTicket) return;
             Console.WriteLine($"[gateway] {remote} <= 0x0024 skill 0x{use.SkillId:x4} {gem.Name} on 0x{use.TargetId:x}: player ({here.X}, {here.Y}), " +
                 $"monster ({target.X}, {target.Y}), distance {Dist(here, target):0.0}; swing from ({stop.X}, {stop.Y}) in {arrive - now:0.00} s (t={now:0.000})");
             // A lockstep client's action starts now and walks up by itself (Lockstep.cs); the swing below then says nothing.
@@ -510,9 +524,10 @@ static partial class Game
                 LockstepAttackOver(conn, action);
                 return;
             }
-            if (!TryBeginSkillCooldownUse(conn, use.SkillId, gem.Effect,
+            var (accepted_cooldownUse, cooldownUse) = await BeginSkillCooldownUseAsync(conn, use.SkillId, gem.Effect,
                 CooldownFor(conn, gem.Effect, gem.Level, gem.Quality), false,
-                () => { }, out var cooldownUse, actionToken: action))
+                () => { }, actionToken: action, valid: () => !m.Dead && m.Life > 0);
+            if (!accepted_cooldownUse)
             {
                 LockstepAttackOver(conn, action);
                 return;
@@ -540,7 +555,7 @@ static partial class Game
         (int X, int Y) aim = default, stand = default;
         int chargeBonus = gem.Name is null ? 0 : ShieldChargeBonusPct(conn, use.SkillId, gem.Effect), chargeToken = 0;
         bool moves = gem.Name is not null && chargeBonus == 0 && LandsAtAim(conn, gem.Effect);
-        if (!TryBeginSkillCooldownUse(conn, use.SkillId, gem.Effect,
+        var (accepted_spellUse, spellUse) = await BeginSkillCooldownUseAsync(conn, use.SkillId, gem.Effect,
             gem.Name is null ? null : CooldownFor(conn, gem.Effect, gem.Level, gem.Quality), false,
             () =>
             {
@@ -556,7 +571,8 @@ static partial class Game
                     var landing = MovementLanding(conn, gem.Effect, stand, aim);
                     conn.Walk.Teleport(landing.X, landing.Y, castAt);
                 }
-            }, out var spellUse, requestedAt: requestedAt)) return;
+            }, requestedAt: requestedAt, valid: () => !m.Dead && m.Life > 0);
+        if (!accepted_spellUse) return;
         if (chargeToken != 0) _ = RunShieldCharge(remote, stream, ciphers, conn, chargeToken, conn.Walk.ArrivesAt,
             use.SkillId, use.Sequence, spellUse?.ActionToken ?? castAction, spellUse);
         bool spellAcknowledged = false;
@@ -581,6 +597,7 @@ static partial class Game
         int? actionToken = null, CooldownUseTicket? cooldownUse = null, bool locationInstant = false,
         bool ordinaryInstantUse = false)
     {
+        using var ordinaryUse = BeginOrdinaryUse(conn);
         int action = actionToken ?? conn.ActionCount;
         int recoveryGeneration = 0;
         int? channelGeneration = null;
@@ -621,6 +638,7 @@ static partial class Game
         }
         if (vaalUse is not null && SkillsFor(conn).IsAttack(gem.Effect))
             lock (conn.Monsters) mirageAdmission = PaidMirageAdmission(conn, vaalUse.Action);
+        ordinaryUse.Distillation = vaalUse?.Distillation;
         // Eligible uses arrive with their one original preflight reservation. Never reserve again after an await.
         if (cooldownUse is not null)
         {
@@ -691,34 +709,45 @@ static partial class Game
         SkillCriticalRoll? criticalRoll = vaalUse?.CriticalRoll;
         if (gem.Name is not null && !vaalCast)
         {
-            uint cost, lifeCost;
+            uint cost = 0, lifeCost = 0;
             bool paid;
-            lock (conn.Monsters)
+            int paidEpoch = conn.ProjectileEpoch, paidAction = conn.ActionCount;
+            await conn.FlaskBarGate.WaitAsync();
+            try
             {
-                if (!Current()) return false;
-                if (markCast && !MarkAdmission(conn, skillId, targetId)) return false;
-                paid = PayMana(conn, skillId, out cost, out lifeCost);
-                if (paid)
+                using (ProjectileMutation(conn))
                 {
-                    InquisitorAcceptedUse(conn, gem.Effect);
-                    criticalRoll = CaptureSkillCriticalRoll(conn, skillId);
-                    OrdinaryAcceptedUse(conn, cooldownUse?.Instant == true || locationInstant || ordinaryInstantUse
-                        ? -(++conn.OrdinaryUtilitySequence) : action);
-                    if (SkillsFor(conn).IsAttack(gem.Effect)) mirageAdmission = PaidMirageAdmission(conn, action);
-                    if (markCast) AdmitPaidMark(conn, skillId, targetId, action);
+                    if (conn.ProjectileEpoch != paidEpoch || conn.ActionCount != paidAction || !Current() || conn.PlayerLife == 0 || conn.Closed || conn.LeavingArea || !CurrentGameRules
+                        || GemSkillEffects(conn).FirstOrDefault(g => g.Id == skillId) != gem
+                        || targetId != 0 && targetId != PlayerId && (!conn.Monsters.TryGetValue(targetId, out var liveTarget) || liveTarget.Dead || liveTarget.Life == 0)
+                        || GemSkillInstanceDisabled(conn, gem.Effect, skillId) is not null) return false;
+                    if (markCast && !MarkAdmission(conn, skillId, targetId)) return false;
+                    paid = PayDistillerUseLocked(conn, DistillerEligible(conn, gem.Effect, gem.Level, gem.Quality),
+                        () => PayMana(conn, skillId, out cost, out lifeCost));
+                    if (paid)
+                    {
+                        InquisitorAcceptedUse(conn, gem.Effect);
+                        criticalRoll = CaptureSkillCriticalRoll(conn, skillId);
+                        OrdinaryAcceptedUse(conn, cooldownUse?.Instant == true || locationInstant || ordinaryInstantUse
+                            ? -(++conn.OrdinaryUtilitySequence) : action);
+                        if (SkillsFor(conn).IsAttack(gem.Effect)) mirageAdmission = PaidMirageAdmission(conn, action);
+                        if (markCast) AdmitPaidMark(conn, skillId, targetId, action);
+                    }
+                    if (paid && Supports.Of(gem.Effect)?.Types.Contains(47) == true)
+                    {
+                        channelGeneration = ++conn.ChannelGeneration;
+                        conn.ChannelSkill = skillId;
+                        conn.ChannelSkillSequence = sequence;
+                        conn.LastChannelUpdateAt = conn.Clock.Elapsed.TotalSeconds;
+                        conn.PaidChannel = CombatLifetime is { IsActive: true } rules
+                            ? new(skillId, gem.Effect, action, conn.ChannelGeneration, rules) : null;
+                    }
+                    // Capture at paid admission, before output or release scheduling can catch up other hits.
+                    recoveryGeneration = conn.ActionInterruptionGeneration;
                 }
-                if (paid && Supports.Of(gem.Effect)?.Types.Contains(47) == true)
-                {
-                    channelGeneration = ++conn.ChannelGeneration;
-                    conn.ChannelSkill = skillId;
-                    conn.ChannelSkillSequence = sequence;
-                    conn.LastChannelUpdateAt = conn.Clock.Elapsed.TotalSeconds;
-                    conn.PaidChannel = CombatLifetime is { IsActive: true } rules
-                        ? new(skillId, gem.Effect, action, conn.ChannelGeneration, rules) : null;
-                }
-                // Capture at paid admission, before output or release scheduling can catch up other hits.
-                recoveryGeneration = conn.ActionInterruptionGeneration;
             }
+            finally { conn.FlaskBarGate.Release(); }
+            if (paid) await PublishFlaskChanges(remote, stream, ciphers, conn);
             if (!paid)
             {
                 Console.WriteLine($"[gateway] {remote} skill 0x{skillId:x4} {gem.Name}: not enough mana or life " +
@@ -736,6 +765,7 @@ static partial class Game
         if (vaalCast)
         {
             recoveryGeneration = vaalUse!.RecoveryGeneration;
+            await PublishFlaskChanges(remote, stream, ciphers, conn);
             await PublishVaalUse(remote, stream, ciphers, conn, vaalUse);
         }
         if (!Current()) return false;
@@ -797,9 +827,10 @@ static partial class Game
             epoch = conn.ProjectileEpoch;
             if (!conn.ProjectileActive(epoch) || conn.Paused || !conn.PlayerSent || conn.PendingTransfer is not null) return;
         }
-        if (!TryBeginSkillCooldownUse(conn, skillId, gem.Effect,
+        var (accepted_cooldownUse, cooldownUse) = await BeginSkillCooldownUseAsync(conn, skillId, gem.Effect,
             CooldownFor(conn, gem.Effect, gem.Level, gem.Quality),
-            true, () => { }, out var cooldownUse)) return;
+            true, () => { });
+        if (!accepted_cooldownUse) return;
         if (await CastGemSkill(remote, stream, ciphers, conn, skillId, at, at, targetId,
             cooldownUse: cooldownUse, ordinaryInstantUse: true))
         {
@@ -840,9 +871,10 @@ static partial class Game
             }
             else if (!InstantLocationSkill.TryResolve(conn, epoch, aim, InTown(conn), CurrentStats(), out from, out to)) return;
         }
-        if (!TryBeginSkillCooldownUse(conn, skillId, gem.Effect,
+        var (accepted_cooldownUse, cooldownUse) = await BeginSkillCooldownUseAsync(conn, skillId, gem.Effect,
             CooldownFor(conn, gem.Effect, gem.Level, gem.Quality),
-            true, () => { }, out var cooldownUse)) return;
+            true, () => { });
+        if (!accepted_cooldownUse) return;
         if (!await CastGemSkill(remote, stream, ciphers, conn, skillId, from, to, cooldownUse: cooldownUse, locationInstant: true)) return;
         bool accepted = false;
         // Keep the raw aim: IceDash resolves it from the client's position when 0x1ce runs. Sending an already rounded
@@ -907,19 +939,20 @@ static partial class Game
             {
                 // Generosity: the supported aura's own increased effect, and "Supported Auras do not affect you".
                 var (supportEffect, affectsSelf) = AuraSupport(conn, skillId);
-                var aura = new AuraCatalog.Aura(skillId, effect, effectId, name, conn.NextBuff++,
-                    AuraCatalog.BuffRow(effectId), reservation.Flat, reservation.Percent, level, quality, SourceBuff: conn.NextBuff++,
+                // Validate the candidate without publishing it to live stats or spending buff identities.
+                var aura = new AuraCatalog.Aura(skillId, effect, effectId, name, 0,
+                    AuraCatalog.BuffRow(effectId), reservation.Flat, reservation.Percent, level, quality,
                     SupportEffectPct: supportEffect, AffectsSelf: affectsSelf);
-                conn.Auras[skillId] = aura;
-                int reserved = RequiredManaWithPetrifiedBlood(conn, conn.PetrifiedBlood.ManaPercent);
+                int reserved = RequiredManaWithPetrifiedBlood(conn, conn.PetrifiedBlood.ManaPercent,
+                    conn.Auras.Values.Append(aura));
                 if (reserved > conn.Pools.Mana)
                 {
-                    conn.Auras.Remove(skillId);
                     Console.WriteLine($"[gateway] {remote} skill 0x{skillId:x4} {name}: needs {reserved} mana reserved, " +
                         $"maximum is {conn.Pools.Mana}");
                     return false;
                 }
-                started = aura;
+                started = aura with { Buff = conn.NextBuff++, SourceBuff = conn.NextBuff++ };
+                conn.Auras[skillId] = started;
                 conn.PlayerMana = (uint)Math.Min(conn.PlayerMana, (uint)(conn.Pools.Mana - reserved));
             }
             conn.Pools = PoolsFor(conn, conn.Pools.Level);
@@ -1068,6 +1101,7 @@ static partial class Game
                 await WhilePaused(conn);
                 if (!Running()) return;
                 double now = conn.Clock.Elapsed.TotalSeconds;
+                using var ordinaryStage = BeginOrdinaryUse(conn);
                 uint cost, lifeCost;
                 using (conn.Performance.Lock(conn.Monsters, "channel"))
                 {
@@ -1158,13 +1192,14 @@ static partial class Game
         uint targetId = 0, int repeat = 0, int? radiusOverride = null, ISet<uint>? once = null, double repeatDelay = 0,
         double radiusMore = 1, int addedChaos = 0)
     {
+        using var offense = new DistillerOffense();
         var paidVaal = SkillsFor(conn).VaalBudget(gem.Effect, gem.Level) is null ? null : conn.VaalUse;
         bool Current() => (cooldownUse?.Current(conn) ?? (actionToken is null || conn.ActionCount == actionToken))
             && (SkillsFor(conn).VaalBudget(gem.Effect, gem.Level) is null
                 || paidVaal is not null && VaalAdmissionCurrent(conn, paidVaal))
             && (channelGeneration is not int generation || ChannelCurrent(conn, skillId, actionToken ?? conn.ActionCount, generation));
         if (!Current()) return;
-        var skillStats = SupportedSkill(conn, skillId).Stats;
+        var skillStats = DistillerInputs(conn, SupportedSkill(conn, skillId).Stats);
         // An attack gem's share of the weapon's damage ("Deals 177.3% of base Attack Damage"): the hit below uses it.
         int effectiveness = SkillsFor(conn).DamageEffectiveness(gem.Effect, gem.Level);
         int Stat(string name) => Stats.Key(name) is uint k ? skillStats.GetValueOrDefault(k) : 0;
@@ -1561,7 +1596,7 @@ static partial class Game
         Cull cull = default)
     {
         if (m.Dead || m.Life == 0) return null;
-        (m.Life, bool starts) = TakeOwnerHitLocked(conn, m, damage, cull, rampageSource, player);
+        (m.Life, bool starts) = TakeOwnerHitLocked(conn, m, damage, cull, rampageSource, player, playerKill: allyAt is null);
         if (allyAt is null) conn.LastEnemyHitAt = m.PlayerHitAt = ProjectileWorldTime(conn);
         if (m.Life == 0) { m.Aggro = false; m.Dead = true; CollectVaalSoulAtDeathLocked(conn, m); }
         TriggerElementalRelicLocked(conn, m, hit: damage > 0, killed: m.Life == 0, allyAt);

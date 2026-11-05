@@ -99,14 +99,28 @@ static partial class Game
                 if (use.SkillId == SkillCatalog.FirstSkillId && ordinaryProjectile is not null)
                 {
                     double duration = WeaponFor(conn).AttackSeconds(CharacterPlayerStats(conn));
-                    if (!TryBeginRangedAttack(conn, at, duration, use.SkillId, use.Slot, out var shot)) continue;
+                    using var paidUse = BeginOrdinaryUse(conn);
+                    (int Action, int X, int Y, SkillCriticalRoll CriticalRoll) shot = default;
+                    int paidEpoch = conn.ProjectileEpoch, paidAction = conn.ActionCount;
+                    bool admitted;
+                    await conn.FlaskBarGate.WaitAsync();
+                    try
+                    {
+                        using (ProjectileMutation(conn))
+                            admitted = paidEpoch == conn.ProjectileEpoch && paidAction == conn.ActionCount && CurrentGameRules
+                                && PayDistillerUseLocked(conn, true,
+                                    () => TryBeginRangedAttack(conn, at, duration, use.SkillId, use.Slot, out shot));
+                    }
+                    finally { conn.FlaskBarGate.Release(); }
+                    if (!admitted) continue;
+                    await PublishFlaskChanges(remote, stream, ciphers, conn);
                     int projectileEpoch;
                     lock (conn.Monsters) projectileEpoch = conn.ProjectileEpoch;
                     // Release work must not block serial input dispatch: resume/move can invalidate a queued echo.
                     _ = ConfirmAndLaunchOrdinaryRanged(remote, stream, ciphers, conn,
                         [.. InstanceProtocol.ActionStarted(PlayerId, shot.X, shot.Y, use.X, use.Y, use.SkillId, use.Slot, use.Flags), .. InstanceProtocol.ActionEnded(PlayerId)],
                         $"0x01ab ranged attack ({ordinaryProjectile}) at ({use.X}, {use.Y}) from ({shot.X}, {shot.Y}) (t={at:0.000})",
-                        (use.X, use.Y), duration, shot.Action, projectileEpoch, ordinaryProjectile, use.Slot, shot.CriticalRoll);
+                        (use.X, use.Y), duration, shot.Action, projectileEpoch, ordinaryProjectile, use.Slot, shot.CriticalRoll!);
                     continue;
                 }
                 // An attack gem (Holy Strike, Ground Slam …) used on the ground with "Always Attack Without Moving" off: a
@@ -126,10 +140,10 @@ static partial class Game
                     if (GroundAttackWalks(here, (use.X, use.Y), WeaponFor(conn).Range))
                     {
                         int walkAction = 0;
-                        if (!TryBeginSkillCooldownUse(conn, use.SkillId, gem.Effect,
+                        var (accepted_approachTicket, approachTicket) = await BeginSkillCooldownUseAsync(conn, use.SkillId, gem.Effect,
                             CooldownFor(conn, gem.Effect, gem.Level, gem.Quality), false,
-                            () => { at = Math.Max(at, ProjectileWorldTime(conn)); walkAction = Interlocked.Increment(ref conn.ActionCount); conn.Walk.Order(use.X, use.Y, at); conn.ChannelSkill = 0; },
-                            out var approachTicket, reserve: false, requestedAt: at)) continue;
+                            () => { at = Math.Max(at, ProjectileWorldTime(conn)); walkAction = Interlocked.Increment(ref conn.ActionCount); conn.Walk.Order(use.X, use.Y, at); conn.ChannelSkill = 0; }, reserve: false, requestedAt: at);
+                        if (!accepted_approachTicket) continue;
                         await Send(remote, stream, ciphers,
                             InstanceProtocol.ActionStarted(PlayerId, here.X, here.Y, use.X, use.Y, use.SkillId, use.Slot, use.Flags),
                             $"0x01ab {gem.Name}: attack-move to ({use.X}, {use.Y}) from ({here.X}, {here.Y}) (t={at:0.000})",
@@ -182,9 +196,11 @@ static partial class Game
                 }
                 if (cast && gem.Name is not null)
                 {
-                    if (!TryBeginSkillCooldownUse(conn, use.SkillId, gem.Effect,
+                    var admission = await BeginSkillCooldownUseAsync(conn, use.SkillId, gem.Effect,
                         CooldownFor(conn, gem.Effect, gem.Level, gem.Quality),
-                        false, StartAction, out cooldownUse, requestedAt: at)) continue;
+                        false, StartAction, requestedAt: at);
+                    cooldownUse = admission.Ticket;
+                    if (!admission.Accepted) continue;
                 }
                 else
                 {

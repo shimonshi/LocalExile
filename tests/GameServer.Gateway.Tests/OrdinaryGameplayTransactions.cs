@@ -11,7 +11,7 @@ using MonsterRarity = GameServer.Core.Protocol.Instance.MonsterRarity;
 
 namespace GameServer.Gateway.Tests;
 
-static class OrdinaryGameplayChecks
+static partial class OrdinaryGameplayChecks
 {
     internal static async Task TornadoNova()
     {

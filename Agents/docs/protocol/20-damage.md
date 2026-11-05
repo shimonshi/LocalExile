@@ -810,6 +810,19 @@ in the non-critical or critical range) and duration are the hit's panel poison r
 captured at the same places as the ignite's: the landed hit already carries the hit's increases and the monster's
 resistance, so it cannot be the base.
 
+The native `combined_poison_duration_on_self` resolvers at `0x142808790` / `0x142808e20` combine raw
+self-duration, all-ailment and damaging-ailment duration sources, including Barkskin and Fortification.
+Their multiplicative bucket uses binary32 percentage units and signed half rounding before the final factor.
+The published combined aliases are outputs, not extra sources.
+The recipient factor applies once when a poison is installed, independently of the engine's expiry-rate clock.
+
+Pathfinder's strongest-poison copy uses one active stack and its remaining duration, rather than summed DPS.
+The local spread model uses 15 cells and recipient immunity, avoidance, self-duration and expiry rate.
+This radius and remaining-duration policy do not establish official-server parity.
+At final poison expiry, the engine rounds a result within `1e-9` below a whole damage point up to that point.
+Live ticks retain their existing floor/carry; larger terminal fractions remain floored.
+This finite tolerance is a local floating-point policy, not an official-server rounding finding.
+
 ## 3a. Impale contacts and reflected damage
 
 `ImpaleStats` resolves unconditional general + attack/spell chance, the attacking weapon's local chance, general

@@ -178,6 +178,7 @@ static partial class Game
         double releaseDelay = 0)
     {
         var c = session.Conn; var gem = GemSkillEffects(c).Single(x => x.Id == body.Actor.Skill);
+        using var proxyUse = BeginOrdinaryUse(c);
         var use = CaptureGemProjectile(c, session, gem.Id, gem, aim, CaptureSkillCriticalRoll(c, gem.Id),
             releaseDelay: releaseDelay, casterOrigin: body.Actor.Position);
         var shot = (ProjectileOffense)use.Payload!;

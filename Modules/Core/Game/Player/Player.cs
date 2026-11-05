@@ -291,7 +291,8 @@ static partial class Game
     // A gem skill's mana cost at the gem's level (its mana_cost stat), paid when the cast starts, plus Petrified
     // Blood's base life cost while it runs and the player is not on Low Life. Lifetap Support replaces the whole
     // mana cost with Life. False when the player lacks the pool it actually uses.
-    internal static bool PayMana(ClientState conn, ushort skillId, out uint cost, out uint lifeCost)
+    internal static bool PayMana(ClientState conn, ushort skillId, out uint cost, out uint lifeCost,
+        uint extraMana = 0, uint extraLife = 0, Func<bool>? validateAdditionalCost = null)
     {
         var own = SupportedSkill(conn, skillId).Stats;
         int Own(string name) => Stats.Key(name) is uint key ? own.GetValueOrDefault(key) : 0;
@@ -315,13 +316,20 @@ static partial class Game
                 cost = 0;
             }
             else life = PetrifiedBlood.LifeCost(conn, (int)Math.Min(cost, int.MaxValue));
-            if (conn.PlayerMana < cost || life > 0 && conn.PlayerLife <= (uint)life) return false;
+            // Caller-prepared costs for this use are already classified as Mana/Life.
+            // Join them after this skill's base conversion; validate the immutable caller plan before ANY debit.
+            ulong joinedMana = (ulong)cost + extraMana, joinedLife = (uint)life + (ulong)extraLife;
+            if (joinedMana > uint.MaxValue || joinedLife > uint.MaxValue) return false;
+            cost = (uint)joinedMana;
+            uint lifeDebit = (uint)joinedLife;
+            if (validateAdditionalCost?.Invoke() == false || conn.PlayerMana < cost
+                || lifeDebit > 0 && conn.PlayerLife <= lifeDebit) return false;
             conn.PlayerMana -= cost;
-            if (life > 0)
+            if (lifeDebit > 0)
             {
-                conn.PlayerLife -= (uint)life;
-                lifeCost = (uint)life;
-                Lifetap.Spend(conn, own, life, conn.Clock.Elapsed.TotalSeconds);
+                conn.PlayerLife -= lifeDebit;
+                lifeCost = lifeDebit;
+                Lifetap.Spend(conn, own, (int)Math.Min(lifeDebit, int.MaxValue), conn.Clock.Elapsed.TotalSeconds);
             }
             ManaSpentLocked(conn, cost, player);
             return true;

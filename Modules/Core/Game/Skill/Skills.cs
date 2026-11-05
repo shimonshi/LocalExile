@@ -15,6 +15,7 @@ static partial class Game
     // refused (GemDisabled).
     internal static IReadOnlyList<GrantedSkill> PlayerSkills(ClientState conn)
     {
+        using var panel = new DistillerOffense(false);
         // One build reads one snapshot of the character's stats, final stats and supported gems: every gem's cast time,
         // hit, crit and panel rows used to recompute them (CharacterPlayerStats, FinalPlayerStats, SupportedSkill) five or
         // six times per gem, 180-270 ms per build in the Debug server, inside the send gate. The snapshot also captures

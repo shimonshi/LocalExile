@@ -214,6 +214,7 @@ static partial class Game
                     name => Stats.Key(name) is uint key && rawOverrides.TryGetValue(key, out int value) ? value : null,
                     OnLowLife(stats)))
                 .Concat(FlaskCharges.GainStats(Get))
+                .Concat(new[] { OrdinaryPathfinderRules.PoisonDuration(Get) })
                 .Concat(new[] { ("energy_shield_recovery_per_minute", (int)Math.Round(EnergyShield.PredictionPerMinute(pools.EnergyShield, Get, inputs.EnergyShieldRecharging) + inputs.LifeRegenerationToEnergyShield)),
                     ("total_energy_shield_recovery_per_minute_from_regeneration", (int)Math.Round(EnergyShield.RegenPerMinute(pools.EnergyShield, Get) + inputs.LifeRegenerationToEnergyShield)),
                     ("energy_shield_recharge_rate_per_minute", (int)Math.Round(EnergyShield.RechargePerMinute(pools.EnergyShield, Get))),
