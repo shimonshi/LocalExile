@@ -336,6 +336,12 @@ static class FlaskGrounds
             lock (_lock) return [.. _profane.Keys];
         }
 
+        public bool HoldsBuff(uint monster, ushort instance)
+        {
+            lock (_lock) return (_blinded.TryGetValue(monster,out ushort blind) && blind == instance)
+                || (_profane.TryGetValue(monster,out var profane) && profane.Buff == instance);
+        }
+
         /// <summary>Marks the player on consecrated ground or not: the buff id to add or to remove, or null.</summary>
         public (ushort Buff, bool Added)? SetConsecrated(bool on, Func<ushort> nextBuff)
         {

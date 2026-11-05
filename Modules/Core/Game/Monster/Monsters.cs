@@ -71,6 +71,7 @@ static partial class Game
         MonsterModSet? extraMods = null, bool scripted = false)
     {
         uint id;
+        ushort? rarityBuff = null;
         // Under the lock the projectile visuals and ground art take ids under: minions spawn from their own loop.
         lock (conn.Monsters)
         {
@@ -233,7 +234,11 @@ static partial class Game
         if (MonsterRarityBuffs.Row(rarity) is ushort glow)
         {
             ushort buff;
-            lock (conn.Monsters) buff = conn.NextBuff++;
+            lock (conn.Monsters)
+            {
+                rarityBuff = buff = conn.NextBuff++;
+                if (conn.Monsters.TryGetValue(id,out var target)) target.NativeBuffReservations.Add(buff);
+            }
             await Send(remote, stream, ciphers, InstanceEntities.AddBuff(id, buff, glow), !log ? null :
                 $"0x01c1 monster 0x{id:x} buff {MonsterRarityBuffs.Id(glow)} (BuffDefinitions row {glow})");
         }
@@ -262,6 +267,8 @@ static partial class Game
                 KingGrace = !friendly && KingInMists.IsBoss(variety),
                 FetishGrace = !friendly && KingInMists.IsFetish(variety),
             }, emerge, waits);
+            if (rarityBuff is ushort held && conn.Monsters.TryGetValue(id,out var current))
+                current.NativeBuffReservations.Add(held);
             if (owned is not null && conn.Monsters.TryGetValue(id, out var added)) owned(id, added);
         }
         if (waits) WatchBuried(remote, stream, ciphers, conn);

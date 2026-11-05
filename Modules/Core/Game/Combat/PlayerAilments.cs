@@ -5,6 +5,14 @@ using GameServer.Core.World;
 
 static partial class Game
 {
+    internal static void ReconcileLivePlayerAilments(ClientState conn, Func<string, int> get)
+    {
+        double now = ResourceEffectsTime(conn);
+        double previous = conn.ElementalAilments.ActionFactor(now);
+        conn.ElementalAilments.Reconcile(get);
+        // Uses the established action cancellation/freeze handler. Its speed read does not rebuild CharacterPlayerStats.
+        PlayerAilmentsChangedLocked(conn, previous, now);
+    }
     internal static void ApplyPlayerAilmentsLocked(ClientState conn, DamagePacket baseHit, DamagePacket taken,
         bool critical, bool blocked, double now, IReadOnlyDictionary<uint, int> stats, uint? source = null)
     {
@@ -38,7 +46,7 @@ static partial class Game
             conn.ChannelSkill = 0;
             conn.Walk.Pause(now, frozenUntil - now);
         }
-        if (previousAction != conn.ElementalAilments.ActionFactor(now)) conn.ApplyMovementSpeed();
+        if (previousAction != conn.ElementalAilments.ActionFactor(now)) conn.ApplyMovementSpeedAt(now);
     }
 
     internal static int AdvancePlayerAilmentsLocked(ClientState conn, double from, double until,
@@ -61,7 +69,7 @@ static partial class Game
             // Commit the mode outcome inside lethal damage, before disconnects or network writes can intervene.
             RecordHardcoreDeath(conn);
         }
-        if (previousAction != conn.ElementalAilments.ActionFactor(until)) conn.ApplyMovementSpeed();
+        if (previousAction != conn.ElementalAilments.ActionFactor(until)) conn.ApplyMovementSpeedAt(until);
         return damage;
     }
 
@@ -112,7 +120,7 @@ static partial class Game
     internal static double PlayerActionFactorFrom(ClientState conn, Func<string, int> get)
     {
         double extra = get("has_tailwind") == 0 ? 0 : Math.Floor(8 * Math.Max(0, 1 + get("tailwind_effect_on_self_+%") / 100d)) - 8;
-        double factor = conn.ElementalAilments.TotalActionFactor(conn.Clock.Elapsed.TotalSeconds, get("action_speed_-%") - extra)
+        double factor = conn.ElementalAilments.TotalActionFactor(ResourceEffectsTime(conn), get("action_speed_-%") - extra)
             * Math.Max(.01, 1 + get("temporal_chains_action_speed_+%_final") / 100d);
         return get("action_speed_cannot_be_reduced_below_base") != 0 ? Math.Max(1, factor) : factor;
     }

@@ -55,11 +55,11 @@ static partial class Game
     static List<byte[]> ShowDotBuffLocked(ClientState conn, uint id, MonsterIgnites set, ushort row, double now)
     {
         var packets = new List<byte[]>();
-        if (set.Buff is ushort old) packets.Add(InstanceEntities.RemoveBuff(id, old));
+        if (set.Buff is ushort old) packets.Add(conn.TargetBuffOutputs.Retain(conn,id,old,InstanceEntities.RemoveBuff(id,old)));
         ushort buff = conn.NextBuff++;
         set.Buff = buff;
-        packets.Add(InstanceEntities.AddBuff(id, buff, row, PlayerId,
-            u68: BitConverter.SingleToUInt32Bits((float)set.RemainingBase(now))));
+        packets.Add(conn.TargetBuffOutputs.Retain(conn,id,buff,InstanceEntities.AddBuff(id, buff, row, PlayerId,
+            u68: BitConverter.SingleToUInt32Bits((float)set.RemainingBase(now)))));
         return packets;
     }
 
@@ -124,11 +124,19 @@ static partial class Game
 
     // Sends a hit's ignited or bleeding buff packets (IgniteOnHitLocked, BleedOnHitLocked) after the lock.
     static async Task SendDotBuff(string remote, NetworkStream stream, ConnectionCiphers ciphers, List<byte[]>? packets,
-        string log)
+        string? log)
     {
         if (packets is null) return;
-        for (int i = 0; i < packets.Count; i++)
-            await Send(remote, stream, ciphers, packets[i], i < packets.Count - 1 ? null : "0x01c1 " + log);
+        try
+        {
+            for (int i = 0; i < packets.Count; i++)
+                await Send(remote, stream, ciphers, packets[i], i < packets.Count - 1 || log is null ? null : "0x01c1 " + log);
+        }
+        catch
+        {
+            foreach (var packet in packets) TargetBuffOutputLedger.Discard(packet);
+            throw;
+        }
     }
 
     // One tick of the ignited monsters (RunPlayerTick): the strongest ignite's fire damage through the monster's
@@ -141,15 +149,16 @@ static partial class Game
 
     // One tick of a strongest-only set (ignites, bleeds: <paramref name="of"/>), <paramref name="factor"/> the monster's
     // mitigation of it, <paramref name="aggravated"/> the strongest aggravated bleed's extra share (MonsterIgnites.Advance).
-    static async Task TickStrongestDots(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn,
-        Func<SpawnedMonster, MonsterIgnites> of, Func<SpawnedMonster, double, double> factor, string died,
-        Func<SpawnedMonster, double, double>? aggravated = null)
+    internal static (List<(uint Id,SpawnedMonster M,uint Life,int Damage)> Hits,List<byte[]> Buffs) PrepareStrongestDotTick(
+        string remote,NetworkStream stream,ConnectionCiphers ciphers,ClientState conn,
+        Func<SpawnedMonster,MonsterIgnites> of,Func<SpawnedMonster,double,double> factor,
+        Func<SpawnedMonster,double,double>? aggravated = null)
     {
         var hits = new List<(uint Id, SpawnedMonster M, uint Life, int Damage)>();
-        var ended = new List<(uint Id, ushort Buff)>();
+        var packets = new List<byte[]>();
         using (ProjectileMutation(conn))
         {
-            if (conn.Closed || conn.LeavingArea) return;
+            if (conn.Closed || conn.LeavingArea) return (hits,packets);
             double now = ProjectileWorldTime(conn);
             foreach (var (id, m) in conn.Monsters)
             {
@@ -158,23 +167,30 @@ static partial class Game
                 int damage = 0;
                 if (m.Dead || m.Life == 0) set.Clear();
                 else damage = set.Advance(now, factor(m, now), aggravated?.Invoke(m, now) ?? 0);
-                if (!set.Burning && set.Buff is ushort gone) { ended.Add((id, gone)); set.Buff = null; }
+                if (!set.Burning && set.Buff is ushort gone) { packets.Add(conn.TargetBuffOutputs.Retain(conn,id,gone,InstanceEntities.RemoveBuff(id,gone))); set.Buff = null; }
                 if (damage == 0) continue;
-                (m.Life, bool stageStarts) = TakeOwnerDamageLocked(conn, m, damage);
+                (m.Life, bool stageStarts) = TakeOwnerDamageLocked(conn, m, damage, playerKill:set.LastTickPlayerOwned);
                 m.Aggro = m.Life > 0;
                 if (m.Life == 0)
                 {
                     m.Dead = true;
                     CollectVaalSoulAtDeathLocked(conn, m);
                     set.Clear(burnt: true);
-                    if (set.Buff is ushort buff) { ended.Add((id, buff)); set.Buff = null; }
+                    if (set.Buff is ushort buff) { packets.Add(conn.TargetBuffOutputs.Retain(conn,id,buff,InstanceEntities.RemoveBuff(id,buff))); set.Buff = null; }
                 }
                 hits.Add((id, m, m.Life, damage));
                 if (stageStarts) CommitBossStage(remote, stream, ciphers, conn, id, m, now);
             }
         }
-        foreach (var (id, buff) in ended)
-            await Send(remote, stream, ciphers, InstanceEntities.RemoveBuff(id, buff), null);
+        return (hits,packets);
+    }
+
+    static async Task TickStrongestDots(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn,
+        Func<SpawnedMonster, MonsterIgnites> of, Func<SpawnedMonster, double, double> factor, string died,
+        Func<SpawnedMonster, double, double>? aggravated = null)
+    {
+        var (hits,packets) = PrepareStrongestDotTick(remote,stream,ciphers,conn,of,factor,aggravated);
+        await SendDotBuff(remote,stream,ciphers,packets,null);
         foreach (var (id, m, life, damage) in hits)
         {
             if (life == 0)
@@ -188,7 +204,7 @@ static partial class Game
             }
             await Send(remote, stream, ciphers, InstanceProtocol.LifeUpdate(id, life),
                 life == 0 ? $"0x01b1 monster 0x{id:x} ({m.Label}) {died}" : null);
-            if (life == 0) await MonsterKilled(remote, stream, ciphers, conn, id, m);
+            if (life == 0) await MonsterKilled(remote, stream, ciphers, conn, id, m, byMinion:!of(m).LastTickPlayerOwned);
         }
     }
 }

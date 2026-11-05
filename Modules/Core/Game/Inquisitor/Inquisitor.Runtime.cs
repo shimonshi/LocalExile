@@ -69,8 +69,10 @@ static partial class Game
         InquisitorOffense.FanaticismModifiers modifiers)
     {
         int Get(string n) => Stats.Key(n) is uint k ? player.GetValueOrDefault(k) : 0;
-        return (int)Math.Clamp(decimal.Floor(Math.Max(0, basis) * Math.Max(0m, 100m - Get("base_mana_cost_-%"))
-            * Math.Max(0m, 100m + Get("mana_cost_+%")) * modifiers.CostFactor / 10000m), 0, int.MaxValue);
+        if (new[] { "no_cost", "virtual_no_cost", "skill_no_cost_or_reservation" }.Any(n => Get(n) != 0)) return 0;
+        return (int)OrdinaryHierophantRules.ManaCost((uint)Math.Clamp(decimal.Floor(Math.Max(0, basis)
+            * Math.Max(0m, 100m - Get("base_mana_cost_-%")) * Math.Max(0m, 100m + Get("mana_cost_+%"))
+            * modifiers.CostFactor / 10000m), 0, int.MaxValue), Get);
     }
 
     internal static void ClearInquisitor(ClientState conn)

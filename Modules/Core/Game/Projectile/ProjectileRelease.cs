@@ -124,7 +124,7 @@ static partial class Game
     {
         if (use.Payload is not ProjectileOffense { ClientPredicted: true }) return use;
         using var offense = new DistillerOffense();
-        var player = CharacterPlayerStats(conn);
+        var player = HierophantOffenseStats(conn);
         var own = DistillerInputs(conn, SupportedSkill(conn, skillId).Stats);
         int Player(string key) => Stats.Key(key) is uint k ? player.GetValueOrDefault(k) : 0;
         int Own(string key) => Stats.Key(key) is uint k ? own.GetValueOrDefault(k) : 0;
@@ -227,7 +227,7 @@ static partial class Game
         ProjectileVector? casterOrigin = null)
     {
         using var offense = new DistillerOffense();
-        var player = CharacterPlayerStats(conn);
+        var player = HierophantOffenseStats(conn);
         var own = DistillerInputs(conn, SupportedSkill(conn, skillId).Stats);
         var merged = MergeSkillStats(player, own);
         int Get(string key) => Stats.Key(key) is uint k ? merged.GetValueOrDefault(k) : 0;

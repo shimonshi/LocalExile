@@ -319,7 +319,7 @@ static partial class Game
         SkillCatalog.Unarmed? weapon = null)
     {
         var gem = SupportedSkill(conn, skillId);
-        var caster = FinalPlayerStats(conn).ToDictionary(kv => kv.Item1, kv => kv.Item2);
+        var caster = HierophantFinalOffense(conn);
         var stats = MergeSkillStats(caster, DistillerInputs(conn, gem.Stats));
         int Get(string name) => name == "is_area_damage" && area is bool isArea ? isArea ? 1 : 0
             : Stats.Key(name) is uint k ? stats.GetValueOrDefault(k) : 0;

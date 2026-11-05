@@ -316,7 +316,7 @@ static partial class Game
                 cost = 0;
             }
             else life = PetrifiedBlood.LifeCost(conn, (int)Math.Min(cost, int.MaxValue));
-            // Caller-prepared costs for this use are already classified as Mana/Life.
+            // Caller-prepared costs (e.g. Recall's recalled-brand share) are already classified as Mana/Life.
             // Join them after this skill's base conversion; validate the immutable caller plan before ANY debit.
             ulong joinedMana = (ulong)cost + extraMana, joinedLife = (uint)life + (ulong)extraLife;
             if (joinedMana > uint.MaxValue || joinedLife > uint.MaxValue) return false;
@@ -324,6 +324,7 @@ static partial class Game
             uint lifeDebit = (uint)joinedLife;
             if (validateAdditionalCost?.Invoke() == false || conn.PlayerMana < cost
                 || lifeDebit > 0 && conn.PlayerLife <= lifeDebit) return false;
+            CaptureOrdinarySkillUse(conn);
             conn.PlayerMana -= cost;
             if (lifeDebit > 0)
             {
@@ -342,7 +343,7 @@ static partial class Game
     internal static int? CastMs(ClientState conn, int effect, ushort skillId = 0)
     {
         var own = skillId == 0 ? new Dictionary<uint, int>() : SupportedSkill(conn, skillId).Stats;
-        var player = CharacterPlayerStats(conn);
+        var player = HierophantOffenseStats(conn);
         int speed = CastSpeedPct(player);
         if (MarkCatalog.Find(effect) is not null) speed += MarkStat(MergeSkillStats(player, own), "mark_skill_cast_speed_+%");
         if (Stats.Key("base_cast_speed_+%") is uint k) speed += own.GetValueOrDefault(k);
@@ -534,6 +535,7 @@ static partial class Game
             await TickPassiveAuras(remote, stream, ciphers, conn);
             if (!PlayerUpdatesCurrent(conn, updates)) return;
             await SendBlind(remote, stream, ciphers, conn);
+            await Send(remote, stream, ciphers, [], null, atGate: () => HierophantPresentation(conn));
             if (!PlayerUpdatesCurrent(conn, updates)) return;
             await PushOutOfCollision(remote, stream, ciphers, conn);
             if (!PlayerUpdatesCurrent(conn, updates)) return;
@@ -623,6 +625,8 @@ static partial class Game
     internal static async Task RunResourceRecovery(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn, PlayerUpdatesState updates)
     {
         double lifeCarry = 0, manaCarry = 0, burnCarry = 0, trapCarry = 0, flaskCarry = 0, last = updates.Schedule.Now(conn);
+        double recoverySurgeUntil = 0;
+        int recoveryHierophantTotems = 0;
         double ratesAt = double.NegativeInfinity, lifeRate = 0, manaRate = 0, burnPerSecond = 0;
         bool zealotsOath = false, convertLifeRegen = false;
         double nextVitalsSave = last + 5;
@@ -667,7 +671,11 @@ static partial class Game
                 double seconds = now - last;
                 if (seconds <= 0) continue;
                 // Stat aggregation stays at the old 250 ms cadence, rather than rebuilding the panel 60 times/s.
-                if (now - ratesAt >= PlayerTickMs / 1000.0 || rf != cachedRf)
+                double previousManaRate = manaRate, previousSurgeUntil = recoverySurgeUntil;
+                double surgeUntil = HierophantOf(conn).Until;
+                int hierophantTotems = IsOrdinaryHierophant(conn) ? conn.Totems.Living(now).Count() : 0;
+                if (now - ratesAt >= PlayerTickMs / 1000.0 || rf != cachedRf || surgeUntil != recoverySurgeUntil || hierophantTotems != recoveryHierophantTotems
+                    || last < surgeUntil && now >= surgeUntil)
                 {
                     recoveryStats = CharacterPlayerStatsCore(conn, out lifeRate);
                     manaRate = PanelStats.ManaPerMinute(
@@ -677,8 +685,13 @@ static partial class Game
                     convertLifeRegen = zealotsOath && EnergyShield.ConversionAllowed(RecoveryStat);
                     burnPerSecond = rf is null ? 0 : DamageModel.Mitigate((conn.PlayerMaxLife * (double)rf.BurnPctPerMinute + conn.Pools.EnergyShield * (double)rf.EnergyShieldBurnPctPerMinute) / 6000.0,
                         Resistance(conn, DamageType.Fire), MaxResistance(conn, DamageType.Fire));
-                    (ratesAt, cachedRf) = (now, rf);
+                    (ratesAt, cachedRf) = (now, rf); recoverySurgeUntil = surgeUntil; recoveryHierophantTotems = hierophantTotems;
                 }
+                // Preserve the old regeneration through the exact Surge expiry inside this resource interval.
+                // Other source changes retain the existing resource writer's interval-sampling policy.
+                double manaRegeneration = manaRate * seconds;
+                if (last < previousSurgeUntil && previousSurgeUntil <= now)
+                    manaRegeneration += (previousManaRate - manaRate) * (previousSurgeUntil - last);
                 double recoveryFrom = last;
                 double life, mana;
                 (life, mana, ended) = AdvanceFlaskRecovery(conn, last, now);
@@ -757,7 +770,7 @@ static partial class Game
                         RecordHardcoreDeath(conn);
                     }
                     bool survived = CompleteResourceRecoveryLocked(conn, recoveryFrom, now, recoveryStats,
-                        mana + manaRate * seconds + leeched.Mana, manaBefore, manaCap, ref manaCarry);
+                        mana + manaRegeneration + leeched.Mana, manaBefore, manaCap, ref manaCarry);
                     lifeAfter = conn.PlayerLife;
                     if (!survived)
                     {
@@ -810,7 +823,13 @@ static partial class Game
             if (rf is not null && lifeAfter == 1 && conn.EnergyShield.Current == 0)
                 await EndRighteousFire(remote, stream, ciphers, conn, "one life and no energy shield");
             if (!PlayerUpdatesCurrent(conn, updates)) return;
-            if ((lifeAfter != lifeBefore || instantLifeChanged) && ailmentDeathEpoch is null) await Send(remote, stream, ciphers, InstanceProtocol.LifeUpdate(PlayerId, lifeAfter), null);
+            if ((lifeAfter != lifeBefore || instantLifeChanged) && ailmentDeathEpoch is null)
+                await Send(remote, stream, ciphers, [], null, atGate: () =>
+                {
+                    lock (conn.Monsters)
+                        return !conn.Closed && !conn.LeavingArea && conn.PlayerLife > 0
+                            ? InstanceProtocol.LifeUpdate(PlayerId, conn.PlayerLife) : null;
+                });
             if (!PlayerUpdatesCurrent(conn, updates)) return;
             if (manaAfter != manaBefore || instantManaChanged) await SendPlayerMana(remote, stream, ciphers, conn, null);
             if (!PlayerUpdatesCurrent(conn, updates)) return;

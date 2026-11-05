@@ -83,14 +83,14 @@ static partial class Game
                     pending.Packets.Add(new(change.Added
                         ? InstanceEntities.AddBuff(id, change.Buff, FlaskGrounds.BlindedBuffRow, PlayerId)
                         : InstanceEntities.RemoveBuff(id, change.Buff),
-                        $"0x{(change.Added ? "01c1" : "01c2")} monster 0x{id:x} {(change.Added ? "blinded in the smoke cloud" : "no longer blinded")}"));
+                        $"0x{(change.Added ? "01c1" : "01c2")} monster 0x{id:x} {(change.Added ? "blinded in the smoke cloud" : "no longer blinded")}", TargetBuff: (id,change.Buff)));
                 bool aliveMonster = monster.Hostile && !monster.Dead && monster.Life > 0;
                 bool inProfane = aliveMonster && state.Covers(FlaskGrounds.Kind.ProfaneGround, monster.Walk.Position(now));
                 if (state.SetProfane(id, inProfane, aliveMonster, now, () => conn.NextBuff++) is { } profane)
                     pending.Packets.Add(new(profane.Added
                         ? InstanceEntities.AddBuff(id, profane.Buff, FlaskGrounds.ProfaneBuffRow, PlayerId)
                         : InstanceEntities.RemoveBuff(id, profane.Buff),
-                        $"profane ground monster 0x{id:x}: {profane.Added}"));
+                        $"profane ground monster 0x{id:x}: {profane.Added}", TargetBuff: (id,profane.Buff)));
             }
             InquisitorGroundStep(conn, now);
             state.StopTickerIfIdle();

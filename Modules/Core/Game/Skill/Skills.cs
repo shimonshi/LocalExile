@@ -238,6 +238,7 @@ static partial class Game
         AddTotemAuraStats(conn, stats);
         WithRage(conn, stats);
         WithBlind(conn, stats);
+        AddOrdinaryHierophantSources(conn, stats);
         // The character panel's sums of base forms (PanelStats); a stat /set_stat set keeps its value.
         ActorScale.Project(stats, rawOverrides, CosmeticScaleSources(conn));
         int Get(string name) => Stats.Key(name) is uint k ? stats.GetValueOrDefault(k) : 0;
@@ -282,7 +283,7 @@ static partial class Game
         stats = StatSnapshotTailFor(conn, tailInputs with { Stats = stats }, StatSnapshotStage.Offence);
         // Keep both side effects at their original positions, including on cache hits. Derived immunity and action-speed
         // floors are resolved before reading the final stage's live inputs.
-        conn.ElementalAilments.Reconcile(Get);
+        if (HierophantOffenseRead.Value is null) ReconcileLivePlayerAilments(conn, Get);
         var ailments = conn.ElementalAilments.Snapshot(conn.Clock.Elapsed.TotalSeconds);
         var finalInputs = tailInputs with
         {
@@ -507,7 +508,13 @@ static partial class Game
             SkillAttackTiming.Apply(SkillsFor(conn), effect, level, stats);
             // The client reads the final duration, not its base: its own Spark sparks live skill_effect_duration ms
             // (0x141b35b7a) and without it died on their first tick, so none was drawn.
-            if (Stats.Key("base_skill_effect_duration") is uint baseDurationKey && own.GetValueOrDefault(baseDurationKey) > 0
+            if (OrdinaryBrand(effect))
+            {
+                var durations = BrandDurationFor(conn, playerStats, own, panelSources);
+                if (Stats.Key(BrandDurationModifiers.Primary) is uint attached) stats[attached] = durations.AttachedMilliseconds;
+                if (Stats.Key(BrandDurationModifiers.Secondary) is uint detached) stats[detached] = durations.DetachedMilliseconds;
+            }
+            else if (Stats.Key("base_skill_effect_duration") is uint baseDurationKey && own.GetValueOrDefault(baseDurationKey) > 0
                 && Stats.Key("skill_effect_duration") is uint durationKey)
                 stats[durationKey] = (int)Math.Round(1000 * SkillDurationModifiers.Seconds(own[baseDurationKey],
                     name => Stats.Key(name) is uint k ? playerStats.GetValueOrDefault(k) : 0,
@@ -878,6 +885,14 @@ static partial class Game
     internal static string? ActorSkillDisabledCore(ClientState conn, int effect, ushort? skillId)
     {
         if (OwnAuraSkillRestricted(conn, effect, skillId)) return "own aura skills are disabled";
+        if (skillId is ushort id && SkillsFor(conn).IsSpell(effect))
+        {
+            var skill = SupportedSkill(conn, id);
+            // Use applied instance metadata and the pure executor predicate, never the recursive engine signature.
+            if (skill.Effect == effect && skill.Supports.Any(s => s.Effect.Id == "SupportSpellTotem")
+                && !HierophantSpellTotemPayload(conn, effect))
+                return "this skill cannot currently be used with Spell Totem Support";
+        }
         // Devout of Gruthkul: every spell, auras and triggered spells too (wiki: they cannot be cast or triggered).
         if (CastingSpell(conn, effect) && SpellsDisabled(conn)) return "spells are disabled";
         return SkillsFor(conn).IsWarcry(effect) && Stats.Key("your_warcry_skills_are_disabled") is uint key

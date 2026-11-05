@@ -29,6 +29,8 @@ readonly record struct SingleUseCooldown(int BaseMilliseconds, int RecoveryPerce
         // Warcry recovery is an increase for the Warcry type (PoB ModParser); the client adds it when is_warcry (0x14281dfa0).
         if (skills.IsWarcry(effect))
             recovery += (long)Get(player, "warcry_cooldown_speed_+%") + Get(own, "warcry_cooldown_speed_+%");
+        if (skills.EffectId(effect) == "BrandRecall")
+            recovery += (long)Get(player, "sigil_recall_cooldown_speed_+%") + Get(own, "sigil_recall_cooldown_speed_+%");
         // Native construction adds 100 in a signed i32. Zero recovery stalls rather than reversing the clock.
         return new(ms, (int)Math.Clamp(recovery, -100, int.MaxValue - 100));
     }
@@ -60,6 +62,7 @@ sealed class SingleUseCooldownState(double at, double rate, double remainingBase
     }
 
     public bool Ready => RemainingBaseMilliseconds <= 1e-6;
+    public bool ReadyAt(double now) => RemainingBaseMilliseconds - Math.Max(0,now-lastAt)*1000*Rate <= 1e-6;
     public double RemainingSeconds => Ready ? 0 : Rate > 0 ? RemainingBaseMilliseconds / (1000 * Rate) : double.PositiveInfinity;
     public bool TryUse(double now, SingleUseCooldown plan)
     {

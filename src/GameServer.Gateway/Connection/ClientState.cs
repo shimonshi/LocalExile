@@ -244,6 +244,8 @@ sealed class SpawnedMonster(string label, PlayerWalk walk, int aggroRange, int s
     public double WitherShownUntil;
     public ushort WitherBuff;
     public readonly Dictionary<ushort, ushort> PlayerAuras = [];
+    // Intrinsic/encounter visuals have no timed-debuff record; reserve their IDs for this monster's lifetime.
+    public readonly HashSet<ushort> NativeBuffReservations = [];
     public (int All, int Elemental) TakenFromPlayer;
     // Pride's more Physical Damage taken, ramped by the time this monster has stayed in the aura (EnemyDebuffsTick).
     public double PrideSince = double.NaN;
@@ -709,9 +711,15 @@ sealed partial class ClientState(AreaLayout layout, uint ticket, uint seed)
     public volatile bool Phasing;
     /// <summary>The next buff instance (S→C 0x1c1). It wraps back to 1 below the monster ailments' fixed instances
     /// (MonsterElementalAilments.Instance) and never hands out 0.</summary>
+    // Brand output may wait at the send gate. Other producers must not reuse its queued or shown IDs on wrap.
+    internal readonly System.Collections.Concurrent.ConcurrentDictionary<ushort, object> ReservedBrandBuffs = new();
     public ushort NextBuff
     {
-        get => nextBuff;
+        get
+        {
+            while (ReservedBrandBuffs.ContainsKey(nextBuff)) NextBuff = (ushort)(nextBuff + 1);
+            return nextBuff;
+        }
         set => nextBuff = value is 0 or >= MonsterElementalAilments.FirstInstance ? (ushort)1 : value;
     }
     ushort nextBuff = 1;

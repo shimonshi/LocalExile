@@ -23,7 +23,7 @@ sealed class PlayerElementalAilments
             expiryRate = rate;
         }
     }
-    double actionFloor, actionCeiling = double.PositiveInfinity, freezeEffect = 1;
+    double actionFloor, actionCeiling = double.PositiveInfinity, freezeEffect = 1, chillEffect = 1, shockEffect = 1;
     bool chillReversed, unaffectedByShock, unaffectedByIgnite;
 
     public (bool Ignite, int Chill, bool Freeze, int Shock) Snapshot(double now) =>
@@ -36,7 +36,7 @@ sealed class PlayerElementalAilments
     public double Magnitude(Kind kind, double now)
     {
         lock (effects) return effects.Where(e => e.Kind == kind && e.From <= now && now < e.Until)
-            .Select(e => e.Magnitude).DefaultIfEmpty().Max();
+            .Select(e => Effective(e.Kind, e.Magnitude)).DefaultIfEmpty().Max();
     }
     /// <summary>When the freeze on the player ends; <paramref name="now"/> without one.</summary>
     public double FreezeUntil(double now)
@@ -57,6 +57,12 @@ sealed class PlayerElementalAilments
         return Math.Min(actionCeiling, Math.Max(actionFloor, 1 + change / 100));
     }
 
+    double Effective(Kind kind, double magnitude) => kind switch
+    {
+        Kind.Chill => Math.Min(30, Math.Floor(magnitude * chillEffect)),
+        Kind.Shock => Math.Min(50, Math.Floor(magnitude * shockEffect)),
+        _ => magnitude,
+    };
     public double ActionFactor(double now) => TotalActionFactor(now, 0);
     // Unaffected by Shock (PoB SelfShockEffect 100% less): the shock stays on the player and in is_shocked, with no effect.
     // increasedPct: the hit's other increased damage taken (from a Blinded enemy), additive with the shock's.
@@ -72,7 +78,10 @@ sealed class PlayerElementalAilments
         lock (effects)
         {
             effects.RemoveAll(e => Immune(e.Kind, get));
-            freezeEffect = Math.Max(0, 1 + get("base_frozen_effect_on_self_+%") / 100.0);
+            int surge = get("has_arcane_surge") == 0 ? 0 : get("non_damaging_ailment_effect_+%_on_self_while_you_have_arcane_surge");
+            freezeEffect = Math.Max(0, 1 + ((double)get("base_frozen_effect_on_self_+%") + surge) / 100);
+            chillEffect = Math.Max(0, 1 + ((double)get("chill_effectiveness_on_self_+%") + surge) / 100);
+            shockEffect = Math.Max(0, 1 + ((double)get("shocked_effect_on_self_+%") + surge) / 100);
             unaffectedByShock = get("unaffected_by_shock") != 0;
             unaffectedByIgnite = get("unaffected_by_ignite") != 0;
             actionFloor = get("action_speed_cannot_be_reduced_below_base") != 0
@@ -97,14 +106,12 @@ sealed class PlayerElementalAilments
             double lightning = taken[DamageType.Lightning].Min / maxLife;
             // Changing Seasons (all_damage_taken_can_chill): every type of the hit's damage counts toward its chill.
             double chilling = get("all_damage_taken_can_chill") != 0 ? taken.MinTotal / maxLife : cold;
-            double chill = Math.Min(30, Math.Floor(50 * Math.Pow(chilling, .4)
-                * Math.Max(0, 1 + get("chill_effectiveness_on_self_+%") / 100.0)));
-            if (chill >= 5) Add(Kind.Chill, chill, 2);
+            double chill = 50 * Math.Pow(chilling, .4);
+            if (Effective(Kind.Chill, chill) >= 5) Add(Kind.Chill, chill, 2);
             if (!critical) return;
             Add(Kind.Freeze, 100, Math.Min(3, 6 * cold));
-            double shock = Math.Min(50, Math.Floor(50 * Math.Pow(lightning, .4)
-                * Math.Max(0, 1 + get("shocked_effect_on_self_+%") / 100.0)));
-            if (shock >= 5) Add(Kind.Shock, shock, 2);
+            double shock = 50 * Math.Pow(lightning, .4);
+            if (Effective(Kind.Shock, shock) >= 5) Add(Kind.Shock, shock, 2);
         }
     }
 
@@ -124,10 +131,7 @@ sealed class PlayerElementalAilments
         lock (effects)
         {
             Reconcile(get);
-            if (kind is Kind.Chill or Kind.Shock)
-                magnitude = Math.Min(kind == Kind.Chill ? 30 : 50, Math.Floor(magnitude * Math.Max(0, 1 + get(kind == Kind.Chill
-                    ? "chill_effectiveness_on_self_+%" : "shocked_effect_on_self_+%") / 100.0)));
-            if (kind is not (Kind.Chill or Kind.Shock) || magnitude >= 5) AddLocked(kind, magnitude, seconds, now, get, random);
+            if (kind is not (Kind.Chill or Kind.Shock) || Effective(kind, magnitude) >= 5) AddLocked(kind, magnitude, seconds, now, get, random);
         }
     }
 

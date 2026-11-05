@@ -275,6 +275,18 @@ def use_item_packet(request):
     return list(struct.pack(">HII", 0x58, inventory, item))
 
 
+
+def socket_gem_packet(request, remove=False):
+    """Ordinary C->S socket0x30 / unsocket0x2f (13-items.md), held-gem/cursor semantics unchanged."""
+    inventory, item, socket = request.get("inventoryId"), request.get("id"), request.get("socket")
+    for value in (inventory, item):
+        if isinstance(value, bool) or not isinstance(value, int) or not 0 < value <= 0xffffffff:
+            raise ValueError("gem socket command needs positive uint32 inventoryId and id")
+    if isinstance(socket, bool) or not isinstance(socket, int) or not 0 <= socket < 6:
+        raise ValueError("gem socket command needs a zero-based socket index (0-5)")
+    return list(struct.pack(">HIII", 0x2f if remove else 0x30, inventory, item, socket) + bytes(3 if remove else 2))
+
+
 def pantheon_packet(request):
     """C->S 0x1ee (3 bytes, the Pantheon panel; the later acts' Pantheon steps): choose a Pantheon god, u8 =
     PantheonPanelLayout row + 1 (the request names the 0-based `row`); the row's IsMajorGod says whether it is the major
@@ -825,6 +837,8 @@ class ClientControl:
         if command == "inventory:place":
             inventory, x, y = int(request["inventoryId"]), int(request.get("x",0)), int(request.get("y",0))
             return self.rpc("interaction",bytes=list(struct.pack(">HIIIBBBB",0x2a,inventory,x,y,0,3,0,0)))
+        if command in ("gem:socket", "gem:unsocket"):
+            return self.rpc("interaction", bytes=socket_gem_packet(request, remove=command == "gem:unsocket"))
         if command == "stash:deposit":
             return {**self.rpc("interaction", bytes=stash_deposit_packet(request)), "id": request["id"]}
         if command == "item:use":

@@ -18,6 +18,7 @@ static partial class Game
         var conn = session.Conn;
         double now = contact.At / (double)ProjectileRuntime.QuantaPerSecond;
         conn.LastEnemyHitAt = now;
+        OrdinaryHierophantSpellHit(conn, CharacterPlayerStats(conn), true, shot.Spell, true);
         uint id = contact.Target.Id;
         var random = contact.Projectile.ReactionRandomSource;
         if (hit.Life == 0)
@@ -45,6 +46,12 @@ static partial class Game
         if (critical) CommitProjectileCritFlasks(session, now, random);
         if (hit.Life == 0) CommitProjectileKill(session, id, target, contact.At, contact.Projectile.RewardRandomSource);
         if (hit.StageStarts) CommitProjectileBossStage(session, id, target, contact.At);
+        CommitOwnerHitCharges(session, now, random);
+    }
+
+    internal static void CommitOwnerHitCharges(ProjectileSession session, double now, Random random)
+    {
+        var conn = session.Conn;
         // Charges affect the next chronological hit/use, rather than waiting for the presentation ticker.
         var charges = ChargesOf(conn);
         if (charges.Pending)

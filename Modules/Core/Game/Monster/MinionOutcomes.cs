@@ -189,7 +189,8 @@ static partial class Game
                             [.. items.Items(row).Where(item => output.ItemIds!.Contains(item.Id))]);
                     }
                     if (output.Kind == PlayerMinions.OutputKind.Charges) return AcceptedChargePresentationLocked(conn, remote);
-                    if (output.TargetId is uint id && !ReferenceEquals(conn.Monsters.GetValueOrDefault(id), output.Target)) return null;
+                    if (output.TargetId is uint id && !ReferenceEquals(conn.Monsters.GetValueOrDefault(id), output.Target))
+                    { TargetBuffOutputLedger.Discard(output.Packet); return null; }
                     return output.Kind switch
                     {
                         PlayerMinions.OutputKind.Life => InstanceProtocol.LifeUpdate(output.TargetId!.Value, output.Target!.Life),

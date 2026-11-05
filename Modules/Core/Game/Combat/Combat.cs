@@ -639,10 +639,19 @@ static partial class Game
         if (vaalUse is not null && SkillsFor(conn).IsAttack(gem.Effect))
             lock (conn.Monsters) mirageAdmission = PaidMirageAdmission(conn, vaalUse.Action);
         ordinaryUse.Distillation = vaalUse?.Distillation;
+        if (vaalUse?.HierophantSurgeActive is bool paidSurge) ordinaryUse.SurgeActive = paidSurge;
         // Eligible uses arrive with their one original preflight reservation. Never reserve again after an await.
         if (cooldownUse is not null)
         {
             if (!cooldownUse.TryExecute(conn, gem.Effect)) return false;
+            if (cooldownUse.Recall is { } recall && conn.ProjectileRuntimeState is ProjectileSession recallSession)
+            {
+                lock (LevelUpdatesFor(conn).Gate) lock (conn.Monsters) CommitHierophantRecall(recallSession, recall);
+                await PublishFlaskChanges(remote, stream, ciphers, conn);
+                await SendNativeCooldownRefresh(remote, stream, ciphers, conn);
+                await SendSkillCost(remote, stream, ciphers, conn, recall.ExtraLife, "Brand Recall total cost");
+                return true;
+            }
             if (!cooldownUse.Instant)
             {
                 if (UsesProjectileRuntime(gem.Effect)) ProjectilesFor(remote, stream, ciphers, conn)
@@ -707,6 +716,7 @@ static partial class Game
                 SupportedSkill(conn, skillId).Level, SupportedSkill(conn, skillId).Quality);
         }
         SkillCriticalRoll? criticalRoll = vaalUse?.CriticalRoll;
+        HierophantBrandUse? brandUse = null;
         if (gem.Name is not null && !vaalCast)
         {
             uint cost = 0, lifeCost = 0;
@@ -732,6 +742,8 @@ static partial class Game
                             ? -(++conn.OrdinaryUtilitySequence) : action);
                         if (SkillsFor(conn).IsAttack(gem.Effect)) mirageAdmission = PaidMirageAdmission(conn, action);
                         if (markCast) AdmitPaidMark(conn, skillId, targetId, action);
+                        if (SkillsFor(conn).EffectId(gem.Effect) is "StormBrand" or "ArmageddonBrand")
+                            brandUse = CaptureHierophantBrandUse(conn, skillId, action, sequence);
                     }
                     if (paid && Supports.Of(gem.Effect)?.Types.Contains(47) == true)
                     {
@@ -794,6 +806,18 @@ static partial class Game
                     () => !conn.Closed && PlayerActionCurrent(conn, action) && Current()) is { } accepted) return accepted;
         if (gem.Name is not null && GameEvents.RunSkillCast(conn, SkillsFor(conn).EffectId(gem.Effect), skillId, from,
                 () => !conn.Closed && PlayerActionCurrent(conn, action) && Current()) is { } taken) return taken;
+        if (gem.Name is not null && HierophantOffensiveTotemVariety(conn, skillId) is not null)
+        {
+            _ = PlaceHierophantOffensiveTotem(remote, stream, ciphers, ProjectilesFor(remote, stream, ciphers, conn), skillId, action, to);
+            return true;
+        }
+        if (gem.Name is not null && SkillsFor(conn).EffectId(gem.Effect) is "StormBrand" or "ArmageddonBrand")
+        {
+            if (brandUse is null) return false;
+            var session = ProjectilesFor(remote, stream, ciphers, conn);
+            ScheduleHierophantBrand(session, brandUse, to, Current);
+            return true;
+        }
         if (gem.Name is not null && TotemVariety(conn, gem.Effect) is { } totem)
         {
             _ = PlaceTotem(remote, stream, ciphers, conn, skillId, gem.Effect, gem.Level, totem, to, Current);
@@ -1349,7 +1373,7 @@ static partial class Game
                 bool freshPlayer = player is null;
                 if (player is null)
                 {
-                    player = CharacterPlayerStats(conn);
+                    player = HierophantOffenseStats(conn);
                     // A shield skill swings the shield (ShieldWeapon), which carries no local modifiers of the main hand.
                     var shield = spell ? null : ShieldWeapon(conn, skillId);
                     var local = spell || shield is not null ? null : MainHandLocalSources(conn);
@@ -1428,6 +1452,7 @@ static partial class Game
                     cull: Cull.Of(player, skillStats, critical, spell));
                 if (applied is not null)
                 {
+                    OrdinaryHierophantSpellHit(conn, CharacterPlayerStats(conn), true, spell, true);
                     landed++;
                     // Item Quantity Support: the kill's loot rolls read the supported skill's share.
                     if (Stats.Key("base_killed_monster_dropped_item_quantity_+%") is uint quantityKey)

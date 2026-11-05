@@ -1343,6 +1343,7 @@ static partial class Game
             if (error is null)
             {
                 conn.Passives = now;
+                if (!conn.MainAscendancy.Allocated.ToHashSet().SetEquals(ascendancyNow.Allocated) || conn.MainAscendancy.Selection != ascendancyNow.Selection) { ClearOrdinaryHierophant(conn); }
                 conn.MainAscendancy = ascendancyNow;
                 AscendancyPolicies.SelectionChanged(conn);
                 conn.MasteryEffects = effectsNow;

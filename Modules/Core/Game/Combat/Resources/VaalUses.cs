@@ -4,6 +4,7 @@ using GameServer.Core.Protocol.Login;
 sealed record VaalUseReservation(ushort Skill, int Effect, int Action, int Epoch, int Rage, uint Souls,
     uint Mana, uint Life, double PreventionSeconds, SkillCriticalRoll? CriticalRoll = null)
 {
+    public bool? HierophantSurgeActive;
     public OrdinaryPathfinderRules.Distillation? Distillation;
     public bool Executed;
     public long WorkGeneration;
@@ -97,6 +98,7 @@ static partial class Game
             if (!conn.VaalSouls.TryConsume(definition.ActiveSkillsRow, plan.Souls))
                 throw new InvalidOperationException("Vaal soul reservation changed inside admission");
         }
+        if (OrdinaryHierophantRules.Owns(conn.MainAscendancy.Selection)) plan.HierophantSurgeActive = HierophantOf(conn).Active(ResourceEffectsTime(conn));
         conn.PlayerMana -= plan.Mana;
         if (plan.Life > 0)
         {

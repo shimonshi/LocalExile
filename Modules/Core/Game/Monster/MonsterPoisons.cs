@@ -73,14 +73,15 @@ static partial class Game
         return added ? new(target, now, target.Poisons.Capture(now), provenance) : null;
     }
 
-    internal static async Task TickPoisons(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn)
+    internal static (List<(uint Id,SpawnedMonster M,uint Life,int Damage)> Hits,List<byte[]> Buffs) PreparePoisonTick(
+        string remote,NetworkStream stream,ConnectionCiphers ciphers,ClientState conn)
     {
         var hits = new List<(uint Id, SpawnedMonster M, uint Life, int Damage)>();
-        var ended = new List<(uint Id, ushort Buff)>();
-        var updated = new List<(uint Id, ushort Buff, int Stacks, double Remaining)>();
+        var ended = new List<byte[]>();
+        var updated = new List<byte[]>();
         using (ProjectileMutation(conn))
         {
-            if (conn.Closed || conn.LeavingArea) return;
+            if (conn.Closed || conn.LeavingArea) return (hits,[]);
             double now = ProjectileWorldTime(conn);
             foreach (var (id, m) in conn.Monsters)
             {
@@ -91,7 +92,7 @@ static partial class Game
                 else damage = m.Poisons.Advance(now, MonsterDotTaken(m, DamageType.Chaos, now));
                 if (damage > 0)
                 {
-                    (m.Life, bool stageStarts) = TakeOwnerDamageLocked(conn, m, damage, playerKill: m.Poisons.LastTickPlayerOwned, poisonAtDeath: poisonAtDeath);
+                    (m.Life, bool stageStarts) = TakeOwnerDamageLocked(conn, m, damage, playerKill:m.Poisons.LastTickPlayerOwned, poisonAtDeath: poisonAtDeath);
                     m.Aggro = m.Life > 0;
                     if (m.Life == 0)
                     {
@@ -106,33 +107,36 @@ static partial class Game
                 {
                     if (m.Poisons.Buff is ushort gone)
                     {
-                        ended.Add((id, gone));
+                        ended.Add(conn.TargetBuffOutputs.Retain(conn,id,gone,InstanceEntities.RemoveBuff(id,gone)));
                         m.Poisons.Buff = null;
                     }
                 }
                 else
                 {
-                    if (m.Poisons.Buff is ushort old) ended.Add((id, old));
+                    if (m.Poisons.Buff is ushort old) ended.Add(conn.TargetBuffOutputs.Retain(conn,id,old,InstanceEntities.RemoveBuff(id,old)));
                     int stacks = m.Poisons.Stacks(now);
                     ushort next = conn.NextBuff++;
                     m.Poisons.Buff = next;
-                    updated.Add((id, next, stacks, m.Poisons.Until - now));
+                    updated.Add(conn.TargetBuffOutputs.Retain(conn,id,next,InstanceEntities.AddBuff(id,next,PoisonBuffRow,PlayerId,
+                        stacks:(ushort)Math.Clamp(stacks,1,ushort.MaxValue),
+                        u68:BitConverter.SingleToUInt32Bits((float)Math.Max(0,m.Poisons.Until-now)))));
                 }
             }
         }
-        foreach (var (id, buff) in ended)
-            await Send(remote, stream, ciphers, InstanceEntities.RemoveBuff(id, buff), null);
-        foreach (var (id, buff, stacks, remaining) in updated)
-            await Send(remote, stream, ciphers,
-                InstanceEntities.AddBuff(id, buff, PoisonBuffRow, PlayerId, stacks: (ushort)Math.Clamp(stacks, 1, ushort.MaxValue),
-                    u68: BitConverter.SingleToUInt32Bits((float)Math.Max(0, remaining))), null);
+        return (hits,[..ended,..updated]);
+    }
+
+    internal static async Task TickPoisons(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn)
+    {
+        var (hits,packets) = PreparePoisonTick(remote,stream,ciphers,conn);
+        await SendDotBuff(remote,stream,ciphers,packets,null);
         foreach (var (id, m, life, damage) in hits)
         {
             if (life == 0)
                 await Send(remote, stream, ciphers, InstanceEntities.StatsUpdate(id, [(StatKeys.HideMiniLifeBar, 1)]), null);
             await Send(remote, stream, ciphers, InstanceProtocol.LifeUpdate(id, life),
                 life == 0 ? $"0x01b1 monster 0x{id:x} ({m.Label}) died of poison" : null);
-            if (life == 0) await MonsterKilled(remote, stream, ciphers, conn, id, m, byMinion: !m.Poisons.LastTickPlayerOwned);
+            if (life == 0) await MonsterKilled(remote, stream, ciphers, conn, id, m, byMinion:!m.Poisons.LastTickPlayerOwned);
         }
     }
 }
