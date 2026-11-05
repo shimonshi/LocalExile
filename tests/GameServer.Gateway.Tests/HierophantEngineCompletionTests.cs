@@ -495,6 +495,38 @@ public sealed class HierophantEngineCompletionTests
             }
             finally { session.Invalidate(); await session.OutputCompleted; }
         }
+        // A retirement guard may reject stage dispatch after both RF output lists acquired leases.
+        using (var cancelled = new OrdinaryHierophantConnectedTests.Setup())
+        using (var cancelledWire = new Wire())
+        {
+            var c = cancelled.Conn; c.Walk.Teleport(300,300,0);
+            var rf = new RighteousFireState(0,0,null,1,600,0,20); c.RighteousFire = rf;
+            c.Monsters[11] = new("outside",new(1000,1000,0),0,0,1000);
+            rf.Auras[11] = 7; // This exit is retained before the later entry/stage dispatch.
+            var boss = new SpawnedMonster("staged",new(310,300,0),0,0,100)
+                { Stage = new(50,2612,3,2) };
+            c.Monsters[10] = boss;
+            var session = new Game.ProjectileSession("RF cancellation",cancelledWire.Stream,cancelledWire.Ciphers,c);
+            c.ProjectileRuntimeState = session;
+            var previousGuard = Program.ProjectileOutputGuard.Value;
+            try
+            {
+                Program.ProjectileOutputGuard.Value = () => !rf.Auras.ContainsKey(10);
+                Assert.Throws<OperationCanceledException>(() => Game.PrepareRighteousFireTick(
+                    "RF cancellation",cancelledWire.Stream,cancelledWire.Ciphers,c,rf,1));
+                Assert.True(boss.StageRunning);
+                ushort entered = rf.Auras[10];
+                Assert.False(c.TargetBuffOutputs.Holds(11,7));
+                Assert.False(c.TargetBuffOutputs.Holds(10,entered));
+                Program.ProjectileOutputGuard.Value = previousGuard;
+                Assert.Empty(await cancelledWire.Drain(session));
+            }
+            finally
+            {
+                Program.ProjectileOutputGuard.Value = previousGuard;
+                session.Invalidate(); await session.OutputCompleted;
+            }
+        }
         // Actual independent publishers must retain their target-local buffs through allocator wrap.
         foreach (string producer in new[] { "Pride", "BlindAura", "Smoke", "Profane", "Rarity", "SmokePending", "ProfanePending", "RawIgnite", "RawBleed", "IgniteExpiry", "BleedExpiry", "PoisonRefresh", "PoisonExpiry",
             "RawIgniteMinion", "RawIgniteDiscard", "RighteousFireExit", "RighteousFireEnd" })

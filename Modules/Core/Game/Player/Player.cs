@@ -891,55 +891,64 @@ static partial class Game
         var hits = new List<(uint Id, SpawnedMonster M, uint Life, int Damage)>();
         var entered = new List<byte[]>();
         var left = new List<byte[]>();
-        using (ProjectileMutation(conn))
+        try
         {
-            double now = ProjectileWorldTime(conn);
-            double perSecond = (conn.PlayerMaxLife * (double)rf.DamagePctPerMinute + conn.Pools.EnergyShield * (double)rf.EnergyShieldDamagePctPerMinute) / 6000.0;
-            var playerStats = CharacterPlayerStats(conn);
-            if (Stats.Key("delirium_aura_damage_over_time_+%_final") is uint moreDot)
-                perSecond *= Math.Max(0, 1 + playerStats.GetValueOrDefault(moreDot) / 100.0);
-            perSecond *= ChargeDamageMore(playerStats);
-            perSecond *= HierophantModifiers.Damage(n => Stats.Key(n) is uint key
-                ? playerStats.GetValueOrDefault(key) : 0, spell: false);
-            perSecond *= OrdinaryAssassinOutgoingMore(conn, playerStats, now);
-            var damageOverTime = new SkillDamageContext(SkillHitKind.Spell, playerStats)
-                .OverTime(new DamageOverTime(DamageType.Fire, perSecond, seconds));
-            var here = conn.Walk.Position(now);
-            foreach (var (id, m) in conn.Monsters)
+            using (ProjectileMutation(conn))
             {
-                bool inside = !m.Dead && m.Life > 0 && m.Hostile && Dist(here, m.Walk.Position(now)) <= rf.Radius + m.StopRange;
-                if (!inside)
+                double now = ProjectileWorldTime(conn);
+                double perSecond = (conn.PlayerMaxLife * (double)rf.DamagePctPerMinute + conn.Pools.EnergyShield * (double)rf.EnergyShieldDamagePctPerMinute) / 6000.0;
+                var playerStats = CharacterPlayerStats(conn);
+                if (Stats.Key("delirium_aura_damage_over_time_+%_final") is uint moreDot)
+                    perSecond *= Math.Max(0, 1 + playerStats.GetValueOrDefault(moreDot) / 100.0);
+                perSecond *= ChargeDamageMore(playerStats);
+                perSecond *= HierophantModifiers.Damage(n => Stats.Key(n) is uint key
+                    ? playerStats.GetValueOrDefault(key) : 0, spell: false);
+                perSecond *= OrdinaryAssassinOutgoingMore(conn, playerStats, now);
+                var damageOverTime = new SkillDamageContext(SkillHitKind.Spell, playerStats)
+                    .OverTime(new DamageOverTime(DamageType.Fire, perSecond, seconds));
+                var here = conn.Walk.Position(now);
+                foreach (var (id, m) in conn.Monsters)
                 {
-                    if (rf.Auras.Remove(id, out ushort gone))
-                        left.Add(conn.TargetBuffOutputs.Retain(conn,id,gone,InstanceEntities.RemoveBuff(id,gone)));
-                    continue;
+                    bool inside = !m.Dead && m.Life > 0 && m.Hostile && Dist(here, m.Walk.Position(now)) <= rf.Radius + m.StopRange;
+                    if (!inside)
+                    {
+                        if (rf.Auras.Remove(id, out ushort gone))
+                            left.Add(conn.TargetBuffOutputs.Retain(conn,id,gone,InstanceEntities.RemoveBuff(id,gone)));
+                        continue;
+                    }
+                    if (!rf.Auras.ContainsKey(id))
+                    {
+                        ushort buff = conn.NextBuff++; rf.Auras[id] = buff;
+                        entered.Add(conn.TargetBuffOutputs.Retain(conn,id,buff,InstanceEntities.AddBuff(id,buff,
+                            RighteousFireAuraBuffRow,PlayerId,rf.Skill,visual:rf.AuraVisual)));
+                    }
+                    var (damage, carry) = MonsterBurn(m, damageOverTime, seconds, now);   // its fire resistance, its shock
+                    m.Burn = carry;
+                    if (damage == 0) continue;
+                    (m.Life, bool stageStarts) = TakeOwnerDamageLocked(conn, m, damage);
+                    m.Aggro = m.Life > 0;
+                    if (m.Life == 0)
+                    {
+                        m.Dead = true;
+                        CollectVaalSoulAtDeathLocked(conn, m);
+                        ShockOnKillLocked(conn, m, playerStats, now);
+                        if (rf.Auras.Remove(id, out ushort b))
+                            left.Add(conn.TargetBuffOutputs.Retain(conn,id,b,InstanceEntities.RemoveBuff(id,b)));
+                        TriggerElementalRelicLocked(conn, m, hit: false, killed: true);   // a burn is no hit
+                    }
+                    hits.Add((id, m, m.Life, damage));
+                    if (stageStarts) CommitBossStage(remote, stream, ciphers, conn, id, m, now);
                 }
-                if (!rf.Auras.ContainsKey(id))
-                {
-                    ushort buff = conn.NextBuff++; rf.Auras[id] = buff;
-                    entered.Add(conn.TargetBuffOutputs.Retain(conn,id,buff,InstanceEntities.AddBuff(id,buff,
-                        RighteousFireAuraBuffRow,PlayerId,rf.Skill,visual:rf.AuraVisual)));
-                }
-                var (damage, carry) = MonsterBurn(m, damageOverTime, seconds, now);   // its fire resistance, its shock
-                m.Burn = carry;
-                if (damage == 0) continue;
-                (m.Life, bool stageStarts) = TakeOwnerDamageLocked(conn, m, damage);
-                m.Aggro = m.Life > 0;
-                if (m.Life == 0)
-                {
-                    m.Dead = true;
-                    CollectVaalSoulAtDeathLocked(conn, m);
-                    ShockOnKillLocked(conn, m, playerStats, now);
-                    if (rf.Auras.Remove(id, out ushort b))
-                        left.Add(conn.TargetBuffOutputs.Retain(conn,id,b,InstanceEntities.RemoveBuff(id,b)));
-                    TriggerElementalRelicLocked(conn, m, hit: false, killed: true);   // a burn is no hit
-                }
-                hits.Add((id, m, m.Life, damage));
-                if (stageStarts) CommitBossStage(remote, stream, ciphers, conn, id, m, now);
             }
+            entered.AddRange(left);
+            return (hits,entered);
         }
-        entered.AddRange(left);
-        return (hits,entered);
+        catch
+        {
+            foreach (var packet in entered) TargetBuffOutputLedger.Discard(packet);
+            foreach (var packet in left) TargetBuffOutputLedger.Discard(packet);
+            throw;
+        }
     }
 
     internal static async Task BurnAround(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn, RighteousFireState rf, double seconds)
