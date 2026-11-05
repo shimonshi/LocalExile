@@ -34,7 +34,7 @@ sealed class LeechSession
         recoverEnergyShield = get("cannot_recover_energy_shield") == 0;
         equippedClaws = Math.Clamp(equippedClaws, 0, 2);
         double commonInstant = (double)get("leech_%_is_instant")
-            + (equippedClaws > 0 ? get("leech_%_is_instant_while_wielding_claw") : 0);
+            + (equippedClaws > 0 ? get("leech_%_is_instant_while_wielding_claw") : 0) + OrdinaryAssassinRules.InstantLeech(replacement("virtual_maximum_power_charges") ?? Charges.LimitsOf(ChargeType.Power, get).Maximum, get);
         lifeInstant = Math.Clamp(replacement("virtual_life_leech_%_is_instant")
             ?? commonInstant + get("life_leech_%_is_instant")
                 + (double)equippedClaws * get("life_leech_%_is_instant_per_equipped_claw"), 0, 100);

@@ -99,8 +99,8 @@ static partial class Game
     {
         var e = m.Mods.Effects;
         double physical = mitigated[DamageType.Physical].Min;
-        double reduction = physicalReduction == 0 ? e.PhysicalReduction - CrushReduction(m, now) : Math.Max(0, e.PhysicalReduction + physicalReduction - CrushReduction(m, now));
-        double physicalTaken = physical * Math.Max(0, 1 - reduction / 100.0)
+        double reduction = physicalReduction == 0 ? e.PhysicalReduction : Math.Max(0, e.PhysicalReduction + physicalReduction);
+        double physicalTaken = physical * Math.Max(0, 1 - (reduction - CrushReduction(m, now)) / 100.0)
             * (1 + MaimedPhysicalTaken(m, now) / 100.0);
         double total = mitigated.MinTotal - physical + physicalTaken;
         // The player's debuffs on it add to its own increased damage taken (MonsterDamageTaken): his enemy auras' elemental
@@ -125,7 +125,7 @@ static partial class Game
 
     /// <summary>The player's base_self_critical_strike_multiplier_-% (critical strikes against them deal less extra damage).</summary>
     internal static int SelfCriticalReduction(ClientState conn) =>
-        Stats.Key("base_self_critical_strike_multiplier_-%") is uint key ? CharacterPlayerStats(conn).GetValueOrDefault(key) : 0;
+        OrdinaryAssassinNoExtraCriticalDamage(conn, CharacterPlayerStats(conn), ResourceEffectsTime(conn)) ? 100 : Stats.Key("base_self_critical_strike_multiplier_-%") is uint key ? CharacterPlayerStats(conn).GetValueOrDefault(key) : 0;
 
     /// <summary>Whether the monster blocks a hit of the player (Stalwart's monster_base_block_%: attacks only). Rolled
     /// before anything of the hit happens: a blocked hit has no damage, impale, flinch or hit message. The skill's

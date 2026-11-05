@@ -10,11 +10,15 @@ static class AddedBaseCriticalStrike
 
     public static int Chance(int intrinsic, long increasedPct, bool spell, Func<string, int> player,
         Func<string, int>? skill = null)
+     => ChanceExact(intrinsic, increasedPct, spell, player, skill).Project();
+
+    public static CriticalChanceValue ChanceExact(int intrinsic, long increasedPct, bool spell, Func<string, int> player,
+        Func<string, int>? skill = null)
     {
         string typed = spell ? Spell : Attack;
         long basis = (long)intrinsic + player(Generic) + player(typed)
             + (skill?.Invoke(Generic) ?? 0) + (skill?.Invoke(typed) ?? 0);
-        return CriticalChanceFinal.Project(basis, increasedPct, player, skill);
+        return CriticalChanceFinal.Exact(basis, increasedPct, player, skill);
     }
 
     /// <summary>PoB Item.lua2325: native weapon base plus local BASE, then local INC, rounded to permyriad.

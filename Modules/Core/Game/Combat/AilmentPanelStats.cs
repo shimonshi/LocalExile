@@ -74,7 +74,7 @@ static class AilmentPanelStats
         var rows = new List<(string, int)>();
         var paths = conversion.Trace(raw).ToList();
         double charges = ChargeEffects.DamageMore(get, context.Spell, ailment: true)
-            * HierophantModifiers.Damage(get, context.Spell, ailment: true);
+            * HierophantModifiers.Damage(get, context.Spell, ailment: true) * OrdinaryAssassinRules.More(get(OrdinaryAssassinRules.NearbyDamage));
         void Add(string ailment, DamageType ailmentType, DamageType[] sources, int percent, bool chaosOnly = false)
         {
             foreach (bool critical in new[] { false, true })
@@ -88,7 +88,7 @@ static class AilmentPanelStats
         }
         if (context.Attack) Add("bleeding", DamageType.Physical, [DamageType.Physical], BleedPercent);
         Add("ignite", DamageType.Fire, [DamageType.Fire], IgnitePercent);
-        Add("poison", DamageType.Chaos, [DamageType.Physical, DamageType.Chaos], PoisonPercent);
+        Add("poison", DamageType.Chaos, get("all_damage_can_poison") != 0 ? DamageTypes.ConversionOrder.ToArray() : [DamageType.Physical, DamageType.Chaos], PoisonPercent);
         if (get("chaos_damage_chance_to_poison_%") != 0)
             Add("poison", DamageType.Chaos, [DamageType.Chaos], PoisonPercent, chaosOnly: true);
         return rows;
@@ -120,13 +120,17 @@ static class AilmentPanelStats
             // Burning Arrow's quality: 1% more ignite damage per quality (GrantedEffectQualityStats).
             * (ailmentType == DamageType.Fire ? Math.Max(0, 1 + get("active_skill_ignite_damage_+%_final") / 100.0) : 1)
             // Crimson Dance: "50% less Damage with Bleeding" (ReminderTextKeystoneCrimsonDance).
-            * (ailment == "bleeding" && get("keystone_crimson_dance") != 0 ? .5 : 1);
+            * (ailment == "bleeding" && get("keystone_crimson_dance") != 0 ? .5 : 1)
+            * (ailment == "poison" && critical ? OrdinaryAssassinRules.More(get(OrdinaryAssassinRules.CriticalPoison)) : 1);
         var typed = DamageTypes.ConversionOrder.Select(type => (History: DamageTypes.HistoryOf(type), Increased: get(Slug(type) + "_damage_+%"))).ToArray();
         int elemental = get("elemental_damage_+%");
         double min = 0, max = 0;
         foreach (var path in paths)
         {
             if (!sources.Contains(path.Type)) continue;
+            if (ailment == "poison" && (get(path.Type == DamageType.Chaos ? "chaos_damage_cannot_poison" : "non_chaos_damage_cannot_poison") != 0
+                || path.Type == DamageType.Physical && (get("physical_damage_cannot_poison") != 0 || get("virtual_physical_damage_cannot_poison") != 0)
+                || path.Type == DamageType.Chaos && get("virtual_chaos_damage_cannot_poison") != 0)) continue;
             // The hit's prohibitions (PlayerHitDamage): a portion the hit cannot deal contributes no ailment base.
             if (DamageStats.Prohibited(path.Type, get, context.Attack)) continue;
             double increased = common;

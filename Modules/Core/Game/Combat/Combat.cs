@@ -376,12 +376,12 @@ static partial class Game
                 var gambler = GamblerFor(player);
                 hit = hit.Scale(OrdinaryTargetMore(conn, m, player));
                 var ownRolled = GameEvents.WithOutgoingDamage(conn, player, m, (gambler with { DamageMorePct = 0 }).RollOutgoingHit(hit, Random.Shared));
-                critical = RollCriticalStrike(conn, CriticalChanceOn(conn, targetId, AttackCriticalChanceWith(conn, player, 0, false) ?? conn.Pools.AttackCriticalStrikeChance,
-                        AttackCriticalChanceVsBlinded(conn, player), AttackCriticalChanceVsProfane(conn, player)), ownPenetration, skillRoll: criticalRoll)
-                    && GameServer.Core.World.EvasionEntropy.ConfirmsCritical(hitChance, conn.AttackAccuracyRandom);
-                int sourceCriticalMultiplier = AttackCriticalMultiplier(conn, player) + OrdinaryCriticalBonus(conn, player);
-                int criticalMultiplier = CriticalMultiplierOn(m, sourceCriticalMultiplier
-                    + MarkOn(conn, m, "enemy_additional_critical_strike_multiplier_against_self"));
+                var criticalResult = ResolveOwnerCritical(conn, m, CriticalChanceOn(conn, targetId, AttackCriticalChanceWith(conn, player, 0, false) ?? 0,
+                        AttackCriticalChanceVsBlinded(conn, player), AttackCriticalChanceVsProfane(conn, player)), false, ownPenetration, criticalRoll, player);
+                critical = criticalResult.Critical && GameServer.Core.World.EvasionEntropy.ConfirmsCritical(hitChance, conn.AttackAccuracyRandom);
+                int sourceCriticalMultiplier = AttackCriticalMultiplier(conn, player) + OrdinaryCriticalBonus(conn, player) + MarkOn(conn, m, "enemy_additional_critical_strike_multiplier_against_self");
+                sourceCriticalMultiplier = OwnerSourceCriticalMultiplier(m, sourceCriticalMultiplier, criticalResult, OrdinaryAssassinSources(conn, player));
+                int criticalMultiplier = m.Mods.Effects.NoExtraCriticalDamage ? 100 : sourceCriticalMultiplier;
                 double at = ProjectileWorldTime(conn);
                 (damage, resistance, var mitigated) = MonsterHitDamage(conn, m, ownRolled, critical, attack: true, at, resistanceMods, pen,
                     gambler.InvertsResistance(Random.Shared));
@@ -1425,14 +1425,12 @@ static partial class Game
                     m.HallowingFlameUntil = 0;
                 }
                 // The shared roll meets each target's current chance: a source can change between targets.
-                int criticalChance = CriticalChanceOn(conn, id, SupportedCriticalChance(conn, skillId),
+                var criticalChance = CriticalChanceOn(conn, id, SupportedCriticalChanceExact(conn, skillId),
                     SupportedCriticalChanceVsBlinded(conn, skillId, release: false),
                     SupportedCriticalChanceVsProfane(conn, skillId, release: false));
-                critical = RollCriticalStrike(conn, criticalChance, skillStats,
-                        attack: !spell, skillRoll: criticalRoll, player: player)
-                    && (spell || GameServer.Core.World.EvasionEntropy.ConfirmsCritical(hitChance, conn.AttackAccuracyRandom));
-                int multiplier = CriticalMultiplierOn(m, sweepMultiplier + OrdinaryCriticalBonus(conn, player)
-                    + MarkOn(conn, m, "enemy_additional_critical_strike_multiplier_against_self"));
+                var criticalResult = ResolveOwnerCritical(conn, m, criticalChance, spell, skillStats, criticalRoll, player);
+                critical = criticalResult.Critical && (spell || GameServer.Core.World.EvasionEntropy.ConfirmsCritical(hitChance, conn.AttackAccuracyRandom));
+                int multiplier = OwnerCriticalMultiplier(m, sweepMultiplier + OrdinaryCriticalBonus(conn, player) + MarkOn(conn, m, "enemy_additional_critical_strike_multiplier_against_self"), criticalResult, OrdinaryAssassinSources(conn, player));
                 double at = ProjectileWorldTime(conn);
                 (damage, resistance, var mitigated) = MonsterHitDamage(conn, m, rolled, critical, attack: !spell, at, mods, pen,
                     gambler.InvertsResistance(Random.Shared));
@@ -1442,7 +1440,7 @@ static partial class Game
                 if (splashMore.TryGetValue(id, out double splashScale)) more *= splashScale;
                 if (more != 1) damage = (int)Math.Floor(damage * Math.Max(0, more));
                 LeechOnHitLocked(conn, m, taken, damage, leech!);
-                damage = WithImpaleHitLocked(conn, m, damage, rolled, critical, sweepMultiplier + OrdinaryCriticalBonus(conn, player),
+                damage = WithImpaleHitLocked(conn, m, damage, rolled, critical, OwnerSourceCriticalMultiplier(m, sweepMultiplier + OrdinaryCriticalBonus(conn, player) + MarkOn(conn, m, "enemy_additional_critical_strike_multiplier_against_self"), criticalResult, OrdinaryAssassinSources(conn, player)),
                     critical ? criticalImpale : impale, more).Damage;
                 // Only the first victim has a freshly built player snapshot. After notification awaits, resolve the
                 // current raw source so a refund between victims cannot keep granting from the sweep's old snapshot.

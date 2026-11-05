@@ -155,6 +155,7 @@ static partial class Game
             mods.Effects.Hit(DamagePacket.Of(DamageType.Physical, baseMin, baseMax)))
         {
             Spell = spell,
+            IncomingAilmentEffect = kingActor ? 420 : effect,
             Scripted = kingActor,
             Ranged = rangedAttack,
             Projectile = projectile,
@@ -1288,12 +1289,13 @@ static partial class Game
         int monsterAccuracy = MonsterBlindRating(conn, id, m, baseAccuracy, now, stats);
         int evasion = TimedBlind.Apply(PlayerEvasionBase(conn, now), PlayerBlindValue(conn, stats).Less);
         int hitChance = DamageModel.AccuracyHitChance(evasion, monsterAccuracy);
-        if (EvadesLocked(conn, hitChance, now))
+        if (!a.Spell && EvadesLocked(conn, hitChance, now))
         {
             Console.WriteLine($"[gateway] {remote} monster 0x{id:x} ({m.Label}) evaded: accuracy {monsterAccuracy} " +
                 $"vs evasion {evasion}, {hitChance}% chance to hit, entropy {conn.EvasionEntropy:0}");
             return null;
         }
+        if (!AssassinIncomingHitAdmitted(conn, now, stats)) return null;
         GainLifeBeforeEnemyHitLocked(conn, stats);
         // Roll the whole monster-mod packet (the Gambler's incoming luck included), then mitigate each component
         // with this hit's one armour decision.
@@ -1330,7 +1332,7 @@ static partial class Game
         var immune = PlayerImmunities(conn);
         // This remains the original next RNG draw when the feature is absent. Blocking never
         // consumes an armour draw; one lazy decision is shared by the whole rolled packet.
-        bool blocked = DamageModel.Blocks(conn.Pools.BlockChance, conn.IncomingHitRandom.NextDouble() * 100, conn.Pools.AttackBlockLucky, conn.Pools.AttackBlockUnlucky);
+        bool blocked = DamageModel.Blocks(a.Spell ? conn.Pools.SpellBlockChance : conn.Pools.BlockChance, conn.IncomingHitRandom.NextDouble() * 100, a.Spell ? conn.Pools.SpellBlockLucky : conn.Pools.AttackBlockLucky, a.Spell ? conn.Pools.SpellBlockUnlucky : conn.Pools.AttackBlockUnlucky);
         bool armourRelevant = mitigated.Components.Any(c => !immune.Contains(c.Type)
             && Math.Round(c.Range.Min) > 0 && PlayerHitMitigation.ArmourPercent(conn.Pools, c.Type, StatOf) > 0);
         var armour = IncomingArmourLocked(conn, !blocked && armourRelevant, priorContacts, stats);
@@ -1338,6 +1340,9 @@ static partial class Game
         int damage = 0, chaosDamage = 0, physicalDamage = 0;
         var ailmentTaken = DamagePacket.Empty;
         int blindedPct = DamageTakenFromBlindedPct(conn, id, stats);
+        var suppression = a.Spell ? Suppression(conn) : default;
+        bool suppressed = a.Spell && DamageModel.Suppresses(suppression.Chance, conn.IncomingHitRandom.Next(100),
+            suppression.Lucky, suppression.Unlucky);
         double ordinaryFactor = OrdinaryIncomingHit(conn, stats, now) * MarkIncoming(conn, id, m, stats);
         foreach (var (type, range) in mitigated.Components)
         {
@@ -1348,16 +1353,17 @@ static partial class Game
             // Flat damage taken after resistance and armour, then the multipliers: the increased damage taken adds to the
             // shock's, and a blocked hit deals only its share (PlayerDamageTaken). Monster hits are attacks, and melee
             // unless ranged.
-            if (!immune.Contains(type)) value = Math.Max(0, value + PlayerDamageTaken.Flat(type, attack: true, StatOf));
+            if (!immune.Contains(type)) value = Math.Max(0, value + PlayerDamageTaken.Flat(type, attack: !a.Spell, StatOf));
             if (type == DamageType.Physical)
                 value = AntiquarianEffects.RangedPhysical(value, a.Ranged, StatOf);
             value = (int)Math.Round(value * conn.ElementalAilments.DamageTakenFactor(now,
-                    blindedPct + StatOf("damage_taken_+%") + PlayerDamageTaken.IncreasedPct(type, melee: !a.Ranged, StatOf))
+                    blindedPct + OrdinaryAssassinIncomingIncreased(conn, stats, now) + PlayerDamageTaken.IncreasedPct(type, melee: !a.Spell && !a.Ranged, StatOf))
                 * ordinaryFactor
                 * (blocked ? PlayerDamageTaken.BlockedPct(type, StatOf) / 100.0 : 1));
             // Excommunicate Support: an excommunicated enemy cannot deal chaos damage.
             if (type == DamageType.Chaos && m.ExcommunicatedUntil > now) value = 0;
             ailmentTaken = ailmentTaken.Add(type, new(value, value));
+            if (suppressed) value = DamageModel.Suppress(value,suppression.Effect);
             if (type == DamageType.Chaos) chaosDamage += value;
             if (type == DamageType.Physical) physicalDamage += value;
             damage += value;
@@ -1396,7 +1402,9 @@ static partial class Game
             new(FortificationDamageTaken(conn, (int)r.Min), FortificationDamageTaken(conn, (int)r.Max))),
             monsterCritical, blocked, now, stats, source: id);
         conn.RecentEnemyHits.Record(now);
-        ChargesWhenHit(conn, blocked);
+        ApplyIncomingPhysicalAilmentsLocked(conn, ResourceEffectsOf(conn).Incoming, baseHit, a.Spell,
+            monsterCritical, blocked, now, stats, IncomingMonsterAilmentSources(conn, m, a.IncomingAilmentEffect), id);
+        ChargesWhenHit(conn, blocked, spell: a.Spell);
         // Brine Bound: a hit that lands, blocked too (blocking keeps the defender's when-hit effects, wiki
         // Blocking), may freeze its monster for 1 s. Its own random keeps the incoming hit's draws in order.
         if (GameServer.Core.World.RandomRolls.Chance(StatOf("chance_to_freeze_enemies_for_1_second_when_hit_%"), 100, Random.Shared))
@@ -1408,7 +1416,7 @@ static partial class Game
             && SpiritChieftainsWhenHitLocked(conn, stats, blocked, monsterCritical, Math.Max(0, lifeBefore - conn.PlayerLife));
         uint life = conn.PlayerLife;
         PlayerRecoveryIntent? recovery = null;
-        if (!blocked && !a.Ranged && life > 0 && a.Damage.Components.All(c => c.Type == DamageType.Physical))
+        if (!blocked && !a.Spell && !a.Ranged && life > 0 && a.Damage.Components.All(c => c.Type == DamageType.Physical))
             recovery = CommitPlayerHitRecoveryLocked(conn, damage, now);
         else if (Stats.Key(AntiquarianEffects.StunRecoverySource) is uint turtle && stats.GetValueOrDefault(turtle) > 0)
             Console.WriteLine($"[gateway] Turtle Shell hit ineligible: block={blocked}, ranged={a.Ranged}, "

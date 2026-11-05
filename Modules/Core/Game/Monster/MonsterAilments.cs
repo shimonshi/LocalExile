@@ -110,6 +110,7 @@ static partial class Game
         double now, Random random, List<MonsterElementalAilments.Effect>? reflected = null,
         MonsterPoisons.Settings poison = default, bool reflectToPlayer = true, HitProvenance provenance = HitProvenance.Owner)
     {
+        if (critical && provenance == HitProvenance.Owner) OrdinaryAssassinCriticalHit(conn, player, now, random);
         double factor = MonsterDamageTaken(m, spell, now, hit: true) * (critical ? criticalMultiplier / 100.0 : 1);
         int Player(string name) => Stats.Key(name) is uint key ? player.GetValueOrDefault(key) : 0;
         int Skill(string name) => skill is not null && Stats.Key(name) is uint key ? skill.GetValueOrDefault(key) : 0;

@@ -390,18 +390,24 @@ static partial class Game
             with { Rating = PlayerBlindAccuracy(conn, AccuracyRating.Selected(conn.Pools, WeaponProfileFor(conn, activeSet: true), Own), player) };
     }
 
-    internal static int SupportedCriticalChance(ClientState conn, ushort skillId) => SupportedCriticalChanceFor(conn, skillId, false);
+    internal static int SupportedCriticalChance(ClientState conn, ushort skillId) =>
+        DisplayedCriticalChance(conn, SupportedCriticalChanceExact(conn, skillId).More(
+            SkillsFor(conn).IsSpell(SupportedSkill(conn, skillId).Effect) && !SkillsFor(conn).IsAttack(SupportedSkill(conn, skillId).Effect)
+                ? OrdinaryAssassinSources(conn, CharacterPlayerStats(conn))(OrdinaryAssassinRules.SpellChance) : 0),
+            n => StatOf(CharacterPlayerStats(conn), n));
+
+    internal static CriticalChanceValue SupportedCriticalChanceExact(ClientState conn, ushort skillId) => SupportedCriticalChanceFor(conn, skillId, false);
 
     // A release retains the unprohibited offensive chance; the hit evaluates current owner prohibitions separately.
-    internal static int SupportedReleaseCriticalChance(ClientState conn, ushort skillId) => SupportedCriticalChanceFor(conn, skillId, true);
+    internal static CriticalChanceValue SupportedReleaseCriticalChance(ClientState conn, ushort skillId) => SupportedCriticalChanceFor(conn, skillId, true);
 
     // extraIncrease: a target condition's increase (critical_strike_chance_+%_vs_blinded_enemies, Game's Blind.cs).
-    internal static int SupportedCriticalChanceFor(ClientState conn, ushort skillId, bool release, long extraIncrease = 0)
+    internal static CriticalChanceValue SupportedCriticalChanceFor(ClientState conn, ushort skillId, bool release, long extraIncrease = 0)
     {
         var gem = SupportedSkill(conn, skillId);
-        gem = gem with { Stats = DistillerInputs(conn, gem.Stats) };
         var hitPlan = SkillHitPlan.ForSkill(SkillsFor(conn), gem.Effect, gem.Level, gem.Quality);
         if (!hitPlan.CanHit) return 0;
+        gem = gem with { Stats = DistillerInputs(conn, gem.Stats) };
         var player = FinalPlayerStats(conn).ToDictionary(v => v.Item1, v => v.Item2);
         int Own(string name) => release && IsCriticalProhibition(name) ? 0
             : Stats.Key(name) is uint k ? gem.Stats.GetValueOrDefault(k) : 0;
@@ -416,11 +422,11 @@ static partial class Game
                 : AttackBaseCriticalStrike.OfMainHand(!weapon.Unarmed, weapon.Critical, Player);
             long increased = conn.Pools.CriticalStrikeChancePct + extraIncrease
                 + AttackBaseCriticalStrike.IncreasedSum(weapon, name => Own(name));
-            return DisplayedCriticalChance(conn, AttackBaseCriticalStrike.ChanceOfBase(basis, increased, Player, Own), Player);
+            return AttackBaseCriticalStrike.ChanceOfBaseExact(basis, increased, Player, Own);
         }
-        return DisplayedCriticalChance(conn, SpellCriticalStrike.Chance(InquisitorOffense.SpellBase(
+        return SpellCriticalStrike.ChanceExact(InquisitorOffense.SpellBase(
             SkillsFor(conn).SpellCritChance(gem.Effect, gem.Level), InquisitorLocalCritical(conn), Player),
-            Player, Own, conn.Pools.SpellCriticalStrikeChancePct + extraIncrease), Player);
+            Player, Own, conn.Pools.SpellCriticalStrikeChancePct + extraIncrease);
     }
 
     internal static (int Flat, int Percent)? SupportedReservation(ClientState conn, ushort skillId)

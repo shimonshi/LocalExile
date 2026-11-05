@@ -240,14 +240,15 @@ static partial class Game
             var mods = HitResistMods(player, own);
             int baseChance = InquisitorOffense.SpellBase(SkillsFor(conn).SpellCritChance(skill.Effect, skill.Level),
                 InquisitorLocalCritical(conn), Player) ?? 0;
-            int chance = SpellCriticalStrike.Chance(baseChance, Player, Own, conn.Pools.SpellCriticalStrikeChancePct);
-            int? vsBlinded = Player(VsBlindedCriticalStat) is not 0 and var extra
-                ? SpellCriticalStrike.Chance(baseChance, Player, Own, conn.Pools.SpellCriticalStrikeChancePct + (long)extra) : null;
-            int? vsProfane = SpellCriticalStrike.Chance(baseChance, Player, Own,
+            var chance = SpellCriticalStrike.ChanceExact(baseChance, Player, Own, conn.Pools.SpellCriticalStrikeChancePct);
+            CriticalChanceValue? vsBlinded = Player(VsBlindedCriticalStat) is not 0 and var extra
+                ? SpellCriticalStrike.ChanceExact(baseChance, Player, Own, conn.Pools.SpellCriticalStrikeChancePct + (long)extra) : null;
+            CriticalChanceValue? vsProfane = SpellCriticalStrike.ChanceExact(baseChance, Player, Own,
                 conn.Pools.SpellCriticalStrikeChancePct + FlaskGrounds.ProfaneCritIncrease);
             int multiplier = (int)Math.Clamp((long)conn.Pools.SpellCriticalStrikeMultiplier + Own("base_critical_strike_multiplier_+"),
                 int.MinValue, int.MaxValue);
             var gambler = GamblerFor(player);
+            var criticalRoll = new SkillCriticalRoll(CriticalExtraRollsFor(conn, player, own));
             bool rageGranted = false;
             var deaths = new List<(uint Id, SpawnedMonster M)>();
             var charges = new List<PlayerMinions.AcceptedCharges>();
@@ -259,11 +260,13 @@ static partial class Game
                 if (!conn.Monsters.TryGetValue(id, out var current) || !ReferenceEquals(current, m)
                     || m.Dead || m.Life == 0 || MonsterBlocks(m, Random.Shared, spell: true)) continue;
                 var rolled = (gambler with { DamageMorePct = 0 }).ForSkill(Own, spell: true).RollOutgoingHit(hit, Random.Shared);
-                bool critical = RollCriticalStrike(conn, CriticalChanceOn(conn, id, chance, vsBlinded, vsProfane), own, attack: false);
+                var criticalResult = ResolveOwnerCritical(conn, m, CriticalChanceOn(conn, id, chance, vsBlinded, vsProfane), true, own, criticalRoll, player);
+                bool critical = criticalResult.Critical;
+                int contactMultiplier = OwnerCriticalMultiplier(m, multiplier, criticalResult, OrdinaryAssassinSources(conn, player));
                 double hitAt = ProjectileWorldTime(conn);
                 var (damage, _, mitigated) = MonsterHitDamage(conn, m, rolled, critical, attack: false, hitAt, mods, pen,
                     gambler.InvertsResistance(Random.Shared));
-                if (critical) damage = DamageModel.CriticalDamage(damage, CriticalMultiplierOn(m, multiplier));
+                if (critical) damage = DamageModel.CriticalDamage(damage, contactMultiplier);
                 var applied = ApplyMonsterHitLocked(conn, m, damage);
                 if (applied is { StageStarts: true } staged)
                 {
@@ -271,7 +274,7 @@ static partial class Game
                     applied = staged with { StageStarts = false };
                 }
                 if (applied is not null)
-                    AilmentsOnHitLocked(conn, m, mitigated, spell: true, critical, multiplier, player, own, hitAt, Random.Shared, reflected);
+                    AilmentsOnHitLocked(conn, m, mitigated, spell: true, critical, contactMultiplier, player, own, hitAt, Random.Shared, reflected);
                 if (applied is not null) InflictMonsterBlind(conn, id, m, hitAt, BlindInputs(player, own));
                 if (applied is not null && !rageGranted) rageGranted = RageOnHitLocked(conn, attack: false, melee: false, critical, own);
                 // shortcut: the ignite's flat fire is rolled apart from the hit (the game takes the hit's own roll; the

@@ -7,6 +7,9 @@
 sealed class SkillCriticalRoll(int extraRolls)
 {
     int? value;
+    SkillCriticalRoll? second;
+    public int Successes(int chance, Random random, bool bifurcate) => (Check(chance, random) ? 1 : 0)
+        + (bifurcate && (second ??= new(extraRolls)).Check(chance, random) ? 1 : 0);
 
     public bool Check(int chancePerMyriad, Random random)
     {

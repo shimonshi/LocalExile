@@ -11,7 +11,10 @@ static class CriticalChanceFinal
 
     public static bool IsInput(string name) => Sources.Contains(name);
 
-    public static int Project(long basis, long increased, Func<string, int> player, Func<string, int>? skill)
+    public static int Project(long basis, long increased, Func<string, int> player, Func<string, int>? skill) =>
+        Exact(basis, increased, player, skill).Project();
+
+    public static CriticalChanceValue Exact(long basis, long increased, Func<string, int> player, Func<string, int>? skill)
     {
         // Exact rational arithmetic keeps half-up permyriad rounding and signed source cancellation without an
         // intermediate 100% cap or overflow when several large developer values compose with LESS factors.
@@ -24,6 +27,6 @@ static class CriticalChanceFinal
             numerator *= BigInteger.Max(0, 100 + percent);
             denominator *= 100;
         }
-        return (int)BigInteger.Min(10_000, (numerator + denominator / 2) / denominator);
+        return new(numerator, denominator);
     }
 }

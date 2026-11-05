@@ -101,13 +101,14 @@ static partial class Game
             double now = ResourceEffectsTime(conn);
             state.CollectRetiredTargets(conn);
             bool work = state.PlayerBlind.Read(now).Less > 0 || state.PlayerBlind.Sent.Less > 0 || state.Targets.Count > 0
+                || state.Incoming.NeedsPresentation
                 || conn.RetiredResourceBuffs.Count > 0 || conn.FlaskGrounds.BlindedMonsters().Any()
                 || conn.Monsters.Keys.Any(conn.BlindAura.Blinded)
                 || conn.Monsters.Values.Any(m => m.RampageBlindUntil > now);
             if (!work) return null;
             var player = snapshot ?? CharacterPlayerStats(conn); // One fresh snapshot for the whole publication pass, at the gate.
             int smoke = BlindEffectLess(player);
-            var bytes = new List<byte>();
+            var bytes = new List<byte>(state.Incoming.Presentation(conn, now));
             foreach (var (actor, buff) in conn.RetiredResourceBuffs)
             {
                 bytes.AddRange(InstanceEntities.RemoveBuff(actor, buff));
@@ -169,36 +170,41 @@ static partial class Game
     // increase: a hit's chance against a Blinded target is recomputed from its base with it in the increased sum, never
     // the final chance scaled. Each site computes that second chance once (null without the stat) and picks it here.
     internal static int CriticalChanceOn(ClientState conn, uint target, int chance, int? vsBlinded, int? vsProfane = null) =>
-        Math.Clamp((vsProfane is int profane && conn.FlaskGrounds.Profane(target) ? profane
-        : vsBlinded is int blinded && Blinded(conn, target) ? blinded : chance)
-        + (conn.Monsters.TryGetValue(target, out var enemy)
-            ? MarkOn(conn, enemy, "enemy_additional_critical_strike_chance_against_self") : 0), 0, 10000);
+        CriticalChanceOn(conn, target, (CriticalChanceValue)chance, vsBlinded is int b ? (CriticalChanceValue)b : null,
+            vsProfane is int p ? (CriticalChanceValue)p : null).Project();
+
+    internal static CriticalChanceValue CriticalChanceOn(ClientState conn, uint target, CriticalChanceValue chance, CriticalChanceValue? vsBlinded, CriticalChanceValue? vsProfane = null) =>
+        AddMarkCriticalChance(conn, target, vsProfane is CriticalChanceValue profane && conn.FlaskGrounds.Profane(target) ? profane
+        : vsBlinded is CriticalChanceValue blinded && Blinded(conn, target) ? blinded : chance);
+
+    static CriticalChanceValue AddMarkCriticalChance(ClientState c, uint id, CriticalChanceValue chance) =>
+        new(chance.Numerator + (c.Monsters.TryGetValue(id, out var m) ? MarkOn(c, m, "enemy_additional_critical_strike_chance_against_self") : 0) * chance.Denominator, chance.Denominator);
 
     // The default attack's (and an ordinary bow's) chance against a Blinded target: the main hand's base with the pooled
     // attack increases and the vs-Blinded one, as Pools.AttackCriticalStrikeChance is built. A release keeps the
     // unprohibited chance, as the bow's ordinary one; the roll checks the prohibitions.
-    internal static int? AttackCriticalChanceVsBlinded(ClientState conn, IReadOnlyDictionary<uint, int> player, bool release = false) =>
+    internal static CriticalChanceValue? AttackCriticalChanceVsBlinded(ClientState conn, IReadOnlyDictionary<uint, int> player, bool release = false) =>
         StatOf(player, VsBlindedCriticalStat) is not (not 0 and var extra)
             ? null : AttackCriticalChanceWith(conn, player, extra, release);
 
     // The default attack's (and an ordinary bow's) chance against a target on the player's profane ground: +100%
     // increased critical strike chance (PoB's SelfCritChance INC for enemies on Profane Ground).
-    internal static int? AttackCriticalChanceVsProfane(ClientState conn, IReadOnlyDictionary<uint, int> player, bool release = false) =>
+    internal static CriticalChanceValue? AttackCriticalChanceVsProfane(ClientState conn, IReadOnlyDictionary<uint, int> player, bool release = false) =>
         AttackCriticalChanceWith(conn, player, FlaskGrounds.ProfaneCritIncrease, release);
 
-    static int? AttackCriticalChanceWith(ClientState conn, IReadOnlyDictionary<uint, int> player, long extra, bool release)
+    static CriticalChanceValue? AttackCriticalChanceWith(ClientState conn, IReadOnlyDictionary<uint, int> player, long extra, bool release)
     {
         var weapon = WeaponProfileFor(conn, activeSet: true);
-        return AttackBaseCriticalStrike.Chance(!weapon.Unarmed, weapon.Critical, conn.Pools.CriticalStrikeChancePct + extra + PaidDistillerCritical(conn),
+        return AttackBaseCriticalStrike.ChanceExact(!weapon.Unarmed, weapon.Critical, conn.Pools.CriticalStrikeChancePct + extra + PaidDistillerCritical(conn),
             name => release && IsCriticalProhibition(name) ? 0 : StatOf(player, name));
     }
 
     // A supported gem's chance against a Blinded target (its attack or spell base, the pooled and own increases).
-    internal static int? SupportedCriticalChanceVsBlinded(ClientState conn, ushort skillId, bool release) =>
+    internal static CriticalChanceValue? SupportedCriticalChanceVsBlinded(ClientState conn, ushort skillId, bool release) =>
         conn.Pools.VsBlindedCriticalPct is not 0 and var extra ? SupportedCriticalChanceFor(conn, skillId, release, extra) : null;
 
     // A supported gem's chance against a target on the player's profane ground (+100% increased critical chance).
-    internal static int? SupportedCriticalChanceVsProfane(ClientState conn, ushort skillId, bool release) =>
+    internal static CriticalChanceValue? SupportedCriticalChanceVsProfane(ClientState conn, ushort skillId, bool release) =>
         SupportedCriticalChanceFor(conn, skillId, release, FlaskGrounds.ProfaneCritIncrease);
 
     // damage_taken_+%_from_blinded_enemies (PoB DamageTaken INC, "from Blinded Enemies") for a Blinded monster's hits, where

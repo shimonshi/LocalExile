@@ -132,8 +132,8 @@ public sealed class HierophantEngineCompletionTests
                     ItemCatalog.Create(Program.Items.Find("Diamond Flask")!) with { Charges = 10 });
                 var ordinary = Target(c,10); var blind = Target(c,11);
                 blind.RampageBlindUntil = 100;
-                Assert.Equal(0, Game.SupportedReleaseCriticalChance(c,skill));
-                Assert.Equal(10000, Game.SupportedCriticalChanceVsBlinded(c,skill,true)!.Value);
+                Assert.Equal(0, Game.SupportedReleaseCriticalChance(c,skill).Project());
+                Assert.Equal(10000, Game.SupportedCriticalChanceVsBlinded(c,skill,true)!.Value.Project());
                 actor.Target = 0;
                 Game.HierophantEngineActivate(session,actor,random:new Midpoint());
                 uint regular = ordinary.MaxLife - ordinary.Life, conditional = blind.MaxLife - blind.Life;
@@ -1027,9 +1027,16 @@ public sealed class HierophantEngineCompletionTests
             Assert.Equal(ProjectileHitResult.Hit, session.Hit(new(entity,session.ActorKey(10,target),0,"direct",new(310,300))));
             Assert.True(target.Life < target.MaxLife); Assert.Equal(ownerLife,c.PlayerLife);
             Assert.True(Game.HierophantOf(c).Active(Game.ResourceEffectsTime(c)));
+            // An Assassin can equip Spell Totem without being Hierophant. Real Mistwalker/Toxic Delivery sources
+            // must remain unchanged by the owned actor, even when its spell can critically strike.
+            c.MainAscendancy = new(new(AscendancyFamily.Normal,"Assassin",AscendancyCatalog.Revision),[28782,19598,48239],[]);
+            c.StatSourcesCacheState = null;
+            s.Set("all_damage_can_poison",1); s.Set("base_chance_to_poison_on_hit_%",100);
+            Assert.Equal(100,s.Read()[Program.Stats.Key("gain_elusive_on_crit_%_chance")!.Value]);
+            Assert.True(s.Read()[Program.Stats.Key(OrdinaryAssassinRules.RecentPoisonDuration)!.Value]>0);
             c.Pools = c.Pools with { SpellCriticalStrikeChancePct=-100, VsBlindedCriticalPct=2000, SpellCriticalStrikeMultiplier=250 };
-            Assert.Equal(0,Game.SupportedReleaseCriticalChance(c,skill));
-            Assert.Equal(10000,Game.SupportedCriticalChanceVsBlinded(c,skill,true)!.Value);
+            Assert.Equal(0,Game.SupportedReleaseCriticalChance(c,skill).Project());
+            Assert.Equal(10000,Game.SupportedCriticalChanceVsBlinded(c,skill,true)!.Value.Project());
             var ordinary=Target(c,11); var blinded=Target(c,12);
             var hit=Game.HierophantEngineHit(c,actor,false);
             uint normalMax=(uint)hit.Components.Sum(x=>Math.Floor(x.Range.Max+1e-9));
@@ -1045,7 +1052,10 @@ public sealed class HierophantEngineCompletionTests
             Assert.Equal(ProjectileHitResult.Hit,session.Hit(new(criticalShot,session.ActorKey(12,blinded),0,"direct",new(310,300))));
             Assert.InRange(ordinary.MaxLife-ordinary.Life,1u,normalMax);
             Assert.InRange(blinded.MaxLife-blinded.Life,criticalMin,criticalMax);
+            Assert.True(ordinary.Poisons.Poisoned); Assert.True(blinded.Poisons.Poisoned);
             Assert.Equal(ownerLife,c.PlayerLife);
+            Assert.Equal(0,Game.OrdinaryAssassinOf(c).ElusiveEffect(0));
+            Assert.Equal(0,Game.OrdinaryAssassinOf(c).RecentPoisons(0));
             session.AdvanceTo(ProjectileRuntime.Time(1)); Game.HierophantEngineStep(session); Assert.Equal(1000u,totem.Life);
             totem.Life = 0; totem.DiedAt = 1; Game.HierophantEngineStep(session);
             Assert.False(Game.HierophantEngineCurrent(session,actor));

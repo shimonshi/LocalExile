@@ -5,7 +5,7 @@ sealed class DeadeyeMarkCatalog(string folder = "data")
 {
     internal sealed record Mark(int Effect, string Id, ushort Buff, uint[] BuffKeys);
     readonly Lazy<Mark[]> marks = new(() => Load(folder));
-    public IReadOnlyList<Mark> All => marks.Value;
+    public IReadOnlyList<Mark> All => [.. marks.Value.Where(m => m.Id != "AssassinsMarkTriggeredAssassin")];
     public Mark? Find(int effect) => marks.Value.SingleOrDefault(m => m.Effect == effect);
 
     static Mark[] Load(string folder)
@@ -15,7 +15,7 @@ sealed class DeadeyeMarkCatalog(string folder = "data")
         var names = new Dictionary<string, string>
         {
             ["SnipersMark"] = "curse_snipers_mark", ["AssassinsMark"] = "curse_assassins_mark",
-            ["PoachersMark"] = "curse_poachers_mark", ["WarlordsMark"] = "curse_warlords_mark"
+            ["AssassinsMarkTriggeredAssassin"] = "curse_assassins_mark", ["PoachersMark"] = "curse_poachers_mark", ["WarlordsMark"] = "curse_warlords_mark"
         };
         var result = new List<Mark>();
         foreach (var (effect, row) in effects.RootElement.EnumerateArray().Select((r, i) => (i, r)))

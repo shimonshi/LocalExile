@@ -227,18 +227,18 @@ static class KingInMists
     }
 
     static MonsterAttack Slam(MonsterAttack attack, ushort skill) => With(attack, skill, 1.0, 22,
-        ConvertPhysical(attack.Damage.Scale(1.9), 30));
+        ConvertPhysical(attack.Damage.Scale(1.9), 30)) with { IncomingAilmentEffect=VineSlamEffect };
 
     static MonsterAttack Cascade(MonsterAttack attack, ushort skill) => With(attack, skill, 1.0, 52,
-        ConvertPhysical(attack.Damage.Scale(1.4), 25));
+        ConvertPhysical(attack.Damage.Scale(1.4), 25)) with { IncomingAilmentEffect=VineCascadeEffect };
 
     static MonsterAttack Projectile2(MonsterAttack attack, ushort skill) => With(attack, skill, 1.0, 50,
         attack.Damage.Scale(0.4).Add(DamageType.Chaos, attack.Damage[DamageType.Physical].Scale(0.15)))
-        with { Projectile = new SkillCatalog.MonsterProjectileInfo("Metadata/Projectiles/AzmeriVoodooKingSpellProj", 800, Lobbed: false, 1), Spell = true };
+        with { IncomingAilmentEffect=SpellProjectile2Effect, Projectile = new SkillCatalog.MonsterProjectileInfo("Metadata/Projectiles/AzmeriVoodooKingSpellProj", 800, Lobbed: false, 1), Spell = true };
 
     static MonsterAttack Projectile3(MonsterAttack attack, ushort skill) => With(attack, skill, 1.0, 50,
         attack.Damage.Scale(0.45).Add(DamageType.Chaos, attack.Damage[DamageType.Physical].Scale(0.45)))
-        with { Projectile = new SkillCatalog.MonsterProjectileInfo("Metadata/Projectiles/AzmeriVoodooKing3SpellProj", 800, Lobbed: false, 1), Spell = true };
+        with { IncomingAilmentEffect=SpellProjectile3Effect, Projectile = new SkillCatalog.MonsterProjectileInfo("Metadata/Projectiles/AzmeriVoodooKing3SpellProj", 800, Lobbed: false, 1), Spell = true };
 
     // The official fetish approach is VoodooKingTeleportFlee (0x4009), not the plain VoodooKingTeleport cast: it is the
     // movement skill whose own clip carries the model to the action's target coordinates.
@@ -246,25 +246,25 @@ static class KingInMists
 
     static MonsterAttack BugBomb(MonsterAttack attack, ushort skill) => With(attack, skill, 1.0, 45,
         attack.Damage.Scale(0.55).Add(DamageType.Chaos, attack.Damage[DamageType.Physical].Scale(0.18)))
-        with { Projectile = new SkillCatalog.MonsterProjectileInfo("Metadata/Projectiles/BugBomb", 400, Lobbed: true, 2) { AreaRadius = 9 }, Spell = true };
+        with { IncomingAilmentEffect=BugBombEffect, Projectile = new SkillCatalog.MonsterProjectileInfo("Metadata/Projectiles/BugBomb", 400, Lobbed: true, 2) { AreaRadius = 9 }, Spell = true };
 
     // The official cast releases six BugSoulrend projectiles (Projectiles.dat: collision radius 3, speed 200).
     static MonsterAttack BugRend(MonsterAttack attack, ushort skill) => With(attack, skill, 1.0, 48,
         attack.Damage.Scale(0.8))
-        with { Projectile = new SkillCatalog.MonsterProjectileInfo("Metadata/Projectiles/BugSoulrend", 200, Lobbed: false, 3) { Count = 6 }, Spell = true };
+        with { Projectile = new SkillCatalog.MonsterProjectileInfo("Metadata/Projectiles/BugSoulrend", 200, Lobbed: false, 3) { Count = 6 }, Spell = true, IncomingAilmentEffect=BugRendEffect };
 
     static MonsterAttack BugRendSingle(MonsterAttack attack, ushort skill) => With(attack, skill, 1.0, 48,
         attack.Damage.Scale(0.8))
-        with { Projectile = new SkillCatalog.MonsterProjectileInfo("Metadata/Projectiles/BugSoulrend", 200, Lobbed: false, 3), Spell = true };
+        with { Projectile = new SkillCatalog.MonsterProjectileInfo("Metadata/Projectiles/BugSoulrend", 200, Lobbed: false, 3), Spell = true, IncomingAilmentEffect=BugRendSingleEffect };
 
     static MonsterAttack Punishment(MonsterAttack attack, ushort skill) => With(attack, skill, 1.0, 40,
-        attack.Damage.Scale(0.9)) with { Spell = true };
+        attack.Damage.Scale(0.9)) with { Spell = true, IncomingAilmentEffect=PunishmentEffect };
 
     static MonsterAttack NoDamage(MonsterAttack attack, ushort skill, double seconds) =>
         With(attack, skill, seconds, 0, DamagePacket.Empty) with { Spell = true };
 
     static MonsterAttack With(MonsterAttack attack, ushort skill, double seconds, double range, DamagePacket damage) =>
-        attack with { SkillId = skill, Seconds = seconds, Range = range, Damage = damage, Projectile = null, Release = null };
+        attack with { IncomingAilmentEffect=-1, SkillId = skill, Seconds = seconds, Range = range, Damage = damage, Projectile = null, Release = null };
 
     static DamagePacket ConvertPhysical(DamagePacket packet, int percent)
     {
@@ -358,7 +358,7 @@ static class KingInMists
                     // invisible BuffDefinitions row 350 (base_cannot_be_damaged) for its whole clip. Team stays 1: the
                     // official create's team 0 turned the overhead bar green and the model vanished when it switched
                     // back (live 2026-11-01), so the client-side immunity is a buff instead.
-                    ushort introInvulnerability = NextBuff();
+                    ushort introInvulnerability = NextBuff(id);
                     await Program.Send(remote, stream, ciphers,
                         InstanceEntities.AddBuff(id, introInvulnerability, CannotBeDamagedRow, id),
                         $"0x01c1 King in the Mists 0x{id:x} intro immunity (BuffDefinitions row {CannotBeDamagedRow})");
@@ -1096,7 +1096,7 @@ static class KingInMists
         {
             if (boss.RitualGrace) return;
             boss.RitualGrace = true;
-            ushort buff = NextBuff();
+            ushort buff = NextBuff(id);
             _ritualBuff = buff;
             await Program.Send(remote, stream, ciphers,
                 InstanceEntities.AddBuff(id, buff, RitualImmunityRow, id),
@@ -1410,7 +1410,7 @@ static class KingInMists
                 lock (conn.Monsters)
                     if (conn.Monsters.TryGetValue(fetishId, out var fetish))
                         fetish.FetishGrace = true;
-                ushort buff = NextBuff();
+                ushort buff = NextBuff(fetishId);
                 _fetishBuffs[i] = buff;
                 await Program.Send(remote, stream, ciphers,
                     InstanceEntities.AddBuff(fetishId, buff, CannotBeDamagedRow, fetishId),
@@ -1899,9 +1899,15 @@ static class KingInMists
             }
         }
 
-        ushort NextBuff()
+        ushort NextBuff(uint? target = null)
         {
-            lock (conn.Monsters) return conn.NextBuff++;
+            lock (conn.Monsters)
+            {
+                ushort buff = conn.NextBuff++;
+                if (target is uint actor && conn.Monsters.TryGetValue(actor,out var monster))
+                    monster.NativeBuffReservations.Add(buff);
+                return buff;
+            }
         }
 
         bool Present()

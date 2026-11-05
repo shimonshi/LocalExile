@@ -239,6 +239,7 @@ static partial class Game
         WithRage(conn, stats);
         WithBlind(conn, stats);
         AddOrdinaryHierophantSources(conn, stats);
+        ReconcileOrdinaryAssassinSources(conn, stats);
         // The character panel's sums of base forms (PanelStats); a stat /set_stat set keeps its value.
         ActorScale.Project(stats, rawOverrides, CosmeticScaleSources(conn));
         int Get(string name) => Stats.Key(name) is uint k ? stats.GetValueOrDefault(k) : 0;
@@ -312,17 +313,18 @@ static partial class Game
     // critical strikes are prohibited, as the chance row itself is.
     internal static IEnumerable<(string Stat, int Value)> SpellEffectiveCritical(ClientState conn, IReadOnlyDictionary<uint, int> player,
         int chance, IReadOnlyDictionary<uint, int>? own) =>
-        SpellEffectiveCritical(() => CriticalOnLowLife(conn, player), player, chance, own);
+        SpellEffectiveCritical(() => CriticalOnLowLife(conn, player), player, chance, own,
+            AlwaysCritical(conn, n => StatOf(player, n)));
 
     // onLowLife: CriticalOnLowLife of the same player stats, asked when the rows are enumerated, as the line above does.
     internal static IEnumerable<(string Stat, int Value)> SpellEffectiveCritical(Func<bool> onLowLife, IReadOnlyDictionary<uint, int> player,
-        int chance, IReadOnlyDictionary<uint, int>? own)
+        int chance, IReadOnlyDictionary<uint, int>? own, bool guaranteed = false)
     {
         bool Flag(string name) => Stats.Key(name) is uint key
             && (player.GetValueOrDefault(key) != 0 || (own?.GetValueOrDefault(key) ?? 0) != 0);
         int allowed = CriticalProhibitedBy(player, attack: false, own) ? 0 : chance;
         int extraRolls = CriticalExtraRollsFor(onLowLife(), player, own);
-        bool bifurcate = Flag("spell_critical_strikes_bifurcate");
+        bool bifurcate = !guaranteed && Flag("spell_critical_strikes_bifurcate");
         yield return ("spell_effective_total_chance_permyriad_for_hit_to_be_critical",
             CriticalStrikePolicy.EffectiveChance(allowed, extraRolls, bifurcate));
         yield return ("spell_effective_total_chance_permyriad_for_hit_to_be_double_critical",
@@ -365,7 +367,7 @@ static partial class Game
     internal static IEnumerable<(uint, int)> BaseStats(ClientState conn)
     {
         var seen = new HashSet<uint>();
-        foreach (var (k, v) in ClassAttributes(conn.ClassRow, conn.Pools with { Accuracy = PlayerAccuracy(conn), Evasion = PlayerEvasion(conn) })) if (seen.Add(k)) yield return (k, v);
+        foreach (var (k, v) in ClassAttributes(conn.ClassRow, conn.Pools with { Accuracy = PlayerAccuracy(conn), Evasion = PlayerEvasion(conn), MovementVelocityPct = conn.Pools.MovementVelocityPct + OrdinaryAssassinMovement(conn) })) if (seen.Add(k)) yield return (k, v);
         List<ushort> nodes;
         lock (conn.Monsters) nodes = [.. conn.Passives];
         var extra = CharacterStatSources(conn, nodes).Stats;
@@ -623,7 +625,9 @@ static partial class Game
                 double damageFactor = CriticalStrikePolicy.DamageFactor(
                     CriticalProhibitedBy(characterInputs, SkillsFor(conn).IsAttack(effect), own) ? 0 : criticalChance,
                     criticalMultiplier, CriticalExtraRollsFor(conn, characterInputs, own),
-                    SkillsFor(conn).IsAttack(effect) ? accuracy.Chance(Monsters.BaseEvasion(conn.Pools.Level) ?? 0, false, false) : 100);
+                    SkillsFor(conn).IsAttack(effect) ? accuracy.Chance(Monsters.BaseEvasion(conn.Pools.Level) ?? 0, false, false) : 100,
+                    !SkillsFor(conn).IsAttack(effect) && OrdinaryAssassinSources(conn, characterInputs)("spell_critical_strikes_bifurcate") != 0
+                        && !AlwaysCritical(conn, n => StatOf(characterInputs, n)));
                 var ranges = SkillsFor(conn).IsAttack(effect)
                     ? AttackPanelStats.Compute(finalPlan, supportedHit, 1 / seconds, damageFactor)
                     : SpellPanelStats.Compute(finalPlan, supportedHit, 1 / seconds,

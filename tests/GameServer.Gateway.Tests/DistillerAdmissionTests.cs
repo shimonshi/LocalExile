@@ -360,7 +360,7 @@ static partial class OrdinaryGameplayChecks
         Assert.Equal(0, Game.SupportedHitInputsFor(c, gem.Id)!.Get("physical_damage_%_to_add_as_chaos"));
         var shot = Assert.IsType<ProjectileOffense>(capture().Payload);
         var original = Assert.IsType<ProjectileOffense>(baseline.Payload);
-        Assert.True(shot.CriticalChance > original.CriticalChance);
+        Assert.True(shot.CriticalChance.Project() > original.CriticalChance.Project());
         Assert.Equal(shot.Hit[DamageType.Physical].Min * .37, shot.Hit[DamageType.Chaos].Min, 6);
         Assert.True(shot.Poison.Min > original.Poison.Min);
         var target = new SpawnedMonster("penetration", new(110,100,0),0,0,100000);

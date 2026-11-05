@@ -40,10 +40,19 @@ static partial class Game
         bool spell, bool critical, IReadOnlyDictionary<uint, int> player, IReadOnlyDictionary<uint, int>? skill,
         MonsterPoisons.Settings settings, double now, Random random, HitProvenance provenance = HitProvenance.Owner)
     {
-        if (target.Dead || target.Life == 0 || settings.Seconds <= 0) return null;
+        if (target.Dead || target.Life == 0) return null;
+        if (OrdinaryAssassinSelected(conn) && settings.RecentDuration != 0 && settings.DurationFaster > 0)
+        {
+            var state = OrdinaryAssassinOf(conn);
+            state.Observe(now, OrdinaryAssassinSources(conn, player), conn.PlayerLife > 0);
+            settings = settings with { Seconds = Ailments.PoisonDurationSeconds * Math.Max(0,
+                settings.DurationPercent + (double)state.RecentPoisons(now) * settings.RecentDuration) / 100 / settings.DurationFaster
+                * settings.DurationMultiplier };
+        }
+        if (settings.Seconds <= 0) return null;
         double phys = mitigated[DamageType.Physical].Min;
         double chaos = mitigated[DamageType.Chaos].Min;
-        if (phys + chaos <= 0) return null;
+        if (settings.AllDamage ? mitigated.MinTotal <= 0 : phys + chaos <= 0) return null;
 
         int Player(string name) => Stats.Key(name) is uint key ? player.GetValueOrDefault(key) : 0;
         int Skill(string name) => skill is not null && Stats.Key(name) is uint key ? skill.GetValueOrDefault(key) : 0;
@@ -61,16 +70,21 @@ static partial class Game
         if (avoid > 0 && RandomRolls.Chance(avoid, 100, random)) return null;
 
         var (min, max) = critical ? (settings.CriticalMin, settings.CriticalMax) : (settings.Min, settings.Max);
-        // Lethal Dose: a hit that finds the enemy unpoisoned applies additional poisons on top of its own.
         int stacks = 1 + (target.Poisons.Stacks(now) == 0
             ? Math.Max(0, Get("additional_poisons_+_to_apply_vs_non_poisoned_enemies")) : 0);
-        double perSecond = min + (Math.Max(min, max) - min) * random.NextDouble();
         double seconds = settings.Seconds * MonsterPoisons.SelfDuration(name => target.Mods.Effects[name]);
-        if (!(seconds > 0) || !(perSecond > 0)) return null;
+        double rolled = min + (Math.Max(min, max) - min) * random.NextDouble();
+        if (!(seconds > 0) || !(rolled > 0)) return null;
         bool added = false;
-        for (int i = 0; i < stacks; i++) added |= target.Poisons.Add(now, PathfinderPoisonDps(perSecond,
-            Player(OrdinaryPathfinderRules.DoublePoison) > 0 && ActualFlaskEffectLocked(conn, now), player, random), seconds, provenance == HitProvenance.Owner);
-        return added ? new(target, now, target.Poisons.Capture(now), provenance) : null;
+        for (int i = 0; i < stacks; i++)
+        {
+            bool admitted = target.Poisons.Add(now, PathfinderPoisonDps(rolled,
+                Player(OrdinaryPathfinderRules.DoublePoison) > 0 && ActualFlaskEffectLocked(conn, now), player, random), seconds, provenance == HitProvenance.Owner);
+            added |= admitted;
+            if (admitted && provenance == HitProvenance.Owner) OrdinaryAssassinAppliedPoison(conn, player, now);
+        }
+        PoisonApplicationReceipt? receipt = added ? new(target, now, target.Poisons.Capture(now), provenance) : null;
+        return receipt;
     }
 
     internal static (List<(uint Id,SpawnedMonster M,uint Life,int Damage)> Hits,List<byte[]> Buffs) PreparePoisonTick(

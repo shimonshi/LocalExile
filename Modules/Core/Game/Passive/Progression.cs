@@ -1256,6 +1256,7 @@ static partial class Game
         // All network sends remain outside it (connection lock -> database, never connection lock -> cipher gate).
         lock (conn.Monsters)
         {
+            IncomingMotion(conn,ResourceEffectsTime(conn),false);
             using var availability = AscendancyPolicies.Enter(conn, conn.MainAscendancy.Selection);
             var next = new List<ushort>(conn.Passives);
             var effects = new Dictionary<ushort, ushort>(conn.MasteryEffects);
@@ -1343,7 +1344,7 @@ static partial class Game
             if (error is null)
             {
                 conn.Passives = now;
-                if (!conn.MainAscendancy.Allocated.ToHashSet().SetEquals(ascendancyNow.Allocated) || conn.MainAscendancy.Selection != ascendancyNow.Selection) { ClearOrdinaryHierophant(conn); }
+                if (!conn.MainAscendancy.Allocated.ToHashSet().SetEquals(ascendancyNow.Allocated) || conn.MainAscendancy.Selection != ascendancyNow.Selection) { ClearOrdinaryHierophant(conn); ClearOrdinaryAssassin(conn); }
                 conn.MainAscendancy = ascendancyNow;
                 AscendancyPolicies.SelectionChanged(conn);
                 conn.MasteryEffects = effectsNow;

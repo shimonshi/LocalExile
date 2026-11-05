@@ -9,6 +9,10 @@ static class SpellCriticalStrike
 
     public static int Chance(int? basePerMyriad, Func<string, int> player, Func<string, int>? skill = null,
         long? playerIncrease = null)
+     => ChanceExact(basePerMyriad, player, skill, playerIncrease).Project();
+
+    public static CriticalChanceValue ChanceExact(int? basePerMyriad, Func<string, int> player, Func<string, int>? skill = null,
+        long? playerIncrease = null)
     {
         int Own(string name) => skill?.Invoke(name) ?? 0;
         if (basePerMyriad is null or < 0 || player("global_cannot_crit") != 0 || Own("global_cannot_crit") != 0
@@ -16,11 +20,16 @@ static class SpellCriticalStrike
         long increased = (playerIncrease ?? ((long)player("critical_strike_chance_+%")
             + player("spell_critical_strike_chance_+%")))
             + Own("critical_strike_chance_+%") + Own("spell_critical_strike_chance_+%");
-        return AddedBaseCriticalStrike.Chance(basePerMyriad.Value, increased, spell: true, player, skill);
+        return AddedBaseCriticalStrike.ChanceExact(basePerMyriad.Value, increased, spell: true, player, skill);
     }
 
     public static int Chance(int? basePerMyriad, StatCatalog stats, IReadOnlyDictionary<uint, int> player,
         IReadOnlyDictionary<uint, int> skill, long? playerIncrease = null) => Chance(basePerMyriad,
+            name => stats.Key(name) is uint k ? player.GetValueOrDefault(k) : 0,
+            name => stats.Key(name) is uint k ? skill.GetValueOrDefault(k) : 0, playerIncrease);
+
+    public static CriticalChanceValue ChanceExact(int? basePerMyriad, StatCatalog stats, IReadOnlyDictionary<uint, int> player,
+        IReadOnlyDictionary<uint, int> skill, long? playerIncrease = null) => ChanceExact(basePerMyriad,
             name => stats.Key(name) is uint k ? player.GetValueOrDefault(k) : 0,
             name => stats.Key(name) is uint k ? skill.GetValueOrDefault(k) : 0, playerIncrease);
 

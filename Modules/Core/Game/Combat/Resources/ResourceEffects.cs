@@ -9,13 +9,17 @@ sealed class ResourceEffectsState(IModuleLifetime? rules, IModuleLifetime? sourc
     internal long Generation;
     internal readonly ManaRecoupState Mana = new();
     internal readonly OrdinaryHierophantState Hierophant = new();
-    internal ushort SurgeBuff;
+    internal readonly OrdinaryAssassinState Assassin = new();
+    AssassinIncomingAilments? incoming;
+    internal AssassinIncomingAilments Incoming => incoming ??= new(this);
+    internal ushort SurgeBuff, ElusiveBuff;
+    internal int SentElusive;
     internal double SentSurgeUntil;
     internal int SentHierophantTotems;
     internal readonly TimedBlind PlayerBlind = new();
     internal readonly Dictionary<uint, (SpawnedMonster Target, TimedBlind Blind)> Targets = [];
     readonly HashSet<(uint Actor, ushort Buff)> retired = [];
-    internal sealed record Snapshot(ManaRecoupState.Carried Mana, (double Seconds, int Less)[] Blind, OrdinaryHierophantState.Carried Hierophant);
+    internal sealed record Snapshot(ManaRecoupState.Carried Mana, (double Seconds, int Less)[] Blind, OrdinaryHierophantState.Carried Hierophant, OrdinaryAssassinState.Carry Assassin, AssassinIncomingAilments.Carry Incoming);
     internal Snapshot? TransferCheckpoint;
     internal bool Loading;
     public IReadOnlyCollection<(uint Actor, ushort Buff)> RetiredBuffs => retired;
@@ -26,7 +30,7 @@ sealed class ResourceEffectsState(IModuleLifetime? rules, IModuleLifetime? sourc
         if (old.Blind is { Buff: > 0 } blind) retired.Add((id, blind.Buff));
         var value = new TimedBlind(); Targets[id] = (target, value); return value;
     }
-    internal Snapshot Capture(double at) => new(Mana.Capture(at), PlayerBlind.Capture(at), Hierophant.Capture(at));
+    internal Snapshot Capture(double at) => new(Mana.Capture(at), PlayerBlind.Capture(at), Hierophant.Capture(at), Assassin.Export(at), Incoming.Capture(at));
     internal void CollectRetiredTargets(ClientState conn)
     {
         foreach (var (id, value) in Targets.ToArray())
@@ -35,16 +39,17 @@ sealed class ResourceEffectsState(IModuleLifetime? rules, IModuleLifetime? sourc
                 if (value.Blind.Buff != 0) retired.Add((id, value.Blind.Buff));
                 Targets.Remove(id);
             }
+        if (incoming is not null) { retired.UnionWith(incoming.RetiredBuffs); incoming.RetiredBuffs.Clear(); }
         conn.RetiredResourceBuffs.UnionWith(retired); retired.Clear();
     }
     public void Freeze(double at) => TransferCheckpoint = Capture(at);
     public void Resume(double at)
     {
         // A refused transfer resumes the live draft, discarding loading earnings rather than paying catch-up.
-        Mana.Take(at); Mana.DiscardRecoveryFraction(); PlayerBlind.Read(at); if (TransferCheckpoint is { } frozen) { Hierophant.Restore(frozen.Hierophant, at); } TransferCheckpoint = null;
+        Mana.Take(at); Mana.DiscardRecoveryFraction(); PlayerBlind.Read(at); if (TransferCheckpoint is { } frozen) { Hierophant.Restore(frozen.Hierophant, at); Assassin.RestoreOwned(frozen.Assassin, at); Incoming.Restore(frozen.Incoming, at); } TransferCheckpoint = null;
     }
     internal void Restore(Snapshot value, double at)
-    { Mana.Restore(value.Mana, at); PlayerBlind.Restore(value.Blind, at); Hierophant.RestoreOwned(value.Hierophant, at); }
+    { Mana.Restore(value.Mana, at); PlayerBlind.Restore(value.Blind, at); Hierophant.RestoreOwned(value.Hierophant, at); Assassin.RestoreOwned(value.Assassin, at); Incoming.Restore(value.Incoming, at); }
     public void Clear()
     {
         if (PlayerBlind.Buff != 0) retired.Add((Program.PlayerId, PlayerBlind.Buff));
@@ -57,7 +62,10 @@ sealed class ResourceEffectsState(IModuleLifetime? rules, IModuleLifetime? sourc
             foreach (var effect in connection.FlaskEffects.End(e => e.CopyManaToLife))
                 if (effect.Buff != 0) retired.Add((Program.PlayerId, effect.Buff));
         if (SurgeBuff != 0) retired.Add((Program.PlayerId, SurgeBuff));
-        SurgeBuff = 0; Hierophant.Clear();
+        if (ElusiveBuff != 0) retired.Add((Program.PlayerId, ElusiveBuff));
+        ElusiveBuff = 0; SentElusive = 0;
+        SurgeBuff = 0; Hierophant.Clear(); Assassin.Clear();
+        if (incoming is not null) { incoming.Clear(); retired.UnionWith(incoming.RetiredBuffs); incoming.RetiredBuffs.Clear(); }
         Mana.Clear(); PlayerBlind.Clear(); Targets.Clear(); TransferCheckpoint = null;
     }
 }
@@ -118,6 +126,7 @@ static partial class Game
         IReadOnlyDictionary<uint, int> stats, double earnedMana, uint manaBefore, uint manaCap, ref double manaCarry)
     {
         AdvancePlayerAilmentsLocked(conn, from, now, stats);
+        if (conn.PlayerLife > 0) AdvanceIncomingPhysicalAilmentsLocked(conn, ResourceEffectsOf(conn).Incoming, from, now, stats);
         if (conn.PlayerLife == 0)
         {
             manaCarry = 0; LeechOf(conn).Clear(now); FortificationOf(conn).Clear();

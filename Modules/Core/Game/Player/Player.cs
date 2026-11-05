@@ -536,6 +536,7 @@ static partial class Game
             if (!PlayerUpdatesCurrent(conn, updates)) return;
             await SendBlind(remote, stream, ciphers, conn);
             await Send(remote, stream, ciphers, [], null, atGate: () => HierophantPresentation(conn));
+            await Send(remote, stream, ciphers, [], null, atGate: () => OrdinaryAssassinPresentation(conn));
             if (!PlayerUpdatesCurrent(conn, updates)) return;
             await PushOutOfCollision(remote, stream, ciphers, conn);
             if (!PlayerUpdatesCurrent(conn, updates)) return;
@@ -670,6 +671,10 @@ static partial class Game
                 }
                 double seconds = now - last;
                 if (seconds <= 0) continue;
+                // Preserve out-of-band damage through stat reconciliation, which clears leech state at death.
+                var leech = LeechOf(conn);
+                instantLifeChanged = leech.InstantLifeChanged;
+                instantManaChanged = leech.InstantManaChanged;
                 // Stat aggregation stays at the old 250 ms cadence, rather than rebuilding the panel 60 times/s.
                 double previousManaRate = manaRate, previousSurgeUntil = recoverySurgeUntil;
                 double surgeUntil = HierophantOf(conn).Until;
@@ -699,11 +704,13 @@ static partial class Game
                 lifeBefore = conn.PlayerLife;
                 manaBefore = conn.PlayerMana;
                 manaCap = (uint)UnreservedMana(conn);
-                var leech = LeechOf(conn);
-                instantLifeChanged = leech.InstantLifeChanged;
-                instantManaChanged = leech.InstantManaChanged;
+                instantLifeChanged |= leech.InstantLifeChanged;
+                instantManaChanged |= leech.InstantManaChanged;
                 leech.InstantLifeChanged = leech.InstantManaChanged = false;
                 dead = lifeBefore == 0;
+                // Leech projection can clear its dirty flags before this worker observes an external death.
+                if (dead && conn.DeathNotificationEpoch != conn.IncomingHitEpoch)
+                    ailmentDeathEpoch = conn.IncomingHitEpoch;
                 if (dead)
                 {
                     lifeCarry = manaCarry = burnCarry = trapCarry = flaskCarry = 0;
@@ -722,7 +729,7 @@ static partial class Game
                         conn.EnergyShield.Current >= conn.EnergyShield.Maximum);
                     var leeched = leech.TakeRecovery(now);
                     int IncomingStat(string name) => RecoveryStat(name);
-                    burnCarry += (InGracePeriod(conn) ? 0 : burnPerSecond * conn.ElementalAilments.DamageTakenFactor(now))
+                    burnCarry += (InGracePeriod(conn) ? 0 : burnPerSecond * conn.ElementalAilments.DamageTakenFactor(now, OrdinaryAssassinIncomingIncreased(conn, recoveryStats, now)))
                         * seconds * Math.Max(0, 1 + IncomingStat(IncomingResourceDefences.TakenStat) / 100.0);
                     int burnWhole = (int)Math.Truncate(burnCarry); burnCarry -= burnWhole;
                     int lifeBurn = IncomingResourceDefences.DamageOverTime(conn.EnergyShield, burnWhole,
@@ -805,7 +812,7 @@ static partial class Game
             if (ailmentDeathEpoch is int lethalEpoch)
                 await PlayerDiedAtEpoch(remote, stream, ciphers, conn,
                     trapDeath ? "0x0055 lethal trap degeneration"
-                        : pbDeath ? "0x0055 Petrified Blood life loss" : "0x0055 lethal elemental ailment", lethalEpoch);
+                        : pbDeath ? "0x0055 Petrified Blood life loss" : "0x0055 lethal ailment damage", lethalEpoch);
             if (!PlayerUpdatesCurrent(conn, updates)) return;
             await SendPlayerEnergyShield(remote, stream, ciphers, conn);
             if (!PlayerUpdatesCurrent(conn, updates)) return;
@@ -869,20 +876,20 @@ static partial class Game
     // are inside.
     internal static async Task BurnAround(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn, RighteousFireState rf, double seconds)
     {
-        double now = conn.Clock.Elapsed.TotalSeconds;
-        double perSecond = (conn.PlayerMaxLife * (double)rf.DamagePctPerMinute + conn.Pools.EnergyShield * (double)rf.EnergyShieldDamagePctPerMinute) / 6000.0;
-        var playerStats = CharacterPlayerStats(conn);
-        if (Stats.Key("delirium_aura_damage_over_time_+%_final") is uint moreDot)
-            perSecond *= Math.Max(0, 1 + playerStats.GetValueOrDefault(moreDot) / 100.0);
-        perSecond *= ChargeDamageMore(playerStats);
-        var damageOverTime = new SkillDamageContext(SkillHitKind.Spell, playerStats)
-            .OverTime(new DamageOverTime(DamageType.Fire, perSecond, seconds));
         var hits = new List<(uint Id, SpawnedMonster M, uint Life, int Damage)>();
         var entered = new List<(uint Id, ushort Buff)>();
         var left = new List<(uint Id, ushort Buff)>();
         using (ProjectileMutation(conn))
         {
-            now = ProjectileWorldTime(conn);
+            double now = ProjectileWorldTime(conn);
+            double perSecond = (conn.PlayerMaxLife * (double)rf.DamagePctPerMinute + conn.Pools.EnergyShield * (double)rf.EnergyShieldDamagePctPerMinute) / 6000.0;
+            var playerStats = CharacterPlayerStats(conn);
+            if (Stats.Key("delirium_aura_damage_over_time_+%_final") is uint moreDot)
+                perSecond *= Math.Max(0, 1 + playerStats.GetValueOrDefault(moreDot) / 100.0);
+            perSecond *= ChargeDamageMore(playerStats);
+            perSecond *= OrdinaryAssassinOutgoingMore(conn, playerStats, now);
+            var damageOverTime = new SkillDamageContext(SkillHitKind.Spell, playerStats)
+                .OverTime(new DamageOverTime(DamageType.Fire, perSecond, seconds));
             var here = conn.Walk.Position(now);
             foreach (var (id, m) in conn.Monsters)
             {
