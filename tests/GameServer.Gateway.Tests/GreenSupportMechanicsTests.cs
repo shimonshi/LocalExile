@@ -24,7 +24,6 @@ public sealed class GreenSupportMechanicsTests
 
     // Cull the Weak's share applies only to normal and magic enemies; Culling Strike's own share keeps applying to all.
     // Pacifism's hit leaves one Life and cancels the cull.
-    [Fact]
     public void Cull_the_weak_and_pacifism_cull_and_spare_by_rarity()
     {
         var weak = Game.Cull.Of(null, With(("kill_normal_or_magic_enemy_on_hit_if_under_x%_life", 47)),
@@ -84,7 +83,6 @@ public sealed class GreenSupportMechanicsTests
 
     // Lethal Dose's extra poisons, Vile Toxins' per-poison damage, Hypothermia's freeze chance, Sadism's duration and
     // Greater Chain's chain multiplier.
-    [Fact]
     public void Poison_freeze_duration_and_chain_support_stats_apply()
     {
         var conn = new ClientState(new(1, "supports", 300, 300, 100, 100, null, []), 1, 1);

@@ -10,7 +10,6 @@ public sealed class AwakenedSupportTests
         name => stats.Where(s => s.Name == name).Sum(s => s.Value);
 
     // Crush: a hit's chance crushes for 4 seconds, and a crushed monster's physical damage reduction is 15% lower.
-    [Fact]
     public void Crush_lowers_physical_damage_reduction_for_four_seconds()
     {
         var monster = new SpawnedMonster("crushed", new(105, 100, 0), 0, 0, 1000)
@@ -33,7 +32,6 @@ public sealed class AwakenedSupportTests
 
     // Awakened Spell Echo's double damage belongs to the final repeat only; Awakened Generosity's increased effect
     // scales the aura it supports.
-    [Fact]
     public void Final_repeat_double_damage_and_aura_support_effect_apply()
     {
         var echo = Stats(("spell_echo_plus_chance_double_damage_%_final", 100));

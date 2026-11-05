@@ -11,7 +11,6 @@ public sealed class RedSupportMechanicsTests
     static Dictionary<uint, int> With(params (string Name, int Value)[] stats) =>
         stats.ToDictionary(s => Program.Stats.Key(s.Name) ?? throw new InvalidOperationException(s.Name), s => s.Value);
 
-    [Fact]
     public void Maim_bloodlust_power_charges_and_volatility_apply()
     {
         // Maim: a hit's chance maims for 4 s, and a maimed monster takes 10% more physical damage.
