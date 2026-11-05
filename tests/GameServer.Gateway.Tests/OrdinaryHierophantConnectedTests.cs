@@ -157,6 +157,18 @@ public sealed class OrdinaryHierophantConnectedTests
         s.Set("hierophant_area_of_effect_+%_per_50_unreserved_mana_up_to_100%", 1);
         s.Set(OrdinaryHierophantRules.TotemMore, 3);
         s.Set("you_and_totem_life_regeneration_rate_per_minute_%_per_active_totem", 60);
+        c.Walk.Teleport(300,300,0);
+        int RighteousFireDamage()
+        {
+            var target = new SpawnedMonster("RF target", new(310,300,0),0,0,100000);
+            c.Monsters[10] = target;
+            uint ownerLife = c.PlayerLife;
+            var tick = Game.PrepareRighteousFireTick("RF scaling",null!,null!,c,new(0,0,null,1,600,0,20),1);
+            foreach (var packet in tick.Buffs) TargetBuffOutputLedger.Discard(packet);
+            Assert.Equal(ownerLife,c.PlayerLife); // The outgoing tick never changes RF self-burn.
+            return Assert.Single(tick.Hits).Damage;
+        }
+        Assert.Equal(100,RighteousFireDamage());
         c.Totems.Place(new(101, 1, (100, 100), 100, 2, null), 1, 0);
         var raw = s.Read(); Assert.Equal(12, Get(raw, "damage_+%"));
         var pools = Game.BuildPoolsFor(c, c.Pools.Level);
@@ -171,6 +183,7 @@ public sealed class OrdinaryHierophantConnectedTests
         c.Auras.Clear();
         Assert.Equal(60, Get(raw, "life_regeneration_rate_per_minute_%"));
         Assert.Equal(1.03, HierophantModifiers.Damage(n => Get(raw, n), false), 8);
+        Assert.Equal(103,RighteousFireDamage());
         int Ignite(IReadOnlyDictionary<uint, int> stats) => AilmentPanelStats.Compute(new("spell", true),
             DamagePacket.Of(DamageType.Fire, 100, 100), new(), n => Get(stats, n))
             .Single(row => row.Stat == "minimum_ignite_damage_to_deal_per_minute_from_non_critical_spell_damage").Value;
@@ -179,11 +192,13 @@ public sealed class OrdinaryHierophantConnectedTests
         s.Set(OrdinaryHierophantRules.HitSurge, 1); s.Set(OrdinaryHierophantRules.SurgeMore, 20);
         Assert.True(Game.OrdinaryHierophantSpellHit(c, s.Read(), true, true, true));
         Assert.Equal(6229, Ignite(s.Read()));
+        Assert.Equal(103,RighteousFireDamage()); // Spell-only Surge cannot scale RF's burn.
         s.Set("damage_+%", 7); s.Set("skill_area_of_effect_+%", 9);
         Assert.Equal(7, Get(s.Read(), "damage_+%")); Assert.Equal(9, Get(s.Read(), "skill_area_of_effect_+%"));
         s.Time.At(2); Assert.Equal(0, Get(s.Read(), "number_of_active_totems"));
         Assert.Equal(1, HierophantModifiers.Damage(n => Get(s.Read(), n), false));
         Assert.Equal(5778, Ignite(s.Read())); // Explicit 7% damage override remains after totem expiry.
+        Assert.Equal(100,RighteousFireDamage());
     }
 
 

@@ -497,7 +497,7 @@ public sealed class HierophantEngineCompletionTests
         }
         // Actual independent publishers must retain their target-local buffs through allocator wrap.
         foreach (string producer in new[] { "Pride", "BlindAura", "Smoke", "Profane", "Rarity", "SmokePending", "ProfanePending", "RawIgnite", "RawBleed", "IgniteExpiry", "BleedExpiry", "PoisonRefresh", "PoisonExpiry",
-            "RawIgniteMinion", "RawIgniteDiscard" })
+            "RawIgniteMinion", "RawIgniteDiscard", "RighteousFireExit", "RighteousFireEnd" })
         {
             using var auraSetup = new OrdinaryHierophantConnectedTests.Setup(); using var auraWire = new Wire();
             var auraConn = auraSetup.Conn; auraConn.Walk.Teleport(300,300,0);
@@ -510,6 +510,8 @@ public sealed class HierophantEngineCompletionTests
             if (producer == "BlindAura") auraConn.Passives = [5087]; // Pinned SaboteurBlind template source.
             bool rawDot = producer.StartsWith("Raw",StringComparison.Ordinal) || producer.EndsWith("Expiry",StringComparison.Ordinal)
                 || producer == "PoisonRefresh";
+            bool pendingRf = producer.StartsWith("RighteousFire",StringComparison.Ordinal);
+            if (pendingRf) auraConn.RighteousFire = new(0,0,null,auraSkill,0,0,20);
             List<byte[]>? dotPackets = null;
             if (producer.StartsWith("RawIgnite",StringComparison.Ordinal) || producer == "IgniteExpiry")
                 dotPackets = Game.IgniteLocked(auraConn,10,auraTarget,new(DamageType.Fire,1,producer == "IgniteExpiry" ? 9 : 100),0);
@@ -542,10 +544,16 @@ public sealed class HierophantEngineCompletionTests
             async Task Publish()
             {
                 if (producer == "Rarity") return;
-                if (rawDot)
+                if (rawDot || pendingRf && dotPackets is not null)
                 {
                     foreach (var packet in dotPackets ?? []) await Program.Send("pending DoT",auraWire.Stream,auraWire.Ciphers,packet,null);
                     dotPackets = null; return;
+                }
+                if (pendingRf)
+                {
+                    if (auraConn.RighteousFire is { } rf)
+                        await Game.BurnAround("RF aura wrap",auraWire.Stream,auraWire.Ciphers,auraConn,rf,0);
+                    return;
                 }
                 if (producer is "Pride" or "BlindAura")
                     await Game.EnemyDebuffsTick("Brand aura wrap", auraWire.Stream, auraWire.Ciphers, auraConn, 0);
@@ -567,6 +575,19 @@ public sealed class HierophantEngineCompletionTests
                 auraSession.AdvanceTo(ProjectileRuntime.Time(10));
                 Assert.True(await Game.CastGemSkill("Brand aura wrap", auraWire.Stream, auraWire.Ciphers, auraConn,
                     auraSkill, (300,300), (310,300), sequence: 0x4568));
+                if (pendingRf)
+                {
+                    if (producer == "RighteousFireEnd") dotPackets = Game.PrepareRighteousFireEnd(auraConn).Buffs;
+                    else
+                    {
+                        var rf = auraConn.RighteousFire!;
+                        auraConn.Walk.Teleport(1000,1000,10);
+                        dotPackets = Game.PrepareRighteousFireTick("RF exit",auraWire.Stream,auraWire.Ciphers,auraConn,rf,0).Buffs;
+                        auraConn.Walk.Teleport(300,300,10);
+                        Assert.Empty(rf.Auras);
+                    }
+                    Assert.True(auraConn.TargetBuffOutputs.Holds(10,auraInstance));
+                }
                 if (rawDot)
                 {
                     List<byte[]>? replacement;
@@ -600,7 +621,7 @@ public sealed class HierophantEngineCompletionTests
                 ushort brandInstance = actor.Presentation!.ShownBuff;
                 Assert.NotEqual((ushort)0, brandInstance);
                 Assert.True(auraInstance != brandInstance,$"{producer}: retained and Brand instances both {auraInstance}");
-                if (rawDot)
+                if (rawDot || pendingRf)
                 {
                     if (producer == "RawIgniteMinion")
                     {
@@ -638,12 +659,12 @@ public sealed class HierophantEngineCompletionTests
                 Assert.DoesNotContain(Convert.ToHexString(InstanceEntities.RemoveBuff(10, auraInstance)), cleanup);
                 await Publish();
                 string reconciled = Convert.ToHexString(await auraWire.Drain(auraSession));
-                Assert.DoesNotContain("01C10000000A",reconciled); // A retained publisher must not need repair/republication.
+                if (!pendingRf) Assert.DoesNotContain("01C10000000A",reconciled); // RF may legitimately reenter after leaving its radius.
                 Assert.DoesNotContain(Convert.ToHexString(InstanceEntities.RemoveBuff(10,auraInstance)),reconciled);
                 if (producer == "Pride") Assert.Equal(auraInstance, auraTarget.PlayerAuras[AuraCatalog.PrideBuffRow]);
                 else if (producer == "BlindAura") Assert.True(auraConn.BlindAura.Blinded(10));
                 else if (producer == "Rarity") Assert.Contains(auraInstance,auraTarget.NativeBuffReservations);
-                else if (!pendingGround && !rawDot) Assert.True(producer == "Smoke" ? auraConn.FlaskGrounds.Blinded(10) : auraConn.FlaskGrounds.Profane(10));
+                else if (!pendingGround && !rawDot && !pendingRf) Assert.True(producer == "Smoke" ? auraConn.FlaskGrounds.Blinded(10) : auraConn.FlaskGrounds.Profane(10));
             }
             finally { auraSession.Invalidate(); await auraSession.OutputCompleted; }
             Assert.Empty(auraConn.ReservedBrandBuffs);
