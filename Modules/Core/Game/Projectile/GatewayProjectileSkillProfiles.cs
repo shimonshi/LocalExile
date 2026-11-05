@@ -76,12 +76,23 @@ static class GatewayProjectileSkillProfiles
                 ContactTargets = new("lightning-arrow-targets", extra, 18)
             };
 
+        // Arrow Nova's payload and circular volley. The child count keeps this stage's base count; the shared modifier
+        // pass below adds the skill's and the support's extra arrows to it.
+        if (get("projectiles_rain") != 0 || get("skill_is_rain_skill") != 0) p = ArrowNovaChildren(p);
+
         p = GatewayProjectileModifiers.Resolve(p, get, attack, arrows);
         // Its chains bounce on the ground instead of seeking another monster.
         if (effect == "RollingMagma") p = p with { GroundChains = p.Chain, Chain = 0 };
         // Spectral Throw pierces every enemy and flies back to the thrower, hitting again on the way back.
         if (effect == "SpectralThrow") p = p with { Pierce = -1, Returns = true };
-        if (IsTornadoShot(effect)) p = TornadoShotChildren(p, get);
+        if (IsTornadoShot(effect))
+        {
+            // Arrow Nova owns the outer landing payload. Compose the skill's terminal stages
+            // inside its already-counted volley, preserving both emissions and the paid offense carrier.
+            if ((get("projectiles_rain") != 0 || get("skill_is_rain_skill") != 0) && p.EndEmission is { } nova)
+                p = p with { EndEmission = nova with { Child = TornadoShotChildren(nova.Child, get) } };
+            else p = TornadoShotChildren(p, get);
+        }
         // The endpoint cluster uses the same already-resolved quantity as each contact cluster.
         if (p.ContactArea is { } contact) p = p with { EndArea = contact };
         return ScaleAreas(p, effect, get, spell: !attack);
@@ -109,6 +120,7 @@ static class GatewayProjectileSkillProfiles
             SequentialDelay = 0,
             CountConsumer = ProjectileCountConsumer.Primary,
             Pierce = parent.Pierce, Fork = parent.Fork, Chain = parent.Chain, Split = 0,
+            ForkExtraProjectileChancePercent = parent.ForkExtraProjectileChancePercent,
             CannotPierce = parent.CannotPierce, CannotFork = parent.CannotFork, CannotChain = parent.CannotChain,
             CannotSplit = true,
             Returns = false, ReturnChancePercent = 0, ReturnRolls = null, CannotReturn = true,
@@ -153,6 +165,39 @@ static class GatewayProjectileSkillProfiles
             uint value = random.NextUInt();
             if (value < limit) return value % exclusiveMax;
         }
+    }
+
+    // Arrow Nova (support projectiles_rain + skill_is_rain_skill): the supported bow attack fires one payload arrow
+    // that lands at the aim and releases the skill's whole volley in a circle from there. Frida 2026-11-04 (Split
+    // Arrow, 18 arrows): all children started on one cell and the directions were exactly 20 degrees apart, the first
+    // on the aim ray; the client drew both the payload and the children, and the payload dealt no damage.
+    static ProjectileProfile ArrowNovaChildren(ProjectileProfile parent)
+    {
+        var child = parent with
+        {
+            // Keep the base count and the skill's own contact/terminal areas: these are its normal arrows.
+            NativeVolley = null, SpreadRadians = 0, AimSpreadDistance = 0,
+            // The client draws these itself (Frida 2026-11-04: the 18 SplitArrowDefault children were client objects),
+            // so a server object would be a second, later volley at the landing cell.
+            HideVisual = true,
+            CountConsumer = ProjectileCountConsumer.Primary,
+            DirectDamage = true, Lobbed = false,
+            EndEmission = null, TravelEmission = null, Pulse = null,
+            EndAreaOnReturnTurnaround = false, Legs = null, LegLeash = 0, GroundChains = 0,
+            Returns = false, ReturnChancePercent = 0, ReturnRolls = null, CannotReturn = true,
+            FormChange = null, SplitForm = null, SplitOnTerrain = false
+        };
+        return parent with
+        {
+            // One payload arrow: no hits, no contacts, and no server object (the official server sends none; the
+            // parabola was ours). The rain rig and its attached arrow art carry the visual; the children stay hidden.
+            Count = 1, CountConsumer = ProjectileCountConsumer.Children,
+            DirectDamage = false, HideVisual = true, Lobbed = true, ArcHeight = 200,
+            Pierce = 0, CannotPierce = true, Fork = 0, Chain = 0, Split = 0, CannotSplit = true,
+            EndArea = null, EndAreaReasons = null, EndAreaOnReturnTurnaround = false,
+            ContactArea = null, ContactTargets = null,
+            EndEmission = new(child, Radial: true) { Delay = ProjectileRuntime.Time(0.221) }
+        };
     }
 
     public static ProjectileProfile ScaleAreas(ProjectileProfile p, string effect, Func<string, int> get, bool spell)

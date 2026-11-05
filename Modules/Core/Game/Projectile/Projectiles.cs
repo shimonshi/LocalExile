@@ -293,7 +293,7 @@ static partial class Game
                 if (!accuracy.CannotBeEvaded && !target.AttackEvasion.Hits(hitChance, at, Conn.AttackAccuracyRandom))
                     return ProjectileHitResult.Miss;
             }
-            if (MonsterBlocks(target, random, shot.Spell)) return ProjectileHitResult.Blocked;
+            if (MonsterBlocks(target, random, shot.Spell, at, shot.SkillStats)) return ProjectileHitResult.Blocked;
             double more = contact.Multiplier * (contact.Phase > 0 ? shot.ReturnMultiplier : 1)
                 * shot.OrdinaryDistance.HitMultiplier(contact.Projectile.Distance, !shot.Spell);
             if (!shot.Spell && shot.FarShot) more *= AntiquarianEffects.FarShot(contact.Projectile.Distance);
@@ -307,7 +307,8 @@ static partial class Game
             var gambler = GamblerFor(player);
             var rolled = WithConditionalSupportDamageLocked(Conn, shot.SkillStats, !shot.Spell, target,
                 GameEvents.WithOutgoingDamage(Conn, player, target, (gambler with { DamageMorePct = 0 })
-                    .ForSkill(name => Stats.Key(name) is uint k ? shot.SkillStats.GetValueOrDefault(k) : 0, shot.Spell)
+                    .ForSkill(name => Stats.Key(name) is uint k ? shot.SkillStats.GetValueOrDefault(k) : 0, shot.Spell,
+                        finalRepeat: contact.Projectile.Use.RepeatsLeft == 0)
                     .RollOutgoingHit(packet, random)), at);
             int chance = contact.Projectile.Form > 0 && shot.SecondFormCriticalChance is int second ? second
                 : CriticalChanceOn(Conn, contact.Target.Id, shot.CriticalChance, shot.VsBlindedCriticalChance,
@@ -323,7 +324,7 @@ static partial class Game
             if (critical) damage = DamageModel.CriticalDamage(damage, multiplier);
             bool immune = target.Invulnerable;
             if (mirage is null)
-                LeechOnHitLocked(Conn, target, MonsterTakenComponents(target, mitigated, shot.Spell), damage, shot.Leech);
+                LeechOnHitLocked(Conn, target, MonsterTakenComponents(target, mitigated, shot.Spell, at), damage, shot.Leech);
             if (!immune)
             {
                 var settings = (critical ? shot.CriticalImpaleSettings : null) ?? shot.ImpaleSettings ?? new(shot.ImpaleChance);
@@ -339,6 +340,10 @@ static partial class Game
                     cull: cull with { RecoverLifePct = 0 });
             if (hit is null) return ProjectileHitResult.Miss;
             if (!immune && damage > 0 && shot.MirageRelease is { } receipt) MirageOwnerHit(this, receipt, target);
+            // Item Quantity Support: the kill's loot rolls read the supported skill's share.
+            if (Stats.Key("base_killed_monster_dropped_item_quantity_+%") is uint quantityKey)
+                target.KilledWithItemQuantityPct = shot.SkillStats.GetValueOrDefault(quantityKey);
+            if (mirage is null && hit.Value.Life == 0) DevourOnKill(Conn, shot.SkillStats);
             if (!immune)
                 AilmentsOnHitLocked(Conn, target, mitigated, shot.Spell, critical, multiplier, player, shot.SkillStats,
                     at, contact.Projectile.ReactionRandomSource, poison: shot.Poison, reflectToPlayer: mirage is null);
@@ -371,8 +376,25 @@ static partial class Game
                     + $" reason={value.Reason} position={value.Position} metadata={p.Profile.Id}"
                     + $" grid={Conn.Layout.Id}_seed{Conn.Seed} blocked={ProjectileGrid.Blocks(Conn.Layout.Id, Conn.Seed, x, y)?.ToString() ?? "unknown"}");
             if (valid && presentation.EventEffect?.Invoke(value) is { } eventEffect)
-                Effect(x, y, eventEffect, presentation.EffectLifetime,
-                    value.Kind == ProjectileEventKind.Area ? value.Radius : null);
+            {
+                bool spawn = value.Kind == ProjectileEventKind.Spawn;
+                // The official rain rig stands at the caster's cell; the payload arrow leaves from the bow, so spawning
+                // the rig at the release point shifted the whole rig (and its attached arrow) ahead of the player.
+                int ex = x, ey = y;
+                if (spawn && presentation.SpawnAtCaster)
+                {
+                    var caster = Actors(Runtime.Now, Runtime.Now).FirstOrDefault(a => a.Key == p.Use.Emitter);
+                    if (caster is null) return;
+                    var at = caster.Position(Runtime.Now);
+                    ex = (int)Math.Round(at.X);
+                    ey = (int)Math.Round(at.Y);
+                }
+                Effect(ex, ey, eventEffect, presentation.EffectLifetime,
+                    value.Kind == ProjectileEventKind.Area ? value.Radius : null, presentation.AttachEffect,
+                    presentation.AttachParent, presentation.EffectAnimatedFlags,
+                    spawn ? presentation.SpawnFlags0 : (byte)0, spawn ? presentation.SpawnAnimationWord : 0,
+                    spawn ? presentation.SpawnAnimationValue : 0, spawn ? presentation.SpawnAnimatedId : 0);
+            }
             // The client draws its own primary projectiles of a skill use; the server still simulates them (contacts,
             // areas and continuation children, which do get objects).
             if (value.Kind == ProjectileEventKind.Spawn && p.Profile.HideVisual) return;
@@ -462,13 +484,19 @@ static partial class Game
                 Effect(x, y, ao, presentation.EffectLifetime, value.Radius);
         }
 
-        void Effect(int x, int y, string ao, long lifetime, double? radius = null)
+        void Effect(int x, int y, string ao, long lifetime, double? radius = null, (string Ao, string Bone)? attach = null,
+            uint attachParent = 0, byte animatedFlags = 0, byte positionedFlags0 = 0, uint animationWord = 0,
+            float animationValue = 0, uint animatedId = 0)
         {
             uint id = Conn.NextObjectId++;
             // Native area art radii are world units; simulation radii are grid cells.
             float scale = radius is double r && Art.ArtRadius(ao) is int nativeRadius
                 ? (float)(r * (250d / 23) / nativeRadius) : 1;
-            var effect = new EffectObject(x, y, ao) { Scale = scale };
+            var effect = new EffectObject(x, y, ao)
+            {
+                Scale = scale, AnimatedFlags = animatedFlags, Flags0 = positionedFlags0,
+                AnimationWord = animationWord, AnimationValue = animationValue, AnimationId = animatedId
+            };
             if (radius is not null && ServerTrace.Projectiles)
                 Console.WriteLine($"[gateway] {remote} projectile area object={id} position=({x}, {y})"
                     + $" radius={radius:0.###} art={ao} scale={scale:0.###}");
@@ -488,6 +516,31 @@ static partial class Game
                 {
                     Conn.ProjectileObjects.Remove(id);
                     return visual.Created ? InstanceProtocol.RemoveObject(id) : null;
+                });
+            });
+            if (attach is not { } child) return;
+            // The art attached to the effect's bone: the client carries it along with the parent's animation.
+            uint childId = Conn.NextObjectId++;
+            // The official split-arrow art sends kind 0 and mask 3 (the base record of the Animated component), which
+            // keeps the parent bone's rotation: the arrow then follows aux_projectile_attach instead of lying flat.
+            var childEffect = new EffectObject(x, y, child.Ao)
+                { Parent = attachParent != 0 ? attachParent : id, Bone = child.Bone, AttachKind = 0, AttachFlags = 3 };
+            var childVisual = new Visual(childId, default);
+            Conn.ProjectileObjects.Add(childId);
+            Packet(() =>
+            {
+                if (childVisual.Ended) return null;
+                childVisual.Created = true;
+                return InstanceEntities.CreateObject(childId, InstanceEntities.ObjectTypeHash(EffectObject.TypePath), childEffect.Blob());
+            });
+            Packet(() => childVisual.Created ? InstanceProtocol.EnterWakeZone(childId) : null);
+            Runtime.Schedule(Runtime.Now + lifetime, () =>
+            {
+                childVisual.Ended = true;
+                Packet(() =>
+                {
+                    Conn.ProjectileObjects.Remove(childId);
+                    return childVisual.Created ? InstanceProtocol.RemoveObject(childId) : null;
                 });
             });
         }
@@ -521,7 +574,7 @@ static partial class Game
                 ? ProjectileHeight.Flight(startGround, Environment.GetEnvironmentVariable("Game_PROJECTILE_HEIGHT"),
                     PresentationFor(p).LaunchHeight).Marker
                 : startGround;
-            var arc = new ProjectileArc(p.Distance, p.Remaining, start, endGround);
+            var arc = new ProjectileArc(p.Distance, p.Remaining, start, endGround, p.Profile.ArcHeight);
             visual.Arc = arc;
             for (int segment = 1; segment < ProjectileArc.Segments; segment++)
             {

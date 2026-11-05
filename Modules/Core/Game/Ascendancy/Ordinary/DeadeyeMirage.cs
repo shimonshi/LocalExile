@@ -165,22 +165,25 @@ static partial class Game
             session.Packet(() => MirageCurrent(session, body) && actor.Attack == attack
                 ? InstanceProtocol.ActionStarted(body.Id, (int)actor.Position.X, (int)actor.Position.Y,
                     target.At.X, target.At.Y, actor.Skill, 0xffff, 0x0408, targetObjectId: target.Key) : null);
-            session.Schedule(ProjectileRuntime.Time(now + AttackReleaseDelay(AttackContactDelay(c, seconds, false))),
+            double delay = AttackReleaseDelay(AttackContactDelay(c, seconds, false));
+            session.Schedule(ProjectileRuntime.Time(now + delay),
                 () => MirageCurrent(session, body) && actor.Attack == attack && !c.Paused
                     && MarkTargetCurrent(c, target.Key, target.Monster),
                 () => CaptureMirage(session, body, target.Monster.Walk.Position(
-                    session.Runtime.Now / (double)ProjectileRuntime.QuantaPerSecond)));
+                    session.Runtime.Now / (double)ProjectileRuntime.QuantaPerSecond), delay));
         }
     }
 
-    internal static ProjectileUse CaptureMirage(ProjectileSession session, MirageBody body, (int X, int Y) aim)
+    internal static ProjectileUse CaptureMirage(ProjectileSession session, MirageBody body, (int X, int Y) aim,
+        double releaseDelay = 0)
     {
         var c = session.Conn; var gem = GemSkillEffects(c).Single(x => x.Id == body.Actor.Skill);
-        var use = CaptureGemProjectile(c, session, gem.Id, gem, aim, CaptureSkillCriticalRoll(c, gem.Id));
+        var use = CaptureGemProjectile(c, session, gem.Id, gem, aim, CaptureSkillCriticalRoll(c, gem.Id),
+            releaseDelay: releaseDelay, casterOrigin: body.Actor.Position);
         var shot = (ProjectileOffense)use.Payload!;
         double factor = Math.Max(0, 1 + MarkStat(SupportedStats(c, gem.Id), "support_mirage_archer_damage_+%_final") / 100d);
         var ignite = shot.Ignite;
-        return use with { Emitter = session.ActorKey(body.Id, body.Monster), Origin = body.Actor.Position,
+        return use with { Emitter = session.ActorKey(body.Id, body.Monster),
             Aim = ProjectileSession.Vector(aim), ProjectilePayloads = null, Payload = shot with
             {
                 Mirage = body, MirageRelease = null, Hit = shot.Hit.Scale(factor), AreaHit = shot.AreaHit?.Scale(factor),
