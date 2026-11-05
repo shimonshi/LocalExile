@@ -124,6 +124,36 @@ class ClientControlTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 flask_packet(bad)
 
+    def test_gem_socket_commands_send_the_ordinary_inventory_messages(self):
+        control = ClientControl.__new__(ClientControl)
+        control.rpc = Mock(return_value={"submitted": True})
+        for command, expected in (
+            ("gem:socket", "0030 00000002 12345678 00000005 0000"),
+            ("gem:unsocket", "002f 00000002 12345678 00000005 000000"),
+        ):
+            control.rpc.reset_mock()
+            self.assertEqual(control.execute({"command": command, "inventoryId": 2,
+                                              "id": 0x12345678, "socket": 5}), {"submitted": True})
+            control.rpc.assert_called_once_with("interaction", bytes=list(bytes.fromhex(expected)))
+        source = Path(__file__).with_name("client-control.js").read_text(encoding="utf-8")
+        self.assertIn("0x2f:17", source)
+        self.assertIn("0x30:16", source)
+
+    def test_invalid_socket_requests_never_reach_the_native_bridge(self):
+        control = ClientControl.__new__(ClientControl)
+        control.rpc = Mock()
+        valid = {"inventoryId": 2, "id": 7, "socket": 0}
+        for command in ("gem:socket", "gem:unsocket"):
+            for field, invalid in (("inventoryId", 0), ("inventoryId", True), ("id", -1),
+                                   ("id", 0x100000000), ("id", "7"), ("socket", True),
+                                   ("socket", -1), ("socket", 6), ("socket", .5)):
+                with self.subTest(command=command, field=field, value=invalid):
+                    with self.assertRaises(ValueError):
+                        control.execute({"command": command, **valid, field: invalid})
+            with self.assertRaises(ValueError):
+                control.execute({"command": command, "id": 7})
+        control.rpc.assert_not_called()
+
     def test_waypoint_travel_is_the_pin_message(self):
         self.assertEqual(waypoint_packet({"area": 0x7ad2}), ([0x00, 0x4d, 0x7a, 0xd2, 0, 0, 0x2f, 0x00, 0], 0x7ad2))
         self.assertEqual(waypoint_packet({"area": "0x235c"})[1], 0x235c)

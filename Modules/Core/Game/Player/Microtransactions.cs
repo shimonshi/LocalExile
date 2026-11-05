@@ -233,7 +233,7 @@ sealed class CosmeticEffects(string folder = "data")
 sealed class SkillArt(string folder = "data")
 {
     readonly Lazy<(Dictionary<(string, int), string> Animated, Dictionary<(string, int), ushort> BuffVisuals,
-        Dictionary<(string, int), string> Projectiles)> _data = new(() => Load(folder));
+        Dictionary<(string, int), string> Projectiles, Dictionary<(string, int), int?> AnimatedRows)> _data = new(() => Load(folder));
     readonly Lazy<Dictionary<string, int>> _radii = new(() => Radii(folder));
 
     /// <summary>
@@ -256,6 +256,9 @@ sealed class SkillArt(string folder = "data")
     /// <summary>The .ao this MiscAnimatedArtVariations Id draws for the variation, or null when it has no row (the
     /// variation draws nothing there, e.g. Righteous Fire's NoRing).</summary>
     public string? Animated(string id, int variation) => _data.Value.Animated.GetValueOrDefault((id, variation));
+
+    /// <summary>The unambiguous MiscAnimated row, for native behavior contexts that consume a row instead of an AO path.</summary>
+    public int? AnimatedRow(string id, int variation) => _data.Value.AnimatedRows.GetValueOrDefault((id, variation));
 
     /// <summary>The BuffVisuals row this BuffVisualsArtVariations Id shows for the variation, or null for the buff's own.</summary>
     public ushort? BuffVisual(string id, int variation) =>
@@ -284,11 +287,13 @@ sealed class SkillArt(string folder = "data")
         return ao;
     }
 
-    static (Dictionary<(string, int), string>, Dictionary<(string, int), ushort>, Dictionary<(string, int), string>) Load(string folder)
+    static (Dictionary<(string, int), string>, Dictionary<(string, int), ushort>, Dictionary<(string, int), string>,
+        Dictionary<(string, int), int?>) Load(string folder)
     {
         var animated = new Dictionary<(string, int), string>();
         var buffs = new Dictionary<(string, int), ushort>();
         var projectiles = new Dictionary<(string, int), string>();
+        var animatedRows = new Dictionary<(string, int), int?>();
         var projectileRows = Rows(Path.Combine(folder, "tables", "Projectiles.json"));
         foreach (var row in Rows(Path.Combine(folder, "tables", "ProjectilesArtVariations.json")))
             if (Int(row, "Variant") is int v && row.GetProperty("Projectiles") is { ValueKind: JsonValueKind.Array } pa && pa.GetArrayLength() > 0
@@ -298,12 +303,17 @@ sealed class SkillArt(string folder = "data")
         var misc = File.Exists(miscPath) ? Rows(miscPath) : [];
         foreach (var row in Rows(Path.Combine(dir, "MiscAnimatedArtVariations.json")))
             if (Int(row, "Variant") is int v && row.GetProperty("Animation") is { ValueKind: JsonValueKind.Array } a && a.GetArrayLength() > 0
-                && a[0].GetInt32() is int m && m < misc.Count && misc[m].GetProperty("AOFile").GetString() is { Length: > 0 } ao)
-                animated.TryAdd((row.GetProperty("Id").GetString() ?? "", v), ao);
+                && a[0].GetInt32() is int m && m >= 0 && m < misc.Count && misc[m].GetProperty("AOFile").GetString() is { Length: > 0 } ao)
+            {
+                var key = (row.GetProperty("Id").GetString() ?? "", v);
+                animated.TryAdd(key, ao);
+                // Existing AO selection stays unchanged; native contexts refuse ambiguous catalog identities.
+                if (!animatedRows.TryAdd(key, a.GetArrayLength() == 1 ? m : (int?)null)) animatedRows[key] = null;
+            }
         foreach (var row in Rows(Path.Combine(dir, "BuffVisualsArtVariations.json")))
             if (Int(row, "__col2") is int v && row.GetProperty("BuffVisual") is { ValueKind: JsonValueKind.Array } b && b.GetArrayLength() > 0)
                 buffs.TryAdd((row.GetProperty("Buff").GetString() ?? "", v), (ushort)b[0].GetInt32());
-        return (animated, buffs, projectiles);
+        return (animated, buffs, projectiles, animatedRows);
     }
 
     static int? Int(JsonElement row, string name) =>

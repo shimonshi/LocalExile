@@ -151,6 +151,12 @@ waits for a change of area or instance: the instance leaves state 3 and returns,
 change and the Id are required (travel into the current area). `{"command":"item:pickup","id":<ground item id>}`
 sends the `object:interact` 0x24, which puts the item into the first free main-inventory cell.
 
+`gem:socket` and `gem:unsocket` accept the host's wire `inventoryId`, item `id` and zero-based `socket` (0..5).
+They encode ordinary inventory messages `0x30` (16 bytes) and `0x2f` (17 bytes), with zero trailing fields.
+Socketing uses the held gem; unsocketing requires an empty cursor.
+The server retains ownership, colour and cursor validation; submission alone does not establish acceptance.
+See [item messages](../protocol/13-items.md).
+
 Every message the bridge writes on a socket goes out as the client's own instance send (`0x14216e940`) writes one:
 the socket is marked as being written (+0x240) and, while another thread services it (+0x242), the buffered writer
 runs under the socket's SRW lock (+0x248), which the flush takes too. Written without the lock, a command raced the

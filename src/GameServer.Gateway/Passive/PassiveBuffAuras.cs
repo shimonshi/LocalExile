@@ -169,6 +169,11 @@ static class PassiveBuffAuras
             lock (_lock) return _blinded.ContainsKey(monster);
         }
 
+        public bool HoldsBuff(uint monster, ushort instance)
+        {
+            lock (_lock) return _blinded.TryGetValue(monster,out ushort buff) && buff == instance;
+        }
+
         /// <summary>The buffs to add and to remove so that exactly <paramref name="inside"/> are blinded. A monster that
         /// is gone (<paramref name="exists"/> false) is forgotten without a message. Call under the Monsters lock, which
         /// <paramref name="next"/> needs.</summary>

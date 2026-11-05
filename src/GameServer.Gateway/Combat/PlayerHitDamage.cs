@@ -43,7 +43,7 @@ static class PlayerHitDamage
         var typed = DamageTypes.ConversionOrder.Select(type =>
             (History: DamageTypes.HistoryOf(type), Increased: get($"{type.ToString().ToLowerInvariant()}_damage_+%"))).ToArray();
         int elemental = get("elemental_damage_+%"), meleePhysical = melee ? get("melee_physical_damage_+%") : 0;
-        double charges = ChargeEffects.DamageMore(get, spell);
+        double charges = ChargeEffects.DamageMore(get, spell) * HierophantModifiers.Damage(get, spell);
         var result = DamagePacket.Empty;
         foreach (var path in conversion.Trace(raw))
         {

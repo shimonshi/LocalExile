@@ -158,7 +158,11 @@ static partial class Game
                 double due = links.ManaCarry + links.All.Sum(l => l.ManaPerMinute) / 60 * Math.Max(0, now - links.PaidAt);
                 uint whole = (uint)Math.Min(uint.MaxValue, Math.Floor(due));
                 if (conn.PlayerMana < whole) all = $"not enough mana for the cost ({conn.PlayerMana} < {whole})";
-                else (conn.PlayerMana, links.ManaCarry, paid) = (conn.PlayerMana - whole, due - whole, whole > 0);
+                else
+                {
+                    (conn.PlayerMana, links.ManaCarry, paid) = (conn.PlayerMana - whole, due - whole, whole > 0);
+                    ManaSpentLocked(conn, whole, player);
+                }
             }
             links.PaidAt = now;
             var here = conn.Walk.Position(now);

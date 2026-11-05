@@ -73,6 +73,7 @@ static partial class Game
             using var sourceAdmission = AscendancyPolicies.Enter(conn, conn.MainAscendancy.Selection);
             ticket = null;
             SingleUseCooldownState? state = null;
+            Game.HierophantRecallPlan? recall = null;
             if (conn.Closed || conn.LeavingArea || conn.RageRetired || conn.PlayerLife == 0 || conn.Paused
                 || requestedAt is double asked && PlayerActionBlocked(conn, asked, conn.Clock.Elapsed.TotalSeconds)
                 || actionToken is int original && conn.ActionCount != original) return false;
@@ -99,14 +100,33 @@ static partial class Game
             if (plan is { } cooldown)
             {
                 double now = conn.Clock.Elapsed.TotalSeconds;
+                if (reserve && skillId is ushort recallSkill && SkillsFor(conn).EffectId(effect) == "BrandRecall")
+                {
+                    if (conn.ProjectileRuntimeState is not ProjectileSession session) return false;
+                    // Validate the roster and full debit before reserving cooldown or changing actions.
+                    recall = PrepareHierophantRecall(session, recallSkill, 0);
+                    if (recall is null || conn.SingleUseCooldowns.TryGetValue(effect, out var existing)
+                        && !existing.ReadyAt(now) || conn.SkillReadyAt.GetValueOrDefault(effect) > now) return false;
+                    var exact = recall;
+                    // This manual non-channel utility has no hit. Pay once at its existing joined admission;
+                    // autonomous recalled activations start fresh unpaid scopes and inherit no contribution.
+                    if (!PayDistillerUseLocked(conn, eligible: true,
+                        () => PayMana(conn, recallSkill, out _, out _, exact.ExtraMana, exact.ExtraLife,
+                            () => HierophantRecallCurrent(session, exact)))) return false;
+                }
                 state = CooldownStateLocked(conn, effect, cooldown, now);
                 if (reserve ? !state.TryUse(now, cooldown) : !state.Ready) return false;
                 conn.SkillReadyAt[effect] = now + state.RemainingSeconds;
             }
             sideEffects();
+            if (recall is not null)
+            {
+                recall = recall with { Action = conn.ActionCount };
+                OrdinaryAcceptedUse(conn, recall.Action);
+            }
             if (reserve && vaal is not null) CommitVaalUse(conn, vaal, vaalAttackDeadline);
             if (plan is not null) ticket = new(effect, conn.ActionCount, conn.ProjectileEpoch, instant, reserve,
-                state, state!.UseVersion);
+                state, state!.UseVersion) { Recall = recall };
             return true;
         }
     }

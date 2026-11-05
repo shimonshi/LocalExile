@@ -36,6 +36,7 @@ static partial class Game
         readonly Dictionary<SpawnedMonster, int> generations = new(ReferenceEqualityComparer.Instance);
         int generation, seed;
         bool invalid;
+        readonly HashSet<byte[]> buffOutputs = [];
         readonly IDisposable? lifetime;
         public ProjectileRuntime Runtime { get; }
         public Task OutputCompleted { get; }
@@ -73,7 +74,7 @@ static partial class Game
             lock (Conn.Monsters)
             {
                 if (!Active) { Invalidate(); return; }
-                if (!Conn.Paused) Runtime.AdvanceTo(Math.Max(Runtime.Now, ProjectileRuntime.Time(Conn.Clock.Elapsed.TotalSeconds)));
+                if (!Conn.Paused) { Runtime.AdvanceTo(Math.Max(Runtime.Now, ProjectileRuntime.Time(Conn.Clock.Elapsed.TotalSeconds))); HierophantEngineStep(this); }
             }
         }
 
@@ -83,7 +84,7 @@ static partial class Game
             lock (Conn.Monsters)
             {
                 if (!Active) { Invalidate(); return; }
-                Runtime.AdvanceTo(at);
+                if (!Conn.Paused) { Runtime.AdvanceTo(at); HierophantEngineStep(this); }
             }
         }
 
@@ -116,7 +117,11 @@ static partial class Game
             lock (Conn.Monsters)
             {
                 if (invalid) return;
+                RetireHierophantEngines(this);
                 invalid = true;
+                foreach (var packet in buffOutputs) TargetBuffOutputLedger.Discard(packet);
+                buffOutputs.Clear();
+                ReleaseBrandBuffReservations(this);
                 lifetime?.Dispose();
                 Runtime.Clear();
                 foreach (var visual in visuals.Values) Conn.ProjectileObjects.Remove(visual.Id);
@@ -141,7 +146,15 @@ static partial class Game
             if (changed) Conn.Minions.StatRevision++;
             return packet;
         });
-        internal void Packet(byte[] bytes, string? log = null) => Packet(() => bytes, log);
+        internal void Packet(byte[] bytes, string? log = null)
+        {
+            lock (Conn.Monsters)
+            {
+                if (!Active) { TargetBuffOutputLedger.Discard(bytes); return; }
+                if (TargetBuffOutputLedger.IsPending(bytes)) buffOutputs.Add(bytes);
+                Packet(() => { buffOutputs.Remove(bytes); return bytes; }, log);
+            }
+        }
         internal void Packet(Func<byte[]?> snapshot, string? log = null) => Enqueue(async () =>
         {
             while (Active)

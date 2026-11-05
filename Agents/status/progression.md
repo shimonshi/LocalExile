@@ -293,6 +293,9 @@ Part of [Status](../Status.md); what to build next in this area is in
   Skill/support area survives player-area normalization, including Fanaticism's separate multiplier.
   Full native weapon, damage, recovery and race matrices remain partial.
   Docs: [ordinary Inquisitor findings](../docs/game/inquisitor-candidate.md).
+- Ordinary Hierophant has Surge/resource consumers, supported Brands, Recall and spell totem actors.
+  Retained default Brand output is bounded; rendering and native Recall/full class parity remain partial.
+  Docs: [Hierophant boundaries](../docs/game/ordinary-hierophant.md).
 - Ordinary Slayer has direct kill/overkill and shared leech condition consumers.
   Full native leech-cap, recovery and DoT/proxy provenance matrices remain partial.
   Docs: [ordinary class findings](../docs/game/ordinary-slayer-deadeye-migration.md).

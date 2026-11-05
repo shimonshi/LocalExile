@@ -73,7 +73,8 @@ static class AilmentPanelStats
     {
         var rows = new List<(string, int)>();
         var paths = conversion.Trace(raw).ToList();
-        double charges = ChargeEffects.DamageMore(get, context.Spell, ailment: true);
+        double charges = ChargeEffects.DamageMore(get, context.Spell, ailment: true)
+            * HierophantModifiers.Damage(get, context.Spell, ailment: true);
         void Add(string ailment, DamageType ailmentType, DamageType[] sources, int percent, bool chaosOnly = false)
         {
             foreach (bool critical in new[] { false, true })

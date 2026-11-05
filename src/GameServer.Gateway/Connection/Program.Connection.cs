@@ -188,6 +188,7 @@ partial class Program
                     lock (conn.Monsters)
                     {
                         conn.Closed = true;
+                        conn.TargetBuffOutputs.Retire();
                         conn.InvalidateIncomingHits();
                         // The handlers below wait for the inbox: it must complete whatever the rules do.
                         try { Logic.Closing(conn); }
@@ -316,6 +317,7 @@ partial class Program
         lock (conn.Monsters)
         {
             conn.Closed = true;
+            conn.TargetBuffOutputs.Retire();
             conn.InvalidateIncomingHits();
             Logic.Closing(conn);
         }
@@ -376,6 +378,7 @@ partial class Program
                 if (atGate() is not { } current) return;
                 bytes = current;
             }
+            if (!TargetBuffOutputLedger.Consume(bytes)) return;
             if (log is not null)
             {
                 string line = $"[gateway] {remote} => {log}: {Convert.ToHexString(bytes.AsSpan(0, Math.Min(bytes.Length, 96)))}";
@@ -391,7 +394,11 @@ partial class Program
             await Write(stream, ciphers, bytes);
             if (trace is not null) Console.WriteLine($"[move-trace] qpc={Stopwatch.GetTimestamp()} send {trace}");
         }
-        finally { gate.Release(); performance.Elapsed(LatencyPhase.SendHold, heldAt); }
+        finally
+        {
+            TargetBuffOutputLedger.Discard(bytes);
+            gate.Release(); performance.Elapsed(LatencyPhase.SendHold, heldAt);
+        }
     }
 
     // The wire itself: the keystream must be applied and written in one order, so encryption and the write share this

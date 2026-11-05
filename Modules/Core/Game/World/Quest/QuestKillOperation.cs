@@ -31,10 +31,15 @@ static partial class Game
                 PlayerMinions.OutputKind.QuestFlags => QuestFlagPresentation(conn) ?? [],
                 PlayerMinions.OutputKind.QuestTransition => QuestTransitionPresentation(conn, output.TargetId!.Value, output.Transition!) ?? [],
                 PlayerMinions.OutputKind.Passives => PassivesMessage(conn).Bytes,
-                _ => output.Packet,
+                // This transaction already owns the common cipher gate; flattened packets cannot overtake it.
+                _ => TargetBuffOutputLedger.Consume(output.Packet) ? output.Packet : [],
             })];
         }
-        finally { QuestKillCommitOutput = null; }
+        finally
+        {
+            foreach (var packet in packets) TargetBuffOutputLedger.Discard(packet.Packet);
+            QuestKillCommitOutput = null;
+        }
     }
 
     // Outside this bounded transaction, use the ordinary guarded cipher gate. Inside, evaluate projections
@@ -44,10 +49,10 @@ static partial class Game
     {
         if (QuestKillCommitOutput is not { } output)
             return Program.Send(remote, stream, ciphers, bytes, log, still, atGate);
-        if (still is not null && !still()) return Task.CompletedTask;
+        if (still is not null && !still()) { TargetBuffOutputLedger.Discard(bytes); return Task.CompletedTask; }
         if (atGate is not null)
         {
-            if (atGate() is not { } current) return Task.CompletedTask;
+            if (atGate() is not { } current) { TargetBuffOutputLedger.Discard(bytes); return Task.CompletedTask; }
             bytes = current;
         }
         output.Add(new(bytes, log));

@@ -73,7 +73,7 @@ static partial class Game
         ushort skillId, int effect, int level, MonsterCatalog.Variety variety, (int X, int Y) at, Func<bool> current)
     {
         double factor, speed;
-        lock (conn.Monsters) factor = conn.ElementalAilments.ActionFactor(conn.Clock.Elapsed.TotalSeconds);
+        lock (conn.Monsters) factor = conn.ElementalAilments.ActionFactor(ResourceEffectsTime(conn));
         speed = Stats.Key("summon_totem_cast_speed_+%") is uint k ? SupportedStats(conn, skillId).GetValueOrDefault(k) : 0;
         double seconds = SkillsFor(conn).CastTimeMs(effect) / 1000.0 / Math.Max(.01, 1 + speed / 100) / Math.Max(.01, factor);
         await Task.Delay(TimeSpan.FromSeconds(seconds));
@@ -129,7 +129,7 @@ static partial class Game
                     if (CollisionEscape.Find(place, conn.Layout.GridW, conn.Layout.GridH, Floor, conn.MonsterBlockers(objectId),
                         moverSize: bodySize) is { } clear) place = clear;
                 }
-                double now = conn.Clock.Elapsed.TotalSeconds;
+                double now = ResourceEffectsTime(conn);
                 var replaced = conn.Totems.Place(new(objectId, skillId, place, life, now + seconds, aura), limit, now);
                 if (replaced.Count > 0) TotemsDiedLocked(conn, now, playerStats);
                 // A totem blocks paths on the client as any body does.
@@ -164,7 +164,7 @@ static partial class Game
     {
         int pct = Stats.Key(TotemRedirectStat) is uint key ? stats.GetValueOrDefault(key) : 0;
         // The totems live on the connection clock; the hit's world time places the player.
-        double clock = conn.Clock.Elapsed.TotalSeconds;
+        double clock = ResourceEffectsTime(conn);
         if (pct <= 0 || conn.Totems.Nearest(conn.Walk.Position(now), clock) is not { } totem) return (nonChaos, chaos);
         var (keptNonChaos, life) = TotemState.Redirect(nonChaos, pct, totem.Life);
         var (keptChaos, left) = TotemState.Redirect(chaos, pct, life);
@@ -193,7 +193,7 @@ static partial class Game
     {
         lock (conn.Monsters)
         {
-            double now = conn.Clock.Elapsed.TotalSeconds;
+            double now = ResourceEffectsTime(conn);
             if (conn.PlayerLife == 0 || conn.Totems.AuraAt(conn.Walk.Position(now), now)?.Aura is not { } aura) return;
             foreach (var (key, value) in aura.Stats)
                 stats[key] = (int)Math.Clamp(stats.GetValueOrDefault(key)
@@ -209,7 +209,7 @@ static partial class Game
         {
             if (!CurrentGameWork || conn.Closed || conn.LeavingArea) return null;
             var totems = conn.Totems;
-            double now = conn.Clock.Elapsed.TotalSeconds;
+            double now = ResourceEffectsTime(conn);
             if (totems.Expire(now).Count > 0) TotemsDiedLocked(conn, now, CharacterPlayerStats(conn));
             var bytes = new List<byte>();
             foreach (var t in totems.All)

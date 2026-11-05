@@ -5,6 +5,7 @@
 sealed record CooldownUseTicket(int Effect, int ActionToken, int ProjectileEpoch, bool Instant, bool Reserved = true,
     SingleUseCooldownState? State = null, int UseVersion = 0)
 {
+    internal Game.HierophantRecallPlan? Recall { get; init; }
     bool consumed;
     public bool Current(ClientState conn)
     {

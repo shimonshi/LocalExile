@@ -21,6 +21,7 @@ sealed class MonsterIgnites
         double Seconds, int CriticalChance = 0, int Stacks = 1, int Aggravate = 0, int CriticalAggravate = 0,
         bool Aggravated = false, int RupturePercent = 0, int FireExposure = 0)
     {
+        public bool Proxy { get; init; }
         public static readonly Settings None = new(0, 0, 0, 0, 0, 0);
 
         /// <summary><paramref name="rows"/>: a context's ailment rows (per minute); <paramref name="get"/>: the merged
@@ -59,7 +60,7 @@ sealed class MonsterIgnites
     public static double DurationMultiplier(Func<string, int> get) =>
         Math.Max(0, 1 + get("support_faster_ailments_ailment_duration_+%_final") / 100.0);
 
-    readonly record struct Ignite(double From, double Until, double DamagePerSecond, bool Aggravated = false);
+    readonly record struct Ignite(double From, double Until, double DamagePerSecond, bool Aggravated = false, bool PlayerOwned = true);
     readonly List<Ignite> active = [];
 
     /// <summary>How many of the strongest deal damage at once: 1, or Crimson Dance's 8 for bleeds.</summary>
@@ -110,30 +111,32 @@ sealed class MonsterIgnites
         if (immune || settings.Seconds <= 0 || !critical && !RandomRolls.Chance(settings.Chance, 100, random)
             || avoid > 0 && RandomRolls.Chance(avoid, 100, random)) return false;
         var (min, max) = critical ? (settings.CriticalMin, settings.CriticalMax) : (settings.Min, settings.Max);
-        return Add(now, min + (Math.Max(min, max) - min) * random.NextDouble(), settings.Seconds, settings.Aggravated);
+        return Add(now, min + (Math.Max(min, max) - min) * random.NextDouble(), settings.Seconds, settings.Aggravated, !settings.Proxy);
     }
 
     /// <summary>An ignite already worked out (its chance rolled, its damage and duration final). True when added.</summary>
-    public bool Add(double now, double perSecond, double seconds, bool aggravated = false)
+    public bool Add(double now, double perSecond, double seconds, bool aggravated = false, bool playerOwned = true)
     {
         if (!(perSecond > 0) || !(seconds > 0)) return false;
         if (active.Count == 0) { last = now; carry = 0; }
-        active.Add(new(now, now + seconds / expiryRate, perSecond, aggravated));
+        active.Add(new(now, now + seconds / expiryRate, perSecond, aggravated, playerOwned));
         return true;
     }
 
     /// <summary>The whole damage the strongest ignites deal (<see cref="Dealing"/>) from the last advance to
     /// <paramref name="until"/>, through every start and end in between, times the target's mitigation
     /// <paramref name="factor"/>; the fraction carries to the next advance. Ended ignites are dropped.</summary>
+    public bool LastTickPlayerOwned { get; private set; } = true;
     public int Advance(double until, double factor, double aggravatedExtra = 0)
     {
         if (active.Count == 0 || !(until > last)) return 0;
         var cuts = active.SelectMany(i => new[] { i.From, i.Until }).Where(t => last < t && t < until)
             .Append(last).Append(until).Distinct().Order().ToArray();
-        double damage = carry;
+        double damage = carry; LastTickPlayerOwned = false;
         for (int k = 1; k < cuts.Length; k++)
         {
             double mid = (cuts[k - 1] + cuts[k]) / 2;
+            LastTickPlayerOwned |= active.Where(i=>i.From<=mid && mid<i.Until).OrderByDescending(i=>i.DamagePerSecond).Take(Math.Max(1,Stacks)).Any(i=>i.PlayerOwned);
             damage += Dealing(active.Where(i => i.From <= mid && mid < i.Until).ToList(), aggravatedExtra)
                 * Math.Max(0, factor) * (cuts[k] - cuts[k - 1]);
         }

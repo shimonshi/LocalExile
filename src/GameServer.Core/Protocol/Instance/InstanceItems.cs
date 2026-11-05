@@ -40,6 +40,9 @@ public sealed record ItemMod(ModSection Section, ushort Hash, IReadOnlyList<int>
 /// </summary>
 public sealed record Item(uint TypeHash, IReadOnlyList<string> Components, ushort VisualIdentity)
 {
+    // Preserved by record updates, including below-level gem XP.
+    [System.Text.Json.Serialization.JsonIgnore]
+    public Guid RuntimeIdentity { get; } = Guid.NewGuid();
     public byte ItemLevel { get; init; } = 1;
     public byte Quality { get; init; }
 
