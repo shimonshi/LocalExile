@@ -4,10 +4,27 @@ using GameServer.Core.Protocol.Login;
 
 static partial class Game
 {
+    // Flask inventory mutations share the charge-output sequence as well as the payment gate.
+    // Drain retained revisions before publishing a removal/replacement; never await under combat/inventory locks.
+    static async Task OrderedFlaskInventory(string remote, NetworkStream stream, ConnectionCiphers ciphers,
+        ClientState conn, uint inventory, Func<Task> mutate)
+    {
+        if (PlayerInventories.Row(inventory) != PlayerInventories.Flask) { await mutate(); return; }
+        await conn.FlaskBarGate.WaitAsync();
+        try { await PublishFlaskChanges(remote, stream, ciphers, conn); await mutate(); }
+        finally { conn.FlaskBarGate.Release(); }
+    }
+    internal static Task PickUpItem(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn, InstanceItems.PickUpItem pick) =>
+        OrderedFlaskInventory(remote, stream, ciphers, conn, pick.InventoryId, () => PickUpItemCore(remote, stream, ciphers, conn, pick));
+    internal static Task PlaceItem(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn, InstanceItems.PlaceItem place) =>
+        OrderedFlaskInventory(remote, stream, ciphers, conn, place.InventoryId, () => PlaceItemCore(remote, stream, ciphers, conn, place));
+    internal static Task HeldOntoItem(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn, InstanceItems.ItemAction a, string hex) =>
+        OrderedFlaskInventory(remote, stream, ciphers, conn, a.InventoryId, () => HeldOntoItemCore(remote, stream, ciphers, conn, a, hex));
+
     // C→S 0x28: a click on an item. It moves to the cursor inventory (row 12) in one save (PlayerInventories.PickUp): one 0xbf
     // removes it from its inventory, another adds it to the cursor at (0, 0). Refused (logged) when the cursor already holds an
     // item or the item is not there.
-    internal static async Task PickUpItem(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn, InstanceItems.PickUpItem pick)
+    static async Task PickUpItemCore(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn, InstanceItems.PickUpItem pick)
     {
         if (await GameEvents.AnyInventoryPick(conn, pick)) return;
         if (StashOf(conn).TabOf(pick.InventoryId) is int tab) { await PickUpFromStash(remote, stream, ciphers, conn, tab, pick); return; }
@@ -24,9 +41,27 @@ static partial class Game
             Console.WriteLine($"[gateway] {remote} <= 0x0028 pick up {pick}: refused ({why})");
             return;
         }
-        if (items.PickUp(row, pick.ItemId) is not { } held)
+        InventoryItem? picked;
+        using (ProjectileMutation(conn))
+        {
+            picked = items.PickUp(row, pick.ItemId);
+            if (row == PlayerInventories.Flask && picked is { } flask)
+            {
+                var output = Automation(conn).Packets;
+                output.Add(new(InstanceItems.InventoryChange(pick.InventoryId, items.NextRevision(row), [flask.Id], []), "flask pickup"));
+                output.Add(new(InstanceItems.InventoryChange(PlayerInventories.InventoryId(PlayerInventories.Cursor),
+                    items.NextRevision(PlayerInventories.Cursor), [], [flask]), "flask pickup cursor"));
+            }
+        }
+        if (picked is not { } held)
         {
             Console.WriteLine($"[gateway] {remote} <= 0x0028 pick up {pick}: refused");
+            return;
+        }
+        if (row == PlayerInventories.Flask)
+        {
+            await PublishFlaskChanges(remote, stream, ciphers, conn);
+            await RefreshMagebloodFlasks(remote, stream, ciphers, conn);
             return;
         }
         if (row == PlayerInventories.PassiveJewels && ClusterSize(held.Item) is not null)
@@ -563,6 +598,7 @@ static partial class Game
             recoveryOwner = ResourceEffectsOf(conn);
             r = FlaskRecovery.For(use, flask.Item, local,
                 name => Get(name) + (name == "flask_life_to_recover_+%" ? Lifetap.FlaskRecovery(conn) : 0), conn.PlayerLife, conn.PlayerMaxLife, playerLevel);
+            r = PathfinderRecovery(r, character);
             copyLife = ManaFlaskCopiesLife(r, character);
             canRecover = Flasks.CanRecover(use, conn.PlayerLife, conn.PlayerMaxLife, conn.PlayerMana, (uint)UnreservedMana(conn))
                 || copyLife && conn.PlayerLife < conn.PlayerMaxLife;
@@ -1112,7 +1148,7 @@ static partial class Game
 
     // C→S 0x4a: the held item clicked on an item. A stack of the same type with room takes what fits (PlayerInventories.MergeOnto,
     // AccountStash.Merge); anything else (currency on an item …) is not handled yet.
-    internal static async Task HeldOntoItem(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn, InstanceItems.ItemAction a, string hex)
+    static async Task HeldOntoItemCore(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn, InstanceItems.ItemAction a, string hex)
     {
         var items = ItemsOf(conn);
         if (StashOf(conn).TabOf(a.InventoryId) is int tab)
@@ -1141,7 +1177,14 @@ static partial class Game
         else if (row == PlayerInventories.PassiveJewels
             && items.Items(row).FirstOrDefault(i => i.Id == a.ItemId) is { } leavingBypass
             && AllocationBypassRemovalRefusal(conn, leavingBypass) is { } bypassRefusal) why = bypassRefusal;
-        else done = items.MergeOnto(row, a.ItemId, ShapeOf, out why, OneOf(a));
+        else
+        {
+            using (ProjectileMutation(conn))
+            {
+                done = items.MergeOnto(row, a.ItemId, ShapeOf, out why, OneOf(a));
+                if (done?.Row == PlayerInventories.Flask) QueueFlaskPlacement(conn, items, done);
+            }
+        }
         if (done is null && PlayerInventories.Row(a.InventoryId) is byte lr && LevelTooLow(conn, lr, held) is { } tooLow) why = tooLow;
         if (done is null)
         {
@@ -1149,6 +1192,12 @@ static partial class Game
             return;
         }
         Console.WriteLine($"[gateway] {remote} <= 0x004a held item onto {a}: {hex}");
+        if (done.Row == PlayerInventories.Flask)
+        {
+            await PublishFlaskChanges(remote, stream, ciphers, conn);
+            await RefreshMagebloodFlasks(remote, stream, ciphers, conn);
+            return;
+        }
         if (done.Merged || done.Rest is not null) { await SendMerged(remote, stream, ciphers, items, done); return; }
         // Not a stack with room: swapped, as 0x2a on that cell.
         var d = done.Displaced;
@@ -1174,6 +1223,19 @@ static partial class Game
     // Shift held on a 0x4a: flag bit 2 (the sender's param 7; live 2026-10-19, Flags = 4 with Shift, 0 without).
     internal static bool OneOf(InstanceItems.ItemAction a) => (a.Flags & 0x04) != 0;
 
+    // Called under ProjectileMutation: allocate revisions and append both inventory snapshots
+    // before a subsequent projectile charge gain can commit. The async publishers share this FIFO.
+    static void QueueFlaskPlacement(ClientState conn, PlayerInventories items, PlayerInventories.Placement done)
+    {
+        var d = done.Displaced;
+        var cursor = done.Merged || done.Rest is not null ? done.Rest : d;
+        var output = Automation(conn).Packets;
+        output.Add(new(InstanceItems.InventoryChange(PlayerInventories.InventoryId(done.Row), items.NextRevision(done.Row),
+            done.Merged ? [done.Placed.Id] : d is null ? [] : [d.Id], [done.Placed]), "flask placement"));
+        output.Add(new(InstanceItems.InventoryChange(PlayerInventories.InventoryId(PlayerInventories.Cursor),
+            items.NextRevision(PlayerInventories.Cursor), [done.Held.Id], cursor is null ? [] : [cursor]), "flask placement cursor"));
+    }
+
     // A held stack went onto a stack of its type: that one grows in place (same id), the held one shrinks (same id) or is gone.
     internal static async Task SendMerged(string remote, NetworkStream stream, ConnectionCiphers ciphers, PlayerInventories items, PlayerInventories.Placement done)
     {
@@ -1188,7 +1250,7 @@ static partial class Game
 
     // C→S 0x2a: put the held item into an inventory cell (PlayerInventories.Place). The target inventory gets one 0xbf (the
     // item it displaced removed, the held item added), the cursor another (the held item removed, the displaced one added).
-    internal static async Task PlaceItem(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn, InstanceItems.PlaceItem place)
+    static async Task PlaceItemCore(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn, InstanceItems.PlaceItem place)
     {
         if (await GameEvents.AnyInventoryPlace(conn, place)) return;
         if (StashOf(conn).TabOf(place.InventoryId) is int tab) { await PlaceInStash(remote, stream, ciphers, conn, tab, place); return; }
@@ -1205,13 +1267,28 @@ static partial class Game
         else if (row == PlayerInventories.PassiveJewels
             && PassiveJewelRefusal(conn, (int)place.X, (int)place.Y, placement) is { } refusal) why = refusal;
         else
-            done = items.Place(row, (int)place.X, (int)place.Y, ShapeOf, out why, one: place.A != 0);
+        {
+            using (ProjectileMutation(conn))
+            {
+                done = items.Place(row, (int)place.X, (int)place.Y, ShapeOf, out why, one: place.A != 0);
+                if (done?.Row == PlayerInventories.Flask)
+                {
+                    done = done with { Placed = EmptyIfEquippedInHostileArea(conn, items, done.Placed) };
+                    QueueFlaskPlacement(conn, items, done);
+                }
+            }
+        }
         if (done is null)
         {
             Console.WriteLine($"[gateway] {remote} <= 0x002a place {place}: refused ({why})");
             return;
         }
-        if (done.Row == PlayerInventories.Flask) done = done with { Placed = EmptyIfEquippedInHostileArea(conn, items, done.Placed) };
+        if (done.Row == PlayerInventories.Flask)
+        {
+            await PublishFlaskChanges(remote, stream, ciphers, conn);
+            await RefreshMagebloodFlasks(remote, stream, ciphers, conn);
+            return;
+        }
         var d = done.Displaced;
         uint target = PlayerInventories.InventoryId(done.Row);   // may differ from the clicked one (off hand → main hand)
         if (done.Merged || done.Rest is not null) { await SendMerged(remote, stream, ciphers, items, done); return; }

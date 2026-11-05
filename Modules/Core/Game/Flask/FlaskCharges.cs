@@ -16,6 +16,7 @@ static partial class Game
         await conn.FlaskBarGate.WaitAsync();
         try
         {
+            await PublishFlaskChanges(remote, stream, ciphers, conn);
             byte[] packet;
             string message;
             lock (conn.Monsters)
@@ -34,15 +35,11 @@ static partial class Game
                 packet = InstanceItems.InventoryChange(PlayerInventories.InventoryId(PlayerInventories.Flask),
                     items.NextRevision(PlayerInventories.Flask), done.Removed, done.Changed);
                 message = log(done.Changed);
-                if (retainOutput) Automation(conn).Packets.Insert(outputAt, new(packet, message));
-                else if (conn.ProjectileRuntime is { Active: true } session)
-                {
-                    session.Packet(packet, message);
-                    return;
-                }
+                // All bar revisions use the same retained queue. A projectile output worker must not
+                // deliver an older replacement after a pickup has already published its removal.
+                Automation(conn).Packets.Insert(outputAt, new(packet, message));
             }
-            if (retainOutput) await PublishFlaskChanges(remote, stream, ciphers, conn);
-            else await Send(remote, stream, ciphers, packet, message);
+            await PublishFlaskChanges(remote, stream, ciphers, conn);
         }
         finally
         {
@@ -59,15 +56,19 @@ static partial class Game
         await ChangeFlaskBar(remote, stream, ciphers, conn, items =>
         {
             if (still is not null && !still()) return null;
+            if (conn.Closed || conn.LeavingArea || conn.PlayerLife == 0) return null;
+            var stats = CharacterPlayerStats(conn);
             bool enough = false;
             var done = items.Change(PlayerInventories.Flask, flask.Id, i =>
             {
-                var after = Flasks.Spend(i, charges);
+                var cost = PathfinderFlaskUseCost(i, charges, stats, Random.Shared);
+                var after = cost is int paid ? Flasks.Spend(i, charges with { ChargesPerUse = paid }) : null;
                 enough = after is not null;
                 return after ?? i;
             });
             if (!enough || done is null) return null;
             spent = done;
+            PathfinderAcceptedFlaskLocked(conn, stats);
             if (accepted is not null)
             {
                 double now = conn.Clock.Elapsed.TotalSeconds;

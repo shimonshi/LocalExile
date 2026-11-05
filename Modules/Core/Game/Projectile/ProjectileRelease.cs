@@ -123,8 +123,9 @@ static partial class Game
         uint repeatsLeft)
     {
         if (use.Payload is not ProjectileOffense { ClientPredicted: true }) return use;
+        using var offense = new DistillerOffense();
         var player = CharacterPlayerStats(conn);
-        var own = SupportedSkill(conn, skillId).Stats;
+        var own = DistillerInputs(conn, SupportedSkill(conn, skillId).Stats);
         int Player(string key) => Stats.Key(key) is uint k ? player.GetValueOrDefault(k) : 0;
         int Own(string key) => Stats.Key(key) is uint k ? own.GetValueOrDefault(k) : 0;
         int Get(string key) => Player(key) + Own(key);
@@ -225,8 +226,9 @@ static partial class Game
         SkillCriticalRoll criticalRoll, ushort sequence = 0, uint repeatsLeft = 0, double releaseDelay = 0,
         ProjectileVector? casterOrigin = null)
     {
+        using var offense = new DistillerOffense();
         var player = CharacterPlayerStats(conn);
-        var own = SupportedSkill(conn, skillId).Stats;
+        var own = DistillerInputs(conn, SupportedSkill(conn, skillId).Stats);
         var merged = MergeSkillStats(player, own);
         int Get(string key) => Stats.Key(key) is uint k ? merged.GetValueOrDefault(k) : 0;
         int Player(string key) => Stats.Key(key) is uint k ? player.GetValueOrDefault(k) : 0;

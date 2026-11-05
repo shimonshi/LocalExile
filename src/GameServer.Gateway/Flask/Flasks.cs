@@ -103,6 +103,21 @@ static class Flasks
         readonly List<Running> _lastEnded = [];
         readonly Lock _lock = new();
         const double Done = 1e-9;
+        double accountedThrough;
+
+        public bool ActiveAt(double now, bool lifeFull, bool manaFull)
+        {
+            lock (_lock)
+            {
+                var projection = new Effects();
+                foreach (var r in _running)
+                    projection._running.Add(new Running(r.Effect) { Remaining = r.Remaining });
+                double from = _running.Count == 0 ? now : Math.Max(accountedThrough, _running.Min(r => r.Effect.Started));
+                projection.Advance(from, now);
+                return projection._running.Any(r => r.Effect.Buff != 0 && r.Effect.Started <= now
+                    && r.Remaining > Done && !r.Effect.EndsWhenFull(lifeFull, manaFull));
+            }
+        }
 
         /// <summary>Whether any flask is recovering.</summary>
         public bool Any
@@ -163,6 +178,7 @@ static class Flasks
                         Run(first, seconds);
                         t += seconds;
                     }
+                accountedThrough = Math.Max(accountedThrough, to);
             }
             return (life, mana, ended);
         }

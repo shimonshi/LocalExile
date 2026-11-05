@@ -42,6 +42,34 @@ public sealed class MonsterPoisonsTests
         // Stacks have all expired at t=3.0
         Assert.Equal(0, poisons.Stacks(3.5));
         Assert.False(poisons.Poisoned);
+
+        foreach (double start in new[] { 0d, 10779578d / 120000 })
+        foreach (double step in new[] { 40d, .25, .02 })
+        foreach (double factor in new[] { 1d, .5 })
+        {
+            var fractional = new MonsterPoisons();
+            Assert.True(fractional.Add(start,33.3,40));
+            int total=0;
+            for(int i=1;i<=Math.Ceiling(40/step);i++)
+                total+=fractional.Advance(start+Math.Min(40,i*step),factor);
+            Assert.Equal((int)(1332*factor),total);
+            Assert.False(fractional.Poisoned);
+            Assert.Equal(0,fractional.Advance(start+41,factor));
+        }
+        var belowWhole=new MonsterPoisons();
+        Assert.True(belowWhole.Add(0,1-1e-7,1));
+        Assert.Equal(0,belowWhole.Advance(1,1));
+        var midEffect=new MonsterPoisons();
+        Assert.True(midEffect.Add(0,1-5e-10,2));
+        Assert.Equal(0,midEffect.Advance(1,1)); // Preserve ordinary flooring before the final expiry.
+        Assert.Equal(1,midEffect.Advance(2,1));
+        var retimed=new MonsterPoisons();
+        double origin=10779578d/120000;
+        Assert.True(retimed.Add(origin,33.3,40));
+        int beforeRetime=retimed.Advance(origin+10,1);
+        retimed.SetExpiryRate(origin+10,2);
+        Assert.Equal(832,beforeRetime+retimed.Advance(origin+25,1));
+        Assert.False(retimed.Poisoned);
     }
 
     [Fact]

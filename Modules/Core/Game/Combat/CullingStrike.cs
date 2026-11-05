@@ -30,7 +30,7 @@ static partial class Game
 
     // The hit's own damage, then the cull. A boss stage this hit starts, or one still running, keeps the boss alive.
     internal static (uint Life, bool StageStarts) TakeOwnerHitLocked(ClientState conn, SpawnedMonster m, int damage, Cull cull,
-        bool? rampageSource = null, IReadOnlyDictionary<uint, int>? player = null)
+        bool? rampageSource = null, IReadOnlyDictionary<uint, int>? player = null, bool playerKill = true)
     {
         int threshold = m.Rarity is MonsterRarity.Normal or MonsterRarity.Magic
             ? Math.Max(cull.Threshold, cull.NormalMagicThreshold) : cull.Threshold;
@@ -40,11 +40,11 @@ static partial class Game
             damage = (int)Math.Min(damage, Math.Max(0, (long)m.Life - 1));
             threshold = 0;
         }
-        var hit = TakeOwnerDamageLocked(conn, m, damage, rampageSource, player);
+        var hit = TakeOwnerDamageLocked(conn, m, damage, rampageSource, player, playerKill);
         if (threshold == 0 || hit.Life == 0 || hit.StageStarts || m.StageRunning
             || hit.Life * 100L > m.MaxLife * (long)threshold || m.Mods.Effects["immune_to_culling_strike"] != 0) return hit;
         m.Life = hit.Life;
-        hit = TakeOwnerDamageLocked(conn, m, (int)hit.Life, rampageSource, player);
+        hit = TakeOwnerDamageLocked(conn, m, (int)hit.Life, rampageSource, player, playerKill);
         if (hit.Life == 0 && cull.RecoverLifePct > 0 && conn.PlayerLife > 0)
         {
             // Instant recovery, sent with the next vitals update like instant leech.

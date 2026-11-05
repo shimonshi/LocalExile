@@ -30,6 +30,34 @@ static partial class Game
         => TryBeginCooldownUseCore(conn, effect, plan, instant, sideEffects, out ticket,
             actionToken, reserve, requestedAt, null);
 
+    internal static async Task<(bool Accepted, CooldownUseTicket? Ticket)> BeginSkillCooldownUseAsync(
+        ClientState conn, ushort skillId, int effect, SingleUseCooldown? plan, bool instant, Action sideEffects,
+        int? actionToken = null, bool reserve = true, double? requestedAt = null, Func<bool>? valid = null)
+    {
+        int epoch = conn.ProjectileEpoch, action = conn.ActionCount;
+        var identity = GemSkillEffects(conn).FirstOrDefault(g => g.Id == skillId);
+        await conn.FlaskBarGate.WaitAsync();
+        try
+        {
+            using (ProjectileMutation(conn))
+            {
+                if (conn.ProjectileEpoch != epoch || conn.ActionCount != action || !CurrentGameRules
+                    || valid?.Invoke() == false || GemSkillEffects(conn).FirstOrDefault(g => g.Id == skillId) != identity) return (false, null);
+                CooldownUseTicket? ticket = null;
+                bool Admit() => TryBeginSkillCooldownUse(conn, skillId, effect, plan, instant, sideEffects,
+                    out ticket, actionToken, reserve, requestedAt);
+                bool vaal = reserve && SkillsFor(conn).VaalBudget(effect, 1) is not null;
+                using var paid = BeginOrdinaryUse(conn);
+                var gem = SupportedSkill(conn, skillId);
+                bool accepted = vaal ? PayDistillerUseLocked(conn,
+                    DistillerEligible(conn, effect, gem.Level, gem.Quality), Admit) : Admit();
+                if (accepted && vaal && conn.VaalUse is { } use) use.Distillation = paid.Distillation;
+                return (accepted, ticket);
+            }
+        }
+        finally { conn.FlaskBarGate.Release(); }
+    }
+
     internal static bool TryBeginSkillCooldownUse(ClientState conn, ushort skillId, int effect,
         SingleUseCooldown? plan, bool instant, Action sideEffects, out CooldownUseTicket? ticket,
         int? actionToken = null, bool reserve = true, double? requestedAt = null) =>

@@ -169,6 +169,8 @@ Part of [Status](../Status.md); what to build next in this area is in
   Doctrine are the two gaps closed here.
 
 - Command-based ordinary ascendancy selection, separate point awards, connected allocations, paid refunds and saves.
+  Ordinary Pathfinder has flask recovery/preservation, strongest-poison spread and paid Distiller hit consumers.
+  Non-hit uses, Ruthless Diamond and the full native repeat/proxy matrix remain partial.
   A native Duelist/Slayer smoke checked ordinary nodes, ascendancy allocation/refund and both point budgets.
   Choice and progress survived relog and a Gateway process restart; a Phrecia request left the saved JSON unchanged.
   The read-only client trace observed class bytes, the Default graph, allocated nodes and separate point counters.

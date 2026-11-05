@@ -47,6 +47,7 @@ Items keep the Roadmap's priority groups, and are in rough priority order within
   Support-area normalization has grouped release coverage; independent native cast/area cadence remains open.
   See [Inquisitor findings and limits](../docs/game/inquisitor-candidate.md).
   Complete Slayer's leech/provenance and Deadeye's peer/projectile/lifetime native matrices in the ordered stack.
+  Pathfinder still needs unsupported non-hit admission, Ruthless Diamond and the full repeat/proxy native matrix.
   See [ordinary class findings and limits](../docs/game/ordinary-slayer-deadeye-migration.md).
 - **Known:** Antiquarian's complete supported node consumers and three legal builds have native acceptance (#98).
   Whaletooth scales actual Enduring Cry recovery; paid refunds, transient effects and durable class progress pass.

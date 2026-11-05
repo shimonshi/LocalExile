@@ -45,11 +45,11 @@ static partial class Game
         {
             (this.remote, this.stream, this.ciphers, Conn, epoch) = (remote, stream, ciphers, conn, conn.ProjectileEpoch);
             Runtime = new(this);
-            OutputCompleted = RunOutput();
+            Task? started = null; StartProjectilePump(() => started = RunOutput()); OutputCompleted = started!;
             lifetime = CombatLifetime?.Own(new ConnectionProjectileRetirement(conn, this));
         }
 
-        public void Start() => _ = Pump();
+        public void Start() => StartProjectilePump(Pump);
         async Task Pump()
         {
             try
@@ -89,6 +89,7 @@ static partial class Game
 
         public void Schedule(long at, Func<bool> valid, Func<ProjectileUse> release)
         {
+            release = CaptureOrdinaryRelease(Conn, release);
             lock (Conn.Monsters)
                 if (Active)
                     Runtime.Schedule(Math.Max(Runtime.Now, at), () =>
@@ -346,7 +347,8 @@ static partial class Game
             if (mirage is null && hit.Value.Life == 0) DevourOnKill(Conn, shot.SkillStats);
             if (!immune)
                 AilmentsOnHitLocked(Conn, target, mitigated, shot.Spell, critical, multiplier, player, shot.SkillStats,
-                    at, contact.Projectile.ReactionRandomSource, poison: shot.Poison, reflectToPlayer: mirage is null);
+                    at, contact.Projectile.ReactionRandomSource, poison: shot.Poison, reflectToPlayer: mirage is null,
+                    provenance: mirage is null ? HitProvenance.Owner : HitProvenance.Proxy);
             if (!immune && hit.Value.Life > 0 && rolled[DamageType.Fire].Max > 0) IgniteOnHitLocked(this, contact.Target.Id, target,
                 OrdinaryIgniteAt(Conn, target, shot, contact.Projectile.Distance, player), critical, at);
             if (!immune && hit.Value.Life > 0 && rolled[DamageType.Physical].Max > 0) BleedOnHitLocked(this, contact.Target.Id, target, shot.Bleed, critical, at);

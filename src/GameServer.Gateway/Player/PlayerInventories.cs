@@ -564,6 +564,30 @@ sealed class PlayerInventories
         }
     }
 
+    // One narrow charge transaction. Pickup also takes _lock; no chosen identity/cell/value may change
+    // between validation and resource debit. Charge saves use the established deferred-save policy.
+    internal bool TryPaySkillFlasks(IReadOnlyList<(InventoryItem Before, int Cost)> payments,
+        Func<bool> debit, out List<InventoryItem> changed, out uint revision)
+    {
+        lock (_lock)
+        {
+            changed = []; revision = 0;
+            if (_stale || payments.Select(p => p.Before.Id).Distinct().Count() != payments.Count) return false;
+            var bar = ItemsIn(Flask);
+            foreach (var (before, cost) in payments)
+                if (cost < 0 || before.Item.Charges < cost || !bar.Any(i => i == before)) return false;
+            if (!debit()) return false;
+            foreach (var (before, cost) in payments)
+            {
+                var after = before with { Item = before.Item with { Charges = before.Item.Charges - cost } };
+                bar[bar.FindIndex(i => i.Id == before.Id)] = after;
+                changed.Add(after);
+            }
+            if (changed.Count > 0) { _unsaved = true; revision = NextRevision(Flask); }
+            return true;
+        }
+    }
+
     /// <summary>Saves what <see cref="ChangeUnsaved"/> changed, if anything.</summary>
     public void SaveUnsaved()
     {

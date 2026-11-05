@@ -187,8 +187,11 @@ static partial class Game
                 changed.Add(item);
         }
         if (changed.Count > 0)
-            session.Packet(InstanceItems.InventoryChange(PlayerInventories.InventoryId(PlayerInventories.Flask),
-                items.NextRevision(PlayerInventories.Flask), [.. changed.Select(i => i.Id)], changed));
+        {
+            Automation(conn).Packets.Add(new(InstanceItems.InventoryChange(PlayerInventories.InventoryId(PlayerInventories.Flask),
+                items.NextRevision(PlayerInventories.Flask), [.. changed.Select(i => i.Id)], changed), "projectile flask charges"));
+            session.Enqueue(() => PublishFlaskChanges(session.remote, session.stream, session.ciphers, conn));
+        }
     }
 
     internal static void CommitProjectileCritFlasks(ProjectileSession session, double at, Random random)

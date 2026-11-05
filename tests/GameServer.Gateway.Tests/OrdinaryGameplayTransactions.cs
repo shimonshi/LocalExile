@@ -11,7 +11,7 @@ using MonsterRarity = GameServer.Core.Protocol.Instance.MonsterRarity;
 
 namespace GameServer.Gateway.Tests;
 
-static class OrdinaryGameplayChecks
+static partial class OrdinaryGameplayChecks
 {
     internal static async Task TornadoNova()
     {
@@ -736,7 +736,7 @@ static class OrdinaryGameplayChecks
             }
             rules.Stop(_ => { }); Wire.Dispose();
             Game.CombatLifetime = oldRules; Program.SetGameLogic(oldLogic!);
-            Saves.Db.Dispose(); foreach (string suffix in new[] { "", "-wal", "-shm" }) File.Delete(path + suffix);
+            TestEnvironment.ReleaseSaves(path);
         }
     }
 }

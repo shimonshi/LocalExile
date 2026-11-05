@@ -30,14 +30,17 @@ static partial class Game
             _ = Task.Run(() => RunRampage(conn, runtime, owner, source, generation));
     }
 
-    static (uint Life, bool StageStarts) TakeOwnerDamageLocked(ClientState conn, SpawnedMonster m, int damage,
-        bool? rampageSource = null, IReadOnlyDictionary<uint, int>? player = null)
+    internal static (uint Life, bool StageStarts) TakeOwnerDamageLocked(ClientState conn, SpawnedMonster m, int damage,
+        bool? rampageSource = null, IReadOnlyDictionary<uint, int>? player = null, bool playerKill = true, MonsterPoisons.Snapshot? poisonAtDeath = null)
     {
         var result = TakeDamageLocked(m, damage);
         if (m.Life > 0 && result.Life == 0)
         {
-            RampageOnKillLocked(conn, m, rampageSource, player);
-            CommitOrdinaryKillLocked(conn, m, player);
+            double now = ResourceEffectsTime(conn);
+            var receipt = new OwnerKillReceipt(m, m.Walk.Position(now), m.Hostile, now, playerKill, poisonAtDeath ?? m.Poisons.Capture(now));
+            PathfinderOwnerKillLocked(conn, receipt);
+            if (playerKill) { RampageOnKillLocked(conn, m, rampageSource, player);
+                CommitOrdinaryKillLocked(conn, m, player); }
             MarkDeath(conn, m);
         }
         return result;

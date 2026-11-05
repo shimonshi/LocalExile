@@ -34,29 +34,31 @@ static partial class Game
     // per second (an independent roll in the non-critical or critical range) and duration come from the hit's panel poison
     // rows (<paramref name="settings"/>, captured with the hit as its ignite's are), so a poison deals what the panel shows:
     // the hit's own increases and the monster's resistance, already in <paramref name="mitigated"/>, must not reach it.
-    internal static void PoisonOnHitLocked(ClientState conn, SpawnedMonster target, DamagePacket mitigated,
+    internal readonly record struct PoisonApplicationReceipt(SpawnedMonster Target, double At, MonsterPoisons.Snapshot Poison, HitProvenance Provenance = HitProvenance.Owner);
+
+    internal static PoisonApplicationReceipt? PoisonOnHitLocked(ClientState conn, SpawnedMonster target, DamagePacket mitigated,
         bool spell, bool critical, IReadOnlyDictionary<uint, int> player, IReadOnlyDictionary<uint, int>? skill,
-        MonsterPoisons.Settings settings, double now, Random random)
+        MonsterPoisons.Settings settings, double now, Random random, HitProvenance provenance = HitProvenance.Owner)
     {
-        if (target.Dead || target.Life == 0 || settings.Seconds <= 0) return;
+        if (target.Dead || target.Life == 0 || settings.Seconds <= 0) return null;
         double phys = mitigated[DamageType.Physical].Min;
         double chaos = mitigated[DamageType.Chaos].Min;
-        if (phys + chaos <= 0) return;
+        if (phys + chaos <= 0) return null;
 
         int Player(string name) => Stats.Key(name) is uint key ? player.GetValueOrDefault(key) : 0;
         int Skill(string name) => skill is not null && Stats.Key(name) is uint key ? skill.GetValueOrDefault(key) : 0;
         int Get(string name) => Player(name) + Skill(name);
 
-        if (MonsterPoisons.Prohibited(Get)) return;
+        if (MonsterPoisons.Prohibited(Get)) return null;
 
         long chance = (long)Get("base_chance_to_poison_on_hit_%")
             + (spell ? Get("spells_chance_to_poison_on_hit_%") : Get("chance_to_poison_on_hit_with_attacks_%") + settings.WeaponChance);
         if (chaos > 0) chance += Get("chaos_damage_chance_to_poison_%");
 
-        if (chance <= 0 || !RandomRolls.Chance((int)Math.Clamp(chance, 0, 100), 100, random)) return;
-        if (target.Mods.Effects["cannot_be_poisoned"] != 0) return;
+        if (chance <= 0 || !RandomRolls.Chance((int)Math.Clamp(chance, 0, 100), 100, random)) return null;
+        if (target.Mods.Effects["cannot_be_poisoned"] != 0) return null;
         int avoid = target.Mods.Effects["avoid_poison_%"];
-        if (avoid > 0 && RandomRolls.Chance(avoid, 100, random)) return;
+        if (avoid > 0 && RandomRolls.Chance(avoid, 100, random)) return null;
 
         var (min, max) = critical ? (settings.CriticalMin, settings.CriticalMax) : (settings.Min, settings.Max);
         // Lethal Dose: a hit that finds the enemy unpoisoned applies additional poisons on top of its own.
@@ -64,7 +66,11 @@ static partial class Game
             ? Math.Max(0, Get("additional_poisons_+_to_apply_vs_non_poisoned_enemies")) : 0);
         double perSecond = min + (Math.Max(min, max) - min) * random.NextDouble();
         double seconds = settings.Seconds * MonsterPoisons.SelfDuration(name => target.Mods.Effects[name]);
-        for (int i = 0; i < stacks; i++) target.Poisons.Add(now, perSecond, seconds);
+        if (!(seconds > 0) || !(perSecond > 0)) return null;
+        bool added = false;
+        for (int i = 0; i < stacks; i++) added |= target.Poisons.Add(now, PathfinderPoisonDps(perSecond,
+            Player(OrdinaryPathfinderRules.DoublePoison) > 0 && ActualFlaskEffectLocked(conn, now), player, random), seconds, provenance == HitProvenance.Owner);
+        return added ? new(target, now, target.Poisons.Capture(now), provenance) : null;
     }
 
     internal static async Task TickPoisons(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn)
@@ -79,12 +85,13 @@ static partial class Game
             foreach (var (id, m) in conn.Monsters)
             {
                 if (m.Poisons.Idle) continue;
+                var poisonAtDeath = m.Poisons.Capture(now);
                 int damage = 0;
                 if (m.Dead || m.Life == 0) m.Poisons.Clear();
                 else damage = m.Poisons.Advance(now, MonsterDotTaken(m, DamageType.Chaos, now));
                 if (damage > 0)
                 {
-                    (m.Life, bool stageStarts) = TakeOwnerDamageLocked(conn, m, damage);
+                    (m.Life, bool stageStarts) = TakeOwnerDamageLocked(conn, m, damage, playerKill: m.Poisons.LastTickPlayerOwned, poisonAtDeath: poisonAtDeath);
                     m.Aggro = m.Life > 0;
                     if (m.Life == 0)
                     {
@@ -125,7 +132,7 @@ static partial class Game
                 await Send(remote, stream, ciphers, InstanceEntities.StatsUpdate(id, [(StatKeys.HideMiniLifeBar, 1)]), null);
             await Send(remote, stream, ciphers, InstanceProtocol.LifeUpdate(id, life),
                 life == 0 ? $"0x01b1 monster 0x{id:x} ({m.Label}) died of poison" : null);
-            if (life == 0) await MonsterKilled(remote, stream, ciphers, conn, id, m);
+            if (life == 0) await MonsterKilled(remote, stream, ciphers, conn, id, m, byMinion: !m.Poisons.LastTickPlayerOwned);
         }
     }
 }

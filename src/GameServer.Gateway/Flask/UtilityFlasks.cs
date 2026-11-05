@@ -343,6 +343,11 @@ static class UtilityFlasks
         }
 
         /// <summary>Whether any effect runs.</summary>
+        public bool ActiveAt(double now)
+        {
+            lock (_lock) return _active.Any(a => a.Started <= now && now < a.Ends);
+        }
+
         public bool Any
         {
             get { lock (_lock) return _active.Count > 0; }
