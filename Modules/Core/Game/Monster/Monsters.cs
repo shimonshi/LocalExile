@@ -1348,6 +1348,8 @@ static partial class Game
                     blindedPct + StatOf("damage_taken_+%") + PlayerDamageTaken.IncreasedPct(type, melee: !a.Ranged, StatOf))
                 * ordinaryFactor
                 * (blocked ? PlayerDamageTaken.BlockedPct(type, StatOf) / 100.0 : 1));
+            // Excommunicate Support: an excommunicated enemy cannot deal chaos damage.
+            if (type == DamageType.Chaos && m.ExcommunicatedUntil > now) value = 0;
             ailmentTaken = ailmentTaken.Add(type, new(value, value));
             if (type == DamageType.Chaos) chaosDamage += value;
             if (type == DamageType.Physical) physicalDamage += value;
