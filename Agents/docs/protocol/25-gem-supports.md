@@ -170,16 +170,17 @@ more damage with bleeding, poison and ignite, and the count across Multistrike r
 ## Remaining execution gaps
 
 A native compatibility match and a displayed support letter do not prove that its special mechanic is implemented.
-Spell Echo's repeats are modelled ([11](11-skills.md) "Spell repeats"), except Ice Nova's and the final-repeat stats.
-Triggers, totems, mines, minion behaviour, attack repeats, projectile branching, leech and many conditional effects
-still require their own execution paths.
+Spell Echo's repeats and final-repeat double damage are modelled ([11](11-skills.md) "Spell repeats"), except
+Ice Nova's special repeat route. Multistrike and Arrow Nova have the bounded execution described above; these do not
+establish every attack-repeat or projectile-branching pattern. Triggers, totems, mines, minion behaviour and other
+conditional effects still need their own execution paths.
 Second Wind's extra cooldown use needs multi-use cooldown state (one stored use is all that is tracked); Momentum's
-stacks need a skill-use and movement signal; Barrage and Arrow Nova need their own release patterns, not a stat.
+stacks need a skill-use and movement signal; Barrage still needs its own release pattern.
 Unleash's seals, minion damage on summoned minions and
 the curses that Blasphemy and Hextouch would apply still need their own mechanics or client-side geometry.
 Persistent damage effects, including Righteous Fire, do not yet refresh every derived parameter on link changes.
-Only the unconditional damage keys listed by GemSupportDamage and the five target conditions above receive
-multiplicative processing.
+Multiplicative processing covers the unconditional damage keys listed by GemSupportDamage and the implemented
+target conditions in ConditionalSupportDamage; it does not cover every conditional stat.
 Lifetap's spent-Life counter and buff are server state: the hidden `lifetap_life_spent` buff is not sent, minions do
 not gain the buff, and its more damage does not reach damage over time.
 The native catalogue includes historical and placeholder variants; their presence does not make them obtainable.
