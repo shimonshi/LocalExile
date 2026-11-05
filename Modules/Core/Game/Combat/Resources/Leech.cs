@@ -25,6 +25,12 @@ static partial class Game
 
     internal static void WithLeechConditions(ClientState conn, Dictionary<uint, int> stats)
     {
+        if (conn.ResourceEffectsState is ResourceEffectsState owner && ResourceEffectsCurrent(conn,owner))
+        {
+            double at = ResourceEffectsTime(conn);
+            if (Stats.Key("is_poisoned") is uint poison) stats[poison] = owner.Incoming.Poisons(at) > 0 ? 1 : 0;
+            if (Stats.Key("is_bleeding") is uint bleed) stats[bleed] = owner.Incoming.Bleeding(at) ? 1 : 0;
+        }
         var state = LeechContext(conn);
         foreach (var (name, active) in new[] { ("is_life_leeching", state.Life), ("is_mana_leeching", state.Mana),
             ("is_es_leeching", state.EnergyShield), ("is_leeching", state.Life || state.Mana || state.EnergyShield),

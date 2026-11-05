@@ -58,7 +58,10 @@ static partial class Game
         int Get(string name) => Stats.Key(name) is uint key ? stats.GetValueOrDefault(key) : 0;
         int damage = conn.ElementalAilments.Advance(from, until, Get, Resistance(conn, DamageType.Fire),
             MaxResistance(conn, DamageType.Fire), PlayerImmunities(conn).Contains(DamageType.Fire),
-            source => DamageTakenFromBlindedPct(conn, source, stats));
+            source => DamageTakenFromBlindedPct(conn, source, stats) + OrdinaryAssassinIncomingIncreased(conn, stats, until));
+        if (Get("unaffected_by_damaging_ailments") != 0 || Get("unaffected_by_ignite") != 0)
+            conn.NonChaosDotTakenCarry = conn.NonChaosDotBypassCarry = 0;
+
         damage = IncomingResourceDefences.TakenOverTime(damage, Get, ref conn.NonChaosDotTakenCarry);
         int lifeDamage = conn.Immune ? 0 : IncomingResourceDefences.DamageOverTime(conn.EnergyShield,
             damage, Get(IncomingResourceDefences.BypassStat), until, ref conn.NonChaosDotBypassCarry);

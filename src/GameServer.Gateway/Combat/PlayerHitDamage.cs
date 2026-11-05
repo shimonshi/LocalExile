@@ -43,7 +43,7 @@ static class PlayerHitDamage
         var typed = DamageTypes.ConversionOrder.Select(type =>
             (History: DamageTypes.HistoryOf(type), Increased: get($"{type.ToString().ToLowerInvariant()}_damage_+%"))).ToArray();
         int elemental = get("elemental_damage_+%"), meleePhysical = melee ? get("melee_physical_damage_+%") : 0;
-        double charges = ChargeEffects.DamageMore(get, spell) * HierophantModifiers.Damage(get, spell);
+        double charges = ChargeEffects.DamageMore(get, spell) * HierophantModifiers.Damage(get, spell) * Math.Max(0, 1 + get("damage_+%_final_if_there_is_at_most_1_rare_or_unique_enemy_nearby") / 100d);
         var result = DamagePacket.Empty;
         foreach (var path in conversion.Trace(raw))
         {

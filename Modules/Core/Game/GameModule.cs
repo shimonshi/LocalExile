@@ -27,7 +27,11 @@ sealed class GameLogic(IModuleLifetime? lifetime = null) : IGameLogic
     public Task OnClientMessages(string remote, NetworkStream stream, ConnectionCiphers ciphers, IReadOnlyList<(ushort Id, byte[] Bytes)> messages, byte[] unknown, ClientState conn, long readAt) =>
         Rules.OnClientMessages(remote, stream, ciphers, messages, unknown, conn, readAt);
 
-    public void ObservePlayerMotion(ClientState conn, double at, bool after) => Rules.InquisitorMotion(conn, at, after);
+    public void ObservePlayerMotion(ClientState conn, double at, bool after)
+    {
+        Rules.IncomingMotion(conn, at, after);
+        Rules.InquisitorMotion(conn, at, after);
+    }
 
     public void Admitting(ClientState conn) => Rules.RegisterVitalsAdmission(conn);
 
@@ -95,4 +99,5 @@ sealed class GameLogic(IModuleLifetime? lifetime = null) : IGameLogic
     public IPlayerWorld WorldFor(ClientState conn) => new Rules.ModuleWorld(conn);
     public IEnumerable<(string Value, string Detail)>? CompletionValues(string kind) => Rules.CompletionValues(kind);
     public double PlayerActionFactor(ClientState conn) => Rules.PlayerActionFactor(conn);
+    public int PlayerMovementBonus(ClientState conn) => Rules.OrdinaryAssassinMovement(conn);
 }

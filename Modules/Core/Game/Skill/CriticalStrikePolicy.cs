@@ -30,14 +30,14 @@ static class CriticalStrikePolicy
     /// <summary>Expected damage per attempted hit before target mitigation. Attack accuracy weights both landing
     /// and independent critical confirmation; luck applies only to the critical roll. Spells supply 100% hit chance.
     /// The caller supplies zero critical chance when critical strikes are prohibited.</summary>
-    public static double DamageFactor(int chancePerMyriad, int multiplier, int extraRolls = 0, int hitChance = 100)
+    public static double DamageFactor(int chancePerMyriad, int multiplier, int extraRolls = 0, int hitChance = 100, bool bifurcate = false)
     {
         double chance = Math.Clamp(chancePerMyriad, 0, 10_000) / 10_000.0;
         if (extraRolls > 0) chance = 1 - (1 - chance) * (1 - chance);
         else if (extraRolls < 0) chance *= chance;
         double landed = Math.Clamp(hitChance, 0, 100) / 100.0;
         chance *= landed;
-        return landed * (1 - chance + chance * Math.Max(0, multiplier) / 100.0);
+        return landed * (1 + chance * (bifurcate ? 2 : 1) * (Math.Max(0, multiplier) / 100.0 - 1));
     }
 
     /// <summary>The Offence panel's "Effective Chance for Critical Strike" (permyriad): the chance after the luck

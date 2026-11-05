@@ -88,6 +88,7 @@ static class CommandsFeature
             bool lifeClamped = false, manaClamped = false;
             lock (conn.Monsters)
             {
+                IncomingMotion(conn, ResourceEffectsTime(conn), false);
                 if (off) conn.PlayerStats.Remove(stat);
                 else conn.PlayerStats[stat] = value;
             }

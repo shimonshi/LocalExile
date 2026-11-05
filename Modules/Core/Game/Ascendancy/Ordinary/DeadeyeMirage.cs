@@ -33,11 +33,23 @@ static partial class Game
             || !s.Supports.Any(x => x.Effect.Id == "SupportMirageArcher")
             || ResolveProjectileDefinition(s.Effect) is null) return null;
         var stats = SupportedStats(c, skill);
-        // Immutable item identity includes the sockets/links. Refunds and source replacement retire pending attacks.
-        return $"{s.SourceGem.GetHashCode()}:{ActiveMainHand(c)?.Item.GetHashCode()}:{s.Effect}:{s.Level}:{s.Quality}:"
+        // Keep item/socket identity and meaningful source changes, excluding incidental gem XP below the next level.
+        return $"{s.SourceGem.RuntimeIdentity}:{(ActiveMainHand(c) is { } hand ? MirageSourceHash(hand.Item) : 0)}:{s.Effect}:{s.Level}:{s.Quality}:"
             + string.Join(',', s.Supports.Select(x => $"{x.Effect.Row}/{x.Gem.Level}/{x.Gem.Quality}"))
             + $":{MarkStat(stats, "mirage_archers_do_not_attach")}:{MarkStat(stats, "additional_max_mirage_archers")}:"
             + MarkStat(stats, "cannot_summon_mirage_archer_if_near_mirage_archer_radius");
+    }
+
+    static int MirageSourceHash(Item item)
+    {
+        var hash = new HashCode();
+        hash.Add((item with { GemExperience = 0, Sockets = Array.Empty<ItemSocket>() }).GetHashCode());
+        foreach (var socket in item.Sockets)
+        {
+            hash.Add(socket.Colour);
+            hash.Add(socket.Gem is { } gem ? MirageSourceHash(gem) : 0);
+        }
+        return hash.ToHashCode();
     }
 
     internal static DeadeyeMirageLifecycle.Release? PaidMirageAdmission(ClientState c, int action) =>
@@ -184,23 +196,29 @@ static partial class Game
             releaseDelay: releaseDelay, casterOrigin: body.Actor.Position);
         var shot = (ProjectileOffense)use.Payload!;
         double factor = Math.Max(0, 1 + MarkStat(SupportedStats(c, gem.Id), "support_mirage_archer_damage_+%_final") / 100d);
-        var ignite = shot.Ignite;
         return use with { Emitter = session.ActorKey(body.Id, body.Monster),
             Aim = ProjectileSession.Vector(aim), ProjectilePayloads = null, Payload = shot with
             {
                 Mirage = body, MirageRelease = null, Hit = shot.Hit.Scale(factor), AreaHit = shot.AreaHit?.Scale(factor),
                 MarkSource = shot.MarkSource is { } mark ? new(flat => mark.Hit(flat).Scale(factor),
-                    flat => ScaleMirageIgnite(mark.Ignite(flat), factor)) : null,
+                    flat => ScaleMirageAilment(mark.Ignite(flat), factor)) : null,
                 MarkAreaSource = shot.MarkAreaSource is { } area ? new(flat => area.Hit(flat).Scale(factor),
-                    flat => ScaleMirageIgnite(area.Ignite(flat), factor)) : null,
-                Ignite = ignite with { Min = ignite.Min * factor, Max = ignite.Max * factor,
-                    CriticalMin = ignite.CriticalMin * factor, CriticalMax = ignite.CriticalMax * factor },
+                    flat => ScaleMirageAilment(area.Ignite(flat), factor)) : null,
+                Ignite = ScaleMirageAilment(shot.Ignite, factor),
+                Bleed = ScaleMirageAilment(shot.Bleed, factor),
+                Poison = ScaleMirageAilment(shot.Poison, factor),
                 ClientPredicted = false, HitPacket = false, Leech = new(DamagePacket.Empty, DamagePacket.Empty, DamagePacket.Empty),
                 Label = "Mirage Archer: " + shot.Label
             } };
     }
 
-    static MonsterIgnites.Settings ScaleMirageIgnite(MonsterIgnites.Settings value, double factor) => value with
+    static MonsterIgnites.Settings ScaleMirageAilment(MonsterIgnites.Settings value, double factor) => value with
+    {
+        Min = value.Min * factor, Max = value.Max * factor,
+        CriticalMin = value.CriticalMin * factor, CriticalMax = value.CriticalMax * factor,
+    };
+
+    static MonsterPoisons.Settings ScaleMirageAilment(MonsterPoisons.Settings value, double factor) => value with
     {
         Min = value.Min * factor, Max = value.Max * factor,
         CriticalMin = value.CriticalMin * factor, CriticalMax = value.CriticalMax * factor,

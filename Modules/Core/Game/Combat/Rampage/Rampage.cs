@@ -38,6 +38,7 @@ static partial class Game
         {
             double now = ResourceEffectsTime(conn);
             var receipt = new OwnerKillReceipt(m, m.Walk.Position(now), m.Hostile, now, playerKill, poisonAtDeath ?? m.Poisons.Capture(now));
+            OrdinaryAssassinOwnerKillLocked(conn, receipt);
             PathfinderOwnerKillLocked(conn, receipt);
             if (playerKill) { RampageOnKillLocked(conn, m, rampageSource, player);
                 CommitOrdinaryKillLocked(conn, m, player); }

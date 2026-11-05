@@ -34,6 +34,7 @@ interface IGameLogic
     /// <summary>The character's action-speed factor (1 is normal), which scales attack, cast, movement and stun-recovery
     /// pacing: the game's own action_speed_-% bucket plus the ailments the framework tracks.</summary>
     double PlayerActionFactor(ClientState conn);
+    int PlayerMovementBonus(ClientState conn) => 0;
 }
 
 /// <summary>A player as mods see it, with its connection.</summary>

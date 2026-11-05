@@ -83,7 +83,7 @@ sealed class PlayerElementalAilments
             chillEffect = Math.Max(0, 1 + ((double)get("chill_effectiveness_on_self_+%") + surge) / 100);
             shockEffect = Math.Max(0, 1 + ((double)get("shocked_effect_on_self_+%") + surge) / 100);
             unaffectedByShock = get("unaffected_by_shock") != 0;
-            unaffectedByIgnite = get("unaffected_by_ignite") != 0;
+            unaffectedByIgnite = get("unaffected_by_ignite") != 0 || get("unaffected_by_damaging_ailments") != 0;
             actionFloor = get("action_speed_cannot_be_reduced_below_base") != 0
                 || get("not_affected_by_action_speed_modifiers") != 0 ? 1 : 0;
             actionCeiling = get("not_affected_by_action_speed_modifiers") != 0 ? 1 : double.PositiveInfinity;
@@ -148,7 +148,7 @@ sealed class PlayerElementalAilments
             if (until <= from) return 0;
             var boundaries = effects.SelectMany(e => new[] { e.From, e.Until }).Where(t => from < t && t < until)
                 .Append(from).Append(until).Distinct().Order().ToArray();
-            double damage = carry;
+            double damage = fireImmune || unaffectedByIgnite ? 0 : carry;
             for (int i = 1; i < boundaries.Length; i++)
             {
                 double at = (boundaries[i - 1] + boundaries[i]) / 2;

@@ -34,7 +34,7 @@ static partial class Game
         double multiplier = 1 + (attacker("dot_multiplier_+") + attacker("fire_dot_multiplier_+") + attacker("ignite_dot_multiplier_+")
             + (critical ? attacker("critical_ailment_dot_multiplier_+") : 0)) / 100.0;
         var ignite = GameServer.Core.World.Ailments.Ignite(DamagePacket.Of(DamageType.Fire, baseFire, baseFire),
-            IgniteIncreases.Sum(attacker), more * multiplier);
+            IgniteIncreases.Sum(attacker), more * multiplier * OrdinaryAssassinRules.More(attacker(OrdinaryAssassinRules.NearbyDamage)));
         double faster = MonsterIgnites.Faster(attacker);
         double seconds = faster > 0 ? ignite.RemainingSeconds * Math.Max(0, 1 + attacker("ignite_duration_+%") / 100.0)
             * MonsterIgnites.SelfDuration(name => m.Mods.Effects[name]) / faster : 0;

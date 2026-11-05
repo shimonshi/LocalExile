@@ -19,6 +19,7 @@ static partial class CommandsRules
             using var defenceTime = FortificationOf(conn).Capture(now);
             // Refresh lazy aura/Fortification pools before reading ANY final defence at the accepted contact.
             var stats = CharacterPlayerStats(conn);
+            if (!AssassinIncomingHitAdmitted(conn, now, stats)) return false;
             GainLifeBeforeEnemyHitLocked(conn, stats);
             int resistance = Resistance(conn, type), maximum = MaxResistance(conn, type);
             // Avoidance rolls before block, as for a monster hit; an avoided hit still lands.

@@ -44,7 +44,7 @@ sealed partial class ClientState
     {
         lock (Monsters)
             Walk.SetSpeed(Math.Max(1, Program.WalkSpeed * (100L + Pools.MovementVelocityPct
-                + Rampage.Current.MovementPercent) / 100.0 * (Program.GameLogicOrNull?.PlayerActionFactor(this)
+                + Rampage.Current.MovementPercent + (Program.GameLogicOrNull?.PlayerMovementBonus(this) ?? 0)) / 100.0 * (Program.GameLogicOrNull?.PlayerActionFactor(this)
                     ?? ElementalAilments.ActionFactor(at))), at);
     }
 }

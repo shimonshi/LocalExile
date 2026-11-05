@@ -5,7 +5,7 @@ using GameServer.Core.World;
 static partial class Game
 {
     internal static readonly DeadeyeMarkCatalog MarkCatalog = new();
-    internal sealed record MarkSource(ushort Skill, int Effect, int Level, int Quality, uint Gem);
+    internal sealed record MarkSource(ushort Skill, int Effect, int Level, int Quality, uint Gem, ushort Node = 0);
     internal sealed record MarkTarget(uint Id, SpawnedMonster Monster, MarkSource Source, OrdinaryEffectClock Clock);
     internal sealed record PendingMark(MarkSource Source, uint Id, SpawnedMonster Monster, double At, int Action);
     internal sealed class MarkSession
@@ -20,11 +20,11 @@ static partial class Game
         Stats.Key(name) is uint key ? stats.GetValueOrDefault(key) : 0;
     static bool MarkOwnerCurrent(ClientState c) => CurrentGameWork && !c.Closed && !c.LeavingArea
         && !c.RageRetired && c.PlayerLife > 0;
-    static bool MarkSourceCurrent(ClientState c, MarkSource s) => GemSkillEffects(c).Any(g =>
+    static bool MarkSourceCurrent(ClientState c, MarkSource s) => s.Node != 0 ? DeathmarkedGrant(c) is { } grant && grant.Node == s.Node && grant.Effect == s.Effect && grant.Level == s.Level : GemSkillEffects(c).Any(g =>
         g.Id == s.Skill && g.Effect == s.Effect && g.Level == s.Level && g.Quality == s.Quality && g.Gem == s.Gem)
         && GemSkillInstanceDisabled(c, s.Effect, s.Skill) is null;
     static bool MarkTargetCurrent(ClientState c, uint id, SpawnedMonster m) =>
-        c.Monsters.TryGetValue(id, out var current) && ReferenceEquals(current, m) && m.Hostile && !m.Dead && m.Life > 0;
+        c.Monsters.TryGetValue(id, out var current) && ReferenceEquals(current, m) && m.Hostile && !m.Dead && m.Life > 0 && m.Mods.Effects["immune_to_curses"] == 0 && m.Mods.Effects["virtual_immune_to_curses"] == 0;
 
     // Preflight is before the shared cooldown and payment transaction. Ground casts never pay for a mark.
     internal static bool MarkAdmission(ClientState c, ushort skill, uint id)
@@ -83,8 +83,8 @@ static partial class Game
     }
 
     internal static int MarkAmount(ClientState c, MarkTarget mark, string name) => DeadeyeMarkRules.Amount(
-        MarkStat(SupportedSkill(c, mark.Source.Skill).Stats, name),
-        n => MarkStat(CharacterPlayerStats(c), n), n => MarkStat(SupportedSkill(c, mark.Source.Skill).Stats, n));
+        MarkStat(MarkOwn(c, mark.Source), name),
+        n => MarkCasterStat(c, n), n => MarkStat(MarkOwn(c, mark.Source), n));
 
     internal static double MarkIncoming(ClientState c, uint attacker, SpawnedMonster enemy,
         IReadOnlyDictionary<uint, int> stats)

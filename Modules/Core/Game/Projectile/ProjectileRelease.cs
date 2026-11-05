@@ -283,6 +283,7 @@ static partial class Game
             AreaHit = SupportedProjectileHit(conn, skillId, area: true),
             MarkSource = CaptureMarkHitSource(conn, skillId, false),
             MarkAreaSource = CaptureMarkHitSource(conn, skillId, true),
+            AssassinCriticalSources = CaptureAssassinCriticalSources(conn),
             VsBlindedCriticalChance = SupportedCriticalChanceVsBlinded(conn, skillId, release: true),
             VsProfaneCriticalChance = SupportedCriticalChanceVsProfane(conn, skillId, release: true),
             Effect = gem.Effect, Level = gem.Level, Quality = gem.Quality,

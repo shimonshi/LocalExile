@@ -19,6 +19,11 @@ sealed class MonsterPoisons
     public readonly record struct Settings(int Chance, double Min, double Max, double CriticalMin, double CriticalMax,
         double Seconds, int WeaponChance = 0)
     {
+        public double DurationPercent { get; init; }
+        public double DurationFaster { get; init; }
+        public double DurationMultiplier { get; init; } = 1;
+        public int RecentDuration { get; init; }
+        public bool AllDamage { get; init; }
         public static readonly Settings None = new(0, 0, 0, 0, 0, 0);
 
         /// <summary><paramref name="local"/>: the attacking weapon's local stats (none for a spell).</summary>
@@ -32,19 +37,23 @@ sealed class MonsterPoisons
             double Row(string bound, string kind) =>
                 r.GetValueOrDefault($"{bound}_poison_damage_to_deal_per_minute_from_{kind}_{hand}_damage") / 60.0 * faster;
             long chance = (long)get("base_chance_to_poison_on_hit_%") + get("chaos_damage_chance_to_poison_%");
+            double durationMultiplier = MonsterIgnites.DurationMultiplier(get);
             double seconds = Ailments.PoisonDurationSeconds
                 * Math.Max(0, 1 + ((double)get("poison_duration_+%") + get("base_all_ailment_duration_+%")) / 100) / faster
-                * MonsterIgnites.DurationMultiplier(get);
+                * durationMultiplier;
             return new((int)Math.Clamp(chance, 0, 100), Row("minimum", "non_critical"), Row("maximum", "non_critical"),
                 Row("minimum", "critical"), Row("maximum", "critical"), seconds,
-                local?.GetValueOrDefault("local_poison_on_hit_%") ?? 0);
+                local?.GetValueOrDefault("local_poison_on_hit_%") ?? 0) {
+                    DurationPercent = 100d + get("poison_duration_+%") + get("base_all_ailment_duration_+%"),
+                    DurationMultiplier = durationMultiplier, DurationFaster = faster, RecentDuration = get("poison_duration_+%_per_poison_applied_recently"),
+                    AllDamage = get("all_damage_can_poison") != 0 };
         }
     }
 
     /// <summary>Whether the attacker cannot poison: poison deals chaos damage, so a chaos prohibition stops it even from
     /// physical damage (PoB CalcOffence gates poison on <c>canDeal.Chaos</c>).</summary>
     public static bool Prohibited(Func<string, int> get) =>
-        get("cannot_poison_enemies") != 0 || get("never_damaging_ailments") != 0
+        get("cannot_poison_enemies") != 0 || get("virtual_never_poison") != 0 || get("never_damaging_ailments") != 0
         || DamageStats.Prohibited(DamageType.Chaos, get);
 
     public static double Faster(Func<string, int> get) =>
@@ -115,10 +124,9 @@ sealed class MonsterPoisons
         return true;
     }
 
-    public bool LastTickPlayerOwned { get; private set; } = true;
-
     /// <summary>Sums the concurrent chaos damage of all active poison stacks from last advance to <paramref name="until"/>,
     /// multiplied by the monster's chaos mitigation <paramref name="factor"/>.</summary>
+    public bool LastTickPlayerOwned { get; private set; } = true;
     public int Advance(double until, double factor)
     {
         if (active.Count == 0 || !(until > last)) return 0;

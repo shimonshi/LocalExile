@@ -2,10 +2,11 @@ using GameServer.Core.World;
 
 
 /// <summary>Frozen offensive inputs. Targets, including evasion and resistance, are resolved at contact.</summary>
-sealed record ProjectileOffense(DamagePacket Hit, bool Spell, int Accuracy, int CriticalChance,
+sealed record ProjectileOffense(DamagePacket Hit, bool Spell, int Accuracy, CriticalChanceValue CriticalChance,
     int CriticalMultiplier, string Label)
 {
     /// <summary>An optional encounter owner; expired owners cannot commit further contacts.</summary>
+    public Func<string, int>? AssassinCriticalSources { get; init; }
     public object? Owner { get; init; }
     public Func<bool>? Valid { get; init; }
     public Game.MirageReceipt? MirageRelease { get; init; }
@@ -42,11 +43,11 @@ sealed record ProjectileOffense(DamagePacket Hit, bool Spell, int Accuracy, int 
     public bool PointBlank { get; init; }
     public double ReturnMultiplier { get; init; } = 1;
     public (int Chance, int Effect, double Seconds) Blind { get; init; }
-    public int? SecondFormCriticalChance { get; init; }
+    public CriticalChanceValue? SecondFormCriticalChance { get; init; }
     /// <summary>The chance against a target the player has Blinded (Program.CriticalChanceOn), or null.</summary>
-    public int? VsBlindedCriticalChance { get; init; }
+    public CriticalChanceValue? VsBlindedCriticalChance { get; init; }
     /// <summary>The chance against a target on the player's profane ground (Rational Doctrine), or null.</summary>
-    public int? VsProfaneCriticalChance { get; init; }
+    public CriticalChanceValue? VsProfaneCriticalChance { get; init; }
     public string? AreaVisual { get; init; }
     public string? FlightVisual { get; init; }
     /// <summary>The client spawns this use's primary projectiles itself (its own skill use), so the server sends no object

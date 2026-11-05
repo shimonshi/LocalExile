@@ -41,7 +41,7 @@ static partial class Game
                 int RawCritical(string name) => IsCriticalProhibition(name) ? 0 : Get(name);
                 int effect = SkillEffectId(conn, SkillCatalog.FirstSkillId) is { } id ? SkillsFor(conn).EffectRow(id) : -1;
                 var weapon = WeaponProfileFor(conn, activeSet: true);
-                var criticalChance = AttackBaseCriticalStrike.Chance(!weapon.Unarmed, weapon.Critical, conn.Pools.CriticalStrikeChancePct + PaidDistillerCritical(conn), RawCritical);
+                var criticalChance = AttackBaseCriticalStrike.ChanceExact(!weapon.Unarmed, weapon.Critical, conn.Pools.CriticalStrikeChancePct + PaidDistillerCritical(conn), RawCritical);
                 var captured = OrdinaryRangedShot.Capture(WeaponFor(conn), character, SkillsFor(conn).EffectStats(effect, 1), Stats,
                     PlayerAccuracy(conn, character), criticalChance, conn.Pools.CriticalStrikeMultiplier);
                 bool wand = projectileId == OrdinaryRangedAttack.Wand;
@@ -51,6 +51,7 @@ static partial class Game
                     captured.CriticalMultiplier, wand ? "ordinary wand" : "ordinary bow")
                 { SkillStats = SkillsFor(conn).EffectStats(effect, 1).ToDictionary(s => s.Item1, s => s.Item2),
                     MarkSource = CaptureOrdinaryMarkHitSource(conn, false),
+                    AssassinCriticalSources = CaptureAssassinCriticalSources(conn),
                     VsBlindedCriticalChance = AttackCriticalChanceVsBlinded(conn, character, release: true),
                     VsProfaneCriticalChance = AttackCriticalChanceVsProfane(conn, character, release: true),
                     Penetration = captured.Penetration, ResistanceMods = captured.ResistanceMods, ImpaleChance = captured.ImpaleChance,

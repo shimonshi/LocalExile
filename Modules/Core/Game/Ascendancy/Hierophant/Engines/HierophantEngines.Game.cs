@@ -270,6 +270,7 @@ static partial class Game
         var blindedChance = SupportedCriticalChanceVsBlinded(c, actor.Skill, release: true);
         var profaneChance = SupportedCriticalChanceVsProfane(c, actor.Skill, release: true);
         int multiplier = SupportedCriticalMultiplier(c, actor.Skill);
+        var assassin = CaptureAssassinCriticalSources(c);
         var poison = SupportedPoison(c, actor.Skill, true, player);
         var ignite = SupportedIgnite(c, actor.Skill, true, player);
         if (actor.Totem is not null && HierophantTotemHitInputs(c, actor, false) is { } ailmentInputs)
@@ -297,7 +298,7 @@ static partial class Game
                         shot.Penetration, shot.ResistanceMods, contact.Projectile.RandomSource,
                         player, shot.SkillStats, CriticalChanceOn(c,contact.Target.Id,shot.CriticalChance,
                             shot.VsBlindedCriticalChance,shot.VsProfaneCriticalChance), shot.CriticalMultiplier, shot.CriticalRoll,
-                        shot.Poison, shot.Ignite, shot.Bleed,
+                        shot.AssassinCriticalSources, shot.Poison, shot.Ignite, shot.Bleed,
                         shot.ImpaleSettings,shot.CriticalImpaleSettings);
                 }) { Presentation = shot.Presentation } });
             return;
@@ -318,15 +319,15 @@ static partial class Game
             HierophantEngineContact(session, actor, id, m, activation.Scale(attachedMore),
                 Penetration.Of(raw, Stats, false, own), HitResistMods(raw, own), random ?? Random.Shared,
                 player, own, CriticalChanceOn(c, id, chance, blindedChance, profaneChance),
-                multiplier, critical, poison, ignite);
+                multiplier, critical, assassin, poison, ignite);
         }
     }
 
     internal static ProjectileHitResult HierophantEngineContact(ProjectileSession session, HierophantEngineActor actor,
         uint id, SpawnedMonster target, DamagePacket packet, Penetration.PerType penetration, HitResistances.Mods mods, Random random,
         IReadOnlyDictionary<uint, int>? capturedPlayer = null, IReadOnlyDictionary<uint, int>? capturedSkill = null,
-        int? capturedChance = null, int? capturedMultiplier = null, SkillCriticalRoll? rolls = null,
-        MonsterPoisons.Settings poison = default,
+        CriticalChanceValue? capturedChance = null, int? capturedMultiplier = null, SkillCriticalRoll? rolls = null,
+        Func<string, int>? assassin = null, MonsterPoisons.Settings poison = default,
         MonsterIgnites.Settings ignite = default, MonsterIgnites.Settings bleed = default,
         ImpaleStats.Settings? impale = null, ImpaleStats.Settings? criticalImpale = null)
     {
@@ -342,36 +343,37 @@ static partial class Game
         var rolled = WithConditionalSupportDamageLocked(c, own, false, target,
             GameEvents.WithOutgoingDamage(c, player, target, (gambler with { DamageMorePct = 0 })
                 .ForSkill(n => MarkStat(own, n), true).RollOutgoingHit(packet, random)), now);
-        bool critical = RollCriticalStrike(c, capturedChance ?? SupportedReleaseCriticalChance(c, actor.Skill), own,
-            attack: false, skillRoll: rolls ?? CaptureSkillCriticalRoll(c, actor.Skill), player: player);
-        int sourceMultiplier = (capturedMultiplier ?? SupportedCriticalMultiplier(c, actor.Skill))
-            + OrdinaryCriticalBonus(c, player) + MarkOn(c, target, "enemy_additional_critical_strike_multiplier_against_self");
-        int multiplier = CriticalMultiplierOn(target, sourceMultiplier);
-        var (damage, _, mitigated) = MonsterHitDamage(c, target, rolled, critical, false, now, mods, penetration,
+        var result = ResolveOwnerCritical(c, target, capturedChance ?? SupportedReleaseCriticalChance(c, actor.Skill), true, own,
+            rolls ?? CaptureSkillCriticalRoll(c, actor.Skill), player, assassin);
+        int sourceMultiplier = OwnerSourceCriticalMultiplier(target, (capturedMultiplier ?? SupportedCriticalMultiplier(c, actor.Skill))
+            + OrdinaryCriticalBonus(c, player) + MarkOn(c, target, "enemy_additional_critical_strike_multiplier_against_self"), result,
+            assassin ?? OrdinaryAssassinSources(c, player));
+        int multiplier = target.Mods.Effects.NoExtraCriticalDamage ? 100 : sourceMultiplier;
+        var (damage, _, mitigated) = MonsterHitDamage(c, target, rolled, result.Critical, false, now, mods, penetration,
             gambler.InvertsResistance(random));
-        if (critical) damage = DamageModel.CriticalDamage(damage, multiplier);
+        if (result.Critical) damage = DamageModel.CriticalDamage(damage, multiplier);
         if (actor.Brand is not null)
             LeechOnHitLocked(c, target, MonsterTakenComponents(target, mitigated, true), damage,
                 HitLeechSources(player, false, own));
-        var impaleSettings = critical ? criticalImpale ?? ImpaleStats.From(player,Stats,false,own,critical:true)
+        var impaleSettings = result.Critical ? criticalImpale ?? ImpaleStats.From(player,Stats,false,own,critical:true)
             : impale ?? ImpaleStats.From(player,Stats,false,own);
-        double physical = rolled[DamageType.Physical].Min * (critical ? Math.Max(0,sourceMultiplier)/100d : 1);
+        double physical = rolled[DamageType.Physical].Min * (result.Critical ? Math.Max(0,sourceMultiplier)/100d : 1);
         var (reflected, _) = target.Impale.OnHit(physical,now,impaleSettings,random,target.Mods.Effects["avoid_impale_%"]);
         damage = ImpaleStats.AddReflected(damage,MonsterImpaleDamage(target,reflected));
         // Totem hits are ally hits; Brands belong to the caster but never masquerade as a hand-cast use.
         var hit = ApplyMonsterHitLocked(c, target, damage, allyAt: actor.Totem is null ? null : actor.At);
         if (hit is null) return ProjectileHitResult.Miss;
         OrdinaryHierophantSpellHit(c, player, true, true, true);
-        AilmentsOnHitLocked(c, target, mitigated, true, critical, multiplier, player, own, now, random,
+        AilmentsOnHitLocked(c, target, mitigated, true, result.Critical, multiplier, player, own, now, random,
             poison: poison,
             reflectToPlayer: actor.Totem is null, provenance: actor.Totem is null ? HitProvenance.Owner : HitProvenance.Proxy);
-        IgniteOnHitLocked(session, id, target, ignite with { Proxy=actor.Totem is not null }, critical, now);
-        BleedOnHitLocked(session, id, target, bleed with { Proxy=actor.Totem is not null }, critical, now);
+        IgniteOnHitLocked(session, id, target, ignite with { Proxy=actor.Totem is not null }, result.Critical, now);
+        BleedOnHitLocked(session, id, target, bleed with { Proxy=actor.Totem is not null }, result.Critical, now);
         if (actor.Brand is not null)
         {
             var source = SupportedSkill(c, actor.Skill);
-            ChargesOnHit(c, target, critical, spell: true, source.Effect, source.Level, source.Quality);
-            if (critical) CommitProjectileCritFlasks(session, now, random);
+            ChargesOnHit(c, target, result.Critical, spell: true, source.Effect, source.Level, source.Quality);
+            if (result.Critical) CommitProjectileCritFlasks(session, now, random);
         }
         session.Packet(InstanceProtocol.LifeUpdate(id, hit.Value.Life), FormattableString.Invariant(
             $"event=hierophant-contact epoch={c.ProjectileEpoch} time={now:R} actor={actor.Id} body={actor.Totem?.Id} origin={actor.At.X},{actor.At.Y} skill={actor.Skill} source={actor.Signature} target={id} outcome=hit life={hit.Value.Life}"));

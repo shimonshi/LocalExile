@@ -25,6 +25,7 @@ static partial class Game
     internal static void ChargesOnHit(ClientState conn, SpawnedMonster m, bool critical, bool spell, int effect = -1, int level = 1,
         int quality = 0, bool? melee = null, bool primary = true)
     {
+        if (critical && !spell) TriggerDeathmarkedLocked(conn, m);
         if (m.Rarity is MonsterRarity.Rare or MonsterRarity.Unique)
             QueueFlaskTrigger(conn, FlaskEnchantments.Trigger.RareHit);
         Func<string, int>? skill = null;
@@ -176,7 +177,7 @@ static partial class Game
         int effectiveArmour, IReadOnlyDictionary<uint, int> stats, bool attack = true, bool ranged = false)
     {
         int Get(string name) => Stats.Key(name) is uint key ? stats.GetValueOrDefault(key) : 0;
-        int increased = PlayerDamageTaken.IncreasedPct(type, melee: attack && !ranged, Get);
+        int increased = PlayerDamageTaken.IncreasedPct(type, melee: attack && !ranged, Get) + OrdinaryAssassinIncomingIncreased(conn, stats, ResourceEffectsTime(conn));
         var reduction = PlayerDamageReduction(conn, stats);
         int resisted = type == DamageType.Physical ? amount : DamageModel.Mitigate(amount, resistance, maxResistance);
         int value = Math.Max(0, PlayerHitMitigation.AfterResistance(conn.Pools, type, resisted,

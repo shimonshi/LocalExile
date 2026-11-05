@@ -26,6 +26,7 @@ sealed record MonsterRelease(string Clip, double Fraction, ContactPoint? Point, 
 
 sealed record MonsterAttack(ushort SkillId, double Seconds, double Range, DamagePacket Damage)
 {
+    public int IncomingAilmentEffect { get; init; } = -1;
     public bool Ranged { get; init; }
     /// <summary>When and from where a projectile skill releases its shot; null: half the attack time, 1.5 cells ahead at
     /// the default height (no rig data for the variety).</summary>
