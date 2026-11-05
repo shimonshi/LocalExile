@@ -171,10 +171,19 @@ public sealed class OrdinaryHierophantConnectedTests
         c.Auras.Clear();
         Assert.Equal(60, Get(raw, "life_regeneration_rate_per_minute_%"));
         Assert.Equal(1.03, HierophantModifiers.Damage(n => Get(raw, n), false), 8);
+        int Ignite(IReadOnlyDictionary<uint, int> stats) => AilmentPanelStats.Compute(new("spell", true),
+            DamagePacket.Of(DamageType.Fire, 100, 100), new(), n => Get(stats, n))
+            .Single(row => row.Stat == "minimum_ignite_damage_to_deal_per_minute_from_non_critical_spell_damage").Value;
+        // Pursuit's generic more damage reaches ailments once; Surge's spell-only more does not.
+        Assert.Equal(6229, Ignite(raw)); // 100 * .9 * 1.12 * 1.03 * 60, rounded.
+        s.Set(OrdinaryHierophantRules.HitSurge, 1); s.Set(OrdinaryHierophantRules.SurgeMore, 20);
+        Assert.True(Game.OrdinaryHierophantSpellHit(c, s.Read(), true, true, true));
+        Assert.Equal(6229, Ignite(s.Read()));
         s.Set("damage_+%", 7); s.Set("skill_area_of_effect_+%", 9);
         Assert.Equal(7, Get(s.Read(), "damage_+%")); Assert.Equal(9, Get(s.Read(), "skill_area_of_effect_+%"));
         s.Time.At(2); Assert.Equal(0, Get(s.Read(), "number_of_active_totems"));
         Assert.Equal(1, HierophantModifiers.Damage(n => Get(s.Read(), n), false));
+        Assert.Equal(5778, Ignite(s.Read())); // Explicit 7% damage override remains after totem expiry.
     }
 
 
