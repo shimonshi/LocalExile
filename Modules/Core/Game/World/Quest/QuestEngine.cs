@@ -357,8 +357,8 @@ static partial class Game
     internal static byte[] QuestObjectBlob(ClientState conn, Quests.ObjectRule rule, GlyphQuest.Placement at, QuestObjectTypes.Info info)
     {
         bool done = QuestObjectTransitioned(conn, rule);
-        // A tile record's virtual model; a room line's object keeps its type's own.
-        string? model = at.Z is not null ? at.Model : info.Model;
+        // A tile record's virtual model; a room line's object keeps its type's own, or takes the line's without one.
+        string? model = at.Z is not null ? at.Model : info.Model ?? (info.OwnModel ? null : at.Model);
         return new QuestObject(at.X, at.Y, info.Components, at.Rotation, at.Z, model, (byte)(done ? info.States : 1), Blocked: !done).Blob();
     }
 
@@ -382,13 +382,14 @@ static partial class Game
     // C→S 0x24 on a quest object: walk up; with the needs of its use rule the flags are set and the carried quest items
     // they finish are taken (QuestItems.Consume), in one save; then what the use brings (Quests.SpawnRule).
     internal static async Task UseQuestObject(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn, InstanceTransfer.UseSkillOnObject use,
-        Quests.ObjectRule rule, GlyphQuest.Placement at, QuestObjectTypes.Info info, double requestedAt)
+        Quests.ObjectRule rule, GlyphQuest.Placement at, QuestObjectTypes.Info info, double requestedAt, Func<Task>? reached = null)
     {
         if (!TryBeginObjectWalk(conn, requestedAt, at.X, at.Y, info.Size, out var objectWalk)) return;
         var (action, now, here, stop, arrive) = objectWalk;
-        await Send(remote, stream, ciphers, InstanceProtocol.ActionStarted(PlayerId, here.X, here.Y, at.X, at.Y, use.SkillId, use.Sequence, use.Flags, targetObjectId: use.TargetId),
-            $"0x01ab player uses quest object 0x{use.TargetId:x} {rule.ObjectType.Split('/')[^1]} from ({here.X}, {here.Y}): reached at ({stop.X}, {stop.Y}) in {arrive - now:0.00} s",
-            still: () => PlayerActionCurrent(conn, action));
+        if (!use.Started)   // a lockstep client got its start from the frame pass
+            await Send(remote, stream, ciphers, InstanceProtocol.ActionStarted(PlayerId, here.X, here.Y, at.X, at.Y, use.SkillId, use.Sequence, use.Flags, targetObjectId: use.TargetId),
+                $"0x01ab player uses quest object 0x{use.TargetId:x} {rule.ObjectType.Split('/')[^1]} from ({here.X}, {here.Y}): reached at ({stop.X}, {stop.Y}) in {arrive - now:0.00} s",
+                still: () => PlayerActionCurrent(conn, action));
         if (arrive > now) await Task.Delay(TimeSpan.FromSeconds(arrive - now));
         if (!PlayerActionCurrent(conn, action)) return;
         try
@@ -398,6 +399,8 @@ static partial class Game
                 Console.WriteLine($"[gateway] {remote} {rule.ObjectType}: out of reach from ({stop.X}, {stop.Y})");
                 return;
             }
+            // What the object does besides its rules' flags (the Sarn plaque's trials window), once the player is there.
+            if (reached is not null) await reached();
             string area = conn.Layout.Id;
             bool Has(string f) => ClientHasQuestFlag(conn, f);
             var flags = QuestsOf(conn).OnUsed(area, rule.ObjectType, Has).Where(f => !Has(f)).ToList();
@@ -471,6 +474,13 @@ static partial class Game
         foreach (var (id, rule, at, info) in objects)
         {
             bool done = QuestObjectTransitioned(conn, rule);
+            if (done && QuestObjectTypes.OpensInPlace(rule.ObjectType) && QuestObject.TransitionableIndex(info.Components) is int opening and >= 0)
+            {
+                await Send(remote, stream, ciphers, InstanceEntities.TransitionableUpdate(id, (byte)opening, (byte)info.States),
+                    $"0x02ba quest object 0x{id:x} {rule.ObjectType.Split('/')[^1]} opens: Transitionable → {info.States}");
+                await Send(remote, stream, ciphers, InstanceEntities.BlockageUpdate(id, false), $"0x01c6 quest object 0x{id:x} unblocked");
+                continue;
+            }
             if (info.Components.Contains("TriggerableBlockage"))
             {
                 uint next = conn.NextObjectId++;
@@ -560,9 +570,10 @@ static partial class Game
         }
         if (!TryBeginObjectWalk(conn, requestedAt, at.X, at.Y, QuestChestSize, out var objectWalk)) return;
         var (action, now, here, stop, arrive) = objectWalk;
-        await Send(remote, stream, ciphers, InstanceProtocol.ActionStarted(PlayerId, here.X, here.Y, at.X, at.Y, use.SkillId, use.Sequence, use.Flags, targetObjectId: use.TargetId),
-            $"0x01ab player opens quest chest 0x{use.TargetId:x} from ({here.X}, {here.Y}): reached at ({stop.X}, {stop.Y}) in {arrive - now:0.00} s",
-            still: () => PlayerActionCurrent(conn, action));
+        if (!use.Started)   // a lockstep client got its start from the frame pass
+            await Send(remote, stream, ciphers, InstanceProtocol.ActionStarted(PlayerId, here.X, here.Y, at.X, at.Y, use.SkillId, use.Sequence, use.Flags, targetObjectId: use.TargetId),
+                $"0x01ab player opens quest chest 0x{use.TargetId:x} from ({here.X}, {here.Y}): reached at ({stop.X}, {stop.Y}) in {arrive - now:0.00} s",
+                still: () => PlayerActionCurrent(conn, action));
         if (arrive > now) await Task.Delay(TimeSpan.FromSeconds(arrive - now));
         if (!PlayerActionCurrent(conn, action)) return;
         if (!GameServer.Core.World.PlayerWalk.InReach(stop, (at.X, at.Y), QuestChestSize, conn.Layout.Walkable) || !conn.Instance.OpenChest(at.X, at.Y))

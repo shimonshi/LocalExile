@@ -100,7 +100,9 @@ Part of [Status](../Status.md); what to build next in this area is in
 - **Predictive actor collision.** Player paths include living monsters and published players in the same instance.
   Monster paths use their `MonsterVarieties.ObjectSize` clearance and avoid other living bodies, including friendlies.
   A 50 ms pass steps the player's and the monsters' estimates in time order as the client does (no packets): a step
-  blocked by terrain or a body ends the walk, and a path cut short paths again from its end. Nothing is pushed out of a
+  blocked by terrain or a body ends the walk, and a path cut short paths again from its end. On a lockstep client the
+  pass replays whole frames instead, each walker in object order (the player first) against the cells as moved so far,
+  as the client's world ticks ([07](../docs/protocol/07-latency-visibility-movement.md) §5). Nothing is pushed out of a
   body. Death releases the occupied space and the corpse stays in the area.
   Melee monsters chase with their attack aimed at the player, about every 200 ms, and the swing starts on S→C 0x1ac.
   Ranged monsters and minions take rings around the player (`MonsterSurround`); the AI decides every 50 ms.
@@ -171,9 +173,26 @@ Part of [Status](../Status.md); what to build next in this area is in
   doodads, rooms and quest tile objects the monster points and a1 quests are fitted to, need no capture.
   Entering any other area tells the player it is generated on the client and not supported by the server yet.
   The client's stages after the doodads (mesh variation, ground clutter, critters) are client-only and not ported.
-  The Labyrinth's boss ends use the layout the client builds with seed 0; the server sends no daily layout.
   Code: `GameServer.Data/Terrain/Generation`, `scripts/re/levelgen`.
   Docs: [re/011](../docs/re/011-level-generation.md).
+- **The Labyrinth's day layout.** The Gateway builds the day's layout as the client does (sections, rooms,
+  connections and secrets: 168 client layouts match) and gives each room one of its LabyrinthAreas areas; entering
+  one of those areas sends the room's node in 0x1d's extra data, and the client and the server's generation then
+  apply the room's overrides and secret rooms alike (live: `1_Labyrinth_OH_quad_#` with its Gauntlet room, 2026-11-02).
+  The day's seed (the UTC day number, `Game_LAB_SEED`) and the area pick are ours. `/lab_layout [tier]` lists the day.
+  The secret rooms' objects (hidden doors, the Gauntlet's end) are not created yet.
+  Code: `LabyrinthLayout.cs`, `LabyrinthPass.cs`, `LabyrinthDay.cs`, `ServerLevels.cs`.
+  Docs: [03](../docs/protocol/03-area-and-world.md), [re/011](../docs/re/011-level-generation.md) ("Labyrinth pass").
+- **A Labyrinth run (Normal).** The Sarn Encampment's (Acts 3, 8) plaque shows the trials until the six Normal ones are
+  done, then opens the statue for good and the way to the plaza behind it (`/trials off` shuts it). At the plaza the
+  device opens the select window (0x7b kind 0x10); choosing Normal (C→S 0x212 = 1) opens the door with its animation
+  and shows the way into the day's first room; the portal goes back to town. Each room is its own instance (the run
+  picks its seed, so the server knows its node), its "entranceN" exits lead to its neighbours, Izaro's arena's way on
+  is open (no fight yet), the glyph statues open the Labyrinth map (0x7b kind 0x0f) with the run's rooms (S→C 0x1cb);
+  being anywhere else ends the run, and the plaza's door shuts again. Checked live 2026-11-03.
+  Not yet: Izaro, the Ascendancy Chamber, Cruel and harder tiers, the secret rooms' objects; a room's exits keep the
+  plain AreaTransition type (not type 5).
+  Code: `LabyrinthDay.cs`, `AreaTransitionCatalog.cs`, QuestObjects `Rules.LabyrinthTrials.cs`, `Act3.cs`, `Act8.cs`.
 - **Trials of Ascendancy.** In each LabyrinthTrials area the Gateway places the trial rooms' door, levers, Locked
   Doors, plaque and portal back, and the Bronze Monograph at the door, which reads at once when clicked.
   The door opens, a lever opens what its room's links name (the `.arm` files' link section), the plaque sets the trial's quest flag and its league quest
@@ -244,8 +263,17 @@ Part of [Status](../Status.md); what to build next in this area is in
   its animation; the Doorman and the opening tutorial's wall are not created ([12](../docs/protocol/12-quests.md) §6).
   Only quests a1q1 and a1q4 are scripted; the client builds the quest tracker from the flags.
 - The client's lockstep network mode (also what "auto" picks on localhost): with `Game_LOCKSTEP=1` on a connection
-  confirmed as local, or `Game_LOCKSTEP=network` on any connection, the player walks, uses objects and uses skills.
-  Without it the player is drawn but cannot move or
+  confirmed as local, or `Game_LOCKSTEP=network` on any connection, the player walks, uses objects and uses skills;
+  a held default attack (bow, wand, one-hand sword) repeats once per attack time at a monster or at the ground, and a
+  Move cuts a swing short at its clip's lock_cancelling keyframe (a bow) or its contact (a wand, a sword), as on the
+  client; a melee monster's chase swings once the player is in its reach, on the way or at its walk's end, and goes on
+  after the player otherwise, as on the client; a bow's or wand's attack walks to where its line to the monster is clear on the projectile
+  grid, as on the client (an attack gem's line threshold is taken to be the bow's); the walk estimates step in the
+  client's frames and object order, a monster's order places its walk when it goes out (at the frame being sent), and
+  a walking monster is ordered again only right after its estimate's step (a client a cell off loses under a frame of
+  its step; pack fights: the client a cell from the estimate at 18 % of chase orders and 12 % of Moves, from 25 and
+  22 %, the rest unobservable from the server: [07](../docs/protocol/07-latency-visibility-movement.md) §6). Without it the player is
+  drawn but cannot move or
   use objects, and the Gateway asks for Predictive once per connection
   ([07](../docs/protocol/07-latency-visibility-movement.md) §6).
 - Waypoint travel to a generated area without a `-Walkmaps` capture for its seed puts the player at an arbitrary cell

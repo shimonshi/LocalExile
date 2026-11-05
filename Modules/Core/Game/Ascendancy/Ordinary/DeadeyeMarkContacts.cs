@@ -30,7 +30,7 @@ static partial class Game
             projectile: !melee, wieldingWand: weapon.WieldingWand), Get), Get)
                 .Scale(attackFactor * (melee ? GamblerFor(player).DamageFactor : 1)),
             flat => MonsterIgnites.Settings.From(AilmentPanelStats.Compute(
-                new("main_hand", Spell: false, Melee: melee, Projectile: !melee),
+                new("main_hand", Spell: false, Melee: melee),
                 raw.Add(DamageType.Physical, flat), conversion, Get), "main_hand", Get));
     }
 

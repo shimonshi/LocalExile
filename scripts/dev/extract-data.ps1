@@ -21,7 +21,7 @@ $manifest = @(
        Args = @('run', '--project', 'Tools/PoEDataExtractor', '--', 'decode', 'Client/Content.ggpk'); Version = 3; Needs = @()
        UsedBy = 'every game table: stats, levels, areas, waypoints, items, mods, monsters, NPCs; all other entries' }
     @{ Name = 'vendor-stock'; Outputs = @('data\vendor-stock.json'); Runner = 'python'
-       Args = @('scripts/re/vendor-stock/generate.py'); Version = 2; Needs = @('tables')
+       Args = @('scripts/re/vendor-stock/generate.py'); Version = 3; Needs = @('tables')
        UsedBy = 'ordinary vendor roles and quest/class gem membership' }
     @{ Name = 'area-transitions'; Outputs = @('data\area-transitions.json'); Runner = 'dotnet'
        Args = @('run', '--project', 'scripts/re/atlas', '--', 'Client/Content.ggpk', 'data/area-transitions.json'); Version = 3; Needs = @('tables')
@@ -37,14 +37,14 @@ $manifest = @(
        UsedBy = 'unique bosses and named packs (14-monster-packs.md), quest room objects (12-quests.md)' }
     # After area-transitions and room-points: --all also takes the object types those files name.
     @{ Name = 'object-types'; Outputs = @('data\object-types.json'); Runner = 'python'
-       Args = @('scripts/re/ot_components.py', '--all', '--json', 'data/object-types.json'); Version = 6; Needs = @('tables', 'area-transitions', 'room-points')
+       Args = @('scripts/re/ot_components.py', '--all', '--json', 'data/object-types.json'); Version = 7; Needs = @('tables', 'area-transitions', 'room-points')
        UsedBy = 'monsters (emergence and inherited Life corpse flags), NPCs, area transitions, quest objects and chests, hideout decorations and stationary collision footprints' }
     @{ Name = 'hideouts'; Outputs = @('data\hideouts.json'); Runner = 'dotnet'
        Args = @('run', '--project', 'scripts/re/atlas', '--', 'Client/Content.ggpk', 'hideouts'); Version = 3; Needs = @('tables', 'object-types')
        UsedBy = 'hideouts and their decorations (21-hideouts.md)' }
     @{ Name = 'animation-contacts'; Outputs = @('data\animation-contacts.json'); Runner = 'python'
-       Args = @('scripts/re/anim_contacts.py'); Version = 5; Needs = @('tables')
-       UsedBy = 'class spell contacts, ACT-selected ordinary wand release timing and the contact keyframes'' positions: where an arrow or wand bolt leaves (11-skills.md)' }
+       Args = @('scripts/re/anim_contacts.py'); Version = 6; Needs = @('tables')
+       UsedBy = 'class spell contacts, rig animation indices, the default attack''s stance clips (their contact and lock_cancelling keyframes as the client plays them, the ACT-selected wand variant), ACT-selected ordinary wand release timing and the contact keyframes'' positions: where an arrow or wand bolt leaves (11-skills.md)' }
     # monster-contacts: the clips a variety plays for its projectile attacks, with their contact keyframe's time and position:
     # when and from where a Sand Spitter mortar leaves (the skill's own animation key, the native clip selector).
     @{ Name = 'monster-contacts'; Outputs = @('data\monster-contacts.json'); Runner = 'python'
@@ -67,7 +67,7 @@ $manifest = @(
        Args = @('run', '--project', 'scripts/re/game-pack', '--', 'constants'); Version = 1; Needs = @()
        UsedBy = 'the Gateway''s HNC mask and the Patch server''s root hash (live.ps1 refreshes the hash before each client start)' }
     @{ Name = 'game-pack'; Outputs = @('data\game-files.zip'); Runner = 'dotnet'
-       Args = @('run', '--project', 'scripts/re/game-pack', '--', 'pack'); Version = 1; Needs = @()
+       Args = @('run', '--project', 'scripts/re/game-pack', '--', 'pack'); Version = 2; Needs = @()
        UsedBy = 'the files of server-side level generation (ServerLevels) and the Phrecia classes'' graph check (GamePack)' }
     @{ Name = 'stat-descriptions'; Outputs = @('data\stat-descriptions.txt'); Runner = 'dotnet'
        Args = @('run', '--project', 'scripts/re/game-pack', '--', 'stat-descriptions'); Version = 1; Needs = @()
