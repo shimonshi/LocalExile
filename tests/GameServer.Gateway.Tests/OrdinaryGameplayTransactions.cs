@@ -736,7 +736,7 @@ static partial class OrdinaryGameplayChecks
             }
             rules.Stop(_ => { }); Wire.Dispose();
             Game.CombatLifetime = oldRules; Program.SetGameLogic(oldLogic!);
-            Saves.Db.Dispose(); foreach (string suffix in new[] { "", "-wal", "-shm" }) File.Delete(path + suffix);
+            TestEnvironment.ReleaseSaves(path);
         }
     }
 }
